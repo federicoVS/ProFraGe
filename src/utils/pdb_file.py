@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+"""
+@author: FVS
+"""
 
 import os
 from prody.proteins.pdbfile import fetchPDB, parsePDB, writePDB
