@@ -76,7 +76,7 @@ def merge_pdbs(pdb_1, pdb_2, out_dir='./', show=False):
     file_name = out_dir + os.path.basename(pdb_1)[:-4] + '_' + os.path.basename(pdb_2).split('_')[1]
     writePDB(file_name, prots)
 
-def fetch_pdb(pdb_ch_id, out_dir='./'):
+def fetch_pdb(pdb_ch_id, pdb_gz_dir=None, out_dir='./', remove_pdb_gz=False):
     '''
     Fetches the specified chains of the specified proteins from the PDB using the ProDy API. The fetched
     PDB file <pdb_id>_<chain_id>.pdb is then written to the specified location.
@@ -85,20 +85,30 @@ def fetch_pdb(pdb_ch_id, out_dir='./'):
     ----------
     pdb_ch_id : (str, str)
         The ID the protein to download and which chain to save.
+    pdb_dir : None
+        The directory holding the protein file (compressed, i.e. .pdb.gz). The default is None, in which
+        case ProDy will download it. Since the ProDy download time is very slow, it is encouraged to
+        download all the desired proteins beforehand.
     out_dir : str, optional
         The directory where to save the file. The default is './' (current directory).
+    remove_pdb_gz : bool, optional
+        Whether to remove the original compressed PDB file. The default is False.
 
     Returns
     -------
     None.
     '''
     p_id, c_id = pdb_ch_id
-    pdb_file = fetchPDB(p_id, chain=c_id)
+    pdb_file = None
+    if pdb_gz_dir is None:
+        pdb_file = fetchPDB(p_id, chain=c_id)
+    else:
+        pdb_file = pdb_gz_dir + p_id + '.pdb.gz'
     if pdb_file is not None:
-        ag = parsePDB(pdb_file)
+        ag = parsePDB(pdb_file, chain=c_id)
         if ag is not None:
             file_name = out_dir + p_id + '_' + c_id + '.pdb'
             writePDB(file_name, ag)
-        # Remove compressed file
-        if os.path.isfile(pdb_file):
-            os.popen('rm ' + pdb_file)
+        if remove_pdb_gz:
+            if os.path.isfile(pdb_file):
+                os.popen('rm ' + pdb_file)
