@@ -104,7 +104,7 @@ def fetch_pdb(pdb_ch_id, pdb_gz_dir=None, out_dir='./', remove_pdb_gz=False):
         pdb_file = fetchPDB(p_id, chain=c_id)
     else:
         pdb_file = pdb_gz_dir + p_id + '.pdb.gz'
-    if pdb_file is not None:
+    if pdb_file is not None and os.path.isfile(pdb_file):
         ag = parsePDB(pdb_file, chain=c_id)
         if ag is not None:
             file_name = out_dir + p_id + '_' + c_id + '.pdb'

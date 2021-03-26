@@ -41,7 +41,7 @@ def progress(count, total, latest_bar):
     total : int
         The total number of steps.
     latest_bar : int
-        The latest_bar count in the progress bar. It is relative to the TOOLBAR_WIDTH
+        The latest_bar count in the progress bar. It is relative to the TOOLBAR_WIDTH.
 
     Returns
     -------

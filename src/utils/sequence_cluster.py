@@ -18,7 +18,6 @@ def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False
     The need for this function is that the proteins contained in the cluster may not match the proteins
     found at https://www.rcsb.org/search using the Advance Search settings.
     
-    
     Parameters
     ----------
     pdb_ids : list of str

@@ -58,7 +58,7 @@ if __name__ == '__main__':
     # Argument parser initialization
     arg_parser = argparse.ArgumentParser(description='Full PDB dataset pipeline')
     arg_parser.add_argument('--ids_dir', type=str, default='../../pdb/ids/', help='The directory containing the .txt files holding the IDs for the PDB. The default is ../../pdb/ids/')
-    arg_parser.add_argument('--pdb_gz_dir', type=str, default='../../pdb/raw/', help='The directory containing the downloaded compressed PDB files. The default is ../../pdb/raw/')
+    arg_parser.add_argument('--pdb_gz_dir', type=str, default='../../pdb/gz/', help='The directory containing the downloaded compressed PDB files. The default is ../../pdb/gz/')
     arg_parser.add_argument('--out_dir', type=str, default='../../pdb/data/', help='The directory where to store the PDB files. The default is ../../pdb/data/')
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
     arg_parser.add_argument('--sqid', type=int, default=30, help='The sequence identity percentage for the sequence clustering. The default is 30.')
