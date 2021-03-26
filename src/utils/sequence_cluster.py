@@ -8,52 +8,73 @@ Created on Thu Mar 25 15:09:40 2021
 import pickle
 import matplotlib.pyplot as plt
 from prody.proteins.pdbclusters import fetchPDBClusters, loadPDBClusters
+from search import binary_search
+import progress_bar
 
 def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False):
     '''
-    Matches the proteins in the current dataset against elements of a cluster. The need for this function is
-    that the proteins contained in the cluster may not match the proteins found at https://www.rcsb.org/search
-    using the Advance Search settings.
+    For each cluster, take the all the chains of the first protein, if it is matched to any in the database.
+    If the first is not is the database, take the second, third, and so on.
+    The need for this function is that the proteins contained in the cluster may not match the proteins
+    found at https://www.rcsb.org/search using the Advance Search settings.
+    
     
     Parameters
     ----------
-    pdb_ids : list<string>
+    pdb_ids : list of str
         Alist holding the IDs of the proteins in the dataset.
-    clusters : list<?>, optional
+    clusters : list of object, optional
         The clusters, if loaded. The default is None (not loaded).
     sqid : int, optional
         The sequence identity for the sequence clustering. The default is 30.
-    out_file : string, optional
+    out_file : str, optional
         The file where to write the resulting list. The default is None (not write).
     verbose : bool, optional
         Whether to print progress information. The default is False.
     
     Returns
     -------
-    m_clusters : list<(string, string)>
-        A list of tuples of the form (p_id, c_id), matching with the proteins in the dataset.
-    '''
-    if clusters is not None:
+    m_pdb_ch_ids : list of (string, string)
+        A list of tuples of string, each holding the ID of the matching protein in the dataset and the ID of
+        one of its chains.
+    '''    
+    if clusters is None:
+        if verbose:
+            print('Fetching clusters...')
         fetchPDBClusters(sqid=sqid)
         clusters = loadPDBClusters()
+    # Sort list of PDB IDs for binary search
+    pdb_ids.sort()
+    m_pdb_ch_ids = []
     count = 1
-    m_clusters = []
+    latest_bar = 1
+    if verbose:
+        print('Matching clusters with protein chains...')
+        progress_bar.start()
     for cluster in clusters:
         if verbose:
-            print(f'Processing cluster {count}/{len(clusters)}')
+            latest_bar = progress_bar.progress(count, len(clusters), latest_bar)
             count += 1
+        last_p = None
         for i in range(len(cluster)):
-            p_id, c_id = cluster[i]
-            for pdb_id in pdb_ids:
-                if pdb_id == p_id:
-                    m_clusters.append((p_id, c_id))
-                    break
+            p_id, c_id = cluster[i] # protein id, chain id
+            if last_p is not None and p_id == last_p:
+                m_pdb_ch_ids.append((p_id, c_id))
+            elif last_p is not None and p_id != last_p:
+                break
+            else:
+                if binary_search(p_id, pdb_ids, sorted=True):
+                    m_pdb_ch_ids.append((p_id, c_id))
+                    last_p = p_id
     if out_file is not None:
         with open(out_file, 'wb') as f:
-            pickle.dump(m_clusters, f)
-    return m_clusters
+            pickle.dump(m_pdb_ch_ids, f)
+    if verbose:
+        progress_bar.end()
+        print(f'Found {len(m_pdb_ch_ids)} matching protein chains.')
+    return m_pdb_ch_ids
 
-def get_clusters(sqid=30, show=False, verbose=False):
+def get_clusters(sqid=30, loaded=False, show=False, verbose=False):
     '''
     Get the sequence clusters resulting from the weekly BLAST clustering.
     
@@ -61,6 +82,8 @@ def get_clusters(sqid=30, show=False, verbose=False):
     ----------
     sqid : int, optional
         The sequence identity for the sequence clustering. The default is 30.
+    loaded : bool, optional
+        Whether the clusters have already been loaded. The default is False.
     show : bool, optional
         Whether to show an histogram of the clusters densities. The default is False.
     verbose : bool, optional
@@ -68,13 +91,16 @@ def get_clusters(sqid=30, show=False, verbose=False):
     
     Returns
     -------
-    clusters : list<?>
+    clusters : list of object
         The list of clusters.
     '''
-    fetchPDBClusters(sqid=sqid)
+    if verbose:
+        print('Fetching clusters...')
+    if not loaded:
+        fetchPDBClusters(sqid=sqid)
     clusters = loadPDBClusters()
     if verbose:
-        print(f'Found {len(clusters)} clusters')
+        print(f'Found {len(clusters)} clusters.')
     if show:
         freqs = {}
         for cluster in clusters:
