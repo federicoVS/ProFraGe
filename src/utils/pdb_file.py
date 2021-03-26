@@ -6,6 +6,7 @@
 import os
 from prody.proteins.pdbfile import fetchPDB, parsePDB, writePDB
 from prody.proteins.functions import showProtein
+import progress_bar
 
 def get_files(data_dir, ext='.pdb'):
     '''
@@ -13,14 +14,14 @@ def get_files(data_dir, ext='.pdb'):
     
     Parameters
     ----------
-    data_dir : string
+    data_dir : str
         The name of the directory.
-    ext : string, optional
+    ext : str, optional
         The file extension. The default is '.pdb'
     
     Returns
     -------
-    files : list<string>
+    files : list of str
         The list containing the files.
     '''
     files = []
@@ -37,15 +38,15 @@ def read_pdb_ids_file(file_name):
     
     Parameters
     ----------
-    file_name : string
+    file_name : str
         The name of the file to read.
     
     Returns
     -------
-    pdb_ids : list<string>
+    pdb_ids : list of str
         The list holding the protein IDs.
     '''
-    pdb_ids = open(file_name, 'r').split(',')
+    pdb_ids = open(file_name, 'r').read().split(',')
     return pdb_ids
         
 def merge_pdbs(pdb_1, pdb_2, out_dir='./', show=False):
@@ -54,11 +55,11 @@ def merge_pdbs(pdb_1, pdb_2, out_dir='./', show=False):
     
     Parameters
     ----------
-    pdb_1 : string
+    pdb_1 : str
         The first PDB file.
-    pdb_2 : string
+    pdb_2 : str
         The second PDB file.
-    out_dir : string, optional
+    out_dir : str, optional
         The output directory. The default is the './' (current directory).
     show : bool, optional
         Whether to plot the two proteins. The default is False.
@@ -75,40 +76,29 @@ def merge_pdbs(pdb_1, pdb_2, out_dir='./', show=False):
     file_name = out_dir + os.path.basename(pdb_1)[:-4] + '_' + os.path.basename(pdb_2).split('_')[1]
     writePDB(file_name, prots)
 
-def fetch_pdbs(pdb_ch_ids, out_dir='./', verbose=False):
+def fetch_pdb(pdb_ch_id, out_dir='./'):
     '''
     Fetches the specified chains of the specified proteins from the PDB using the ProDy API. The fetched
-    PDB file <p_id>_<c_id>.pdb is then written to the specified location.
+    PDB file <pdb_id>_<chain_id>.pdb is then written to the specified location.
     
     Parameters
     ----------
-    pdb_ch_ids : list<(string, string)>
-        The list of the IDs of the (p_id, c_id) tuples to download. This means that chain c_id of protein
-        p_id will be downloaded.
-    out_dir : string, optional
-        The directory where to save the files. The default is './' (current directory).
-    verbose : bool, optional
-        Whether to print progress information. The default is False.
+    pdb_ch_id : (str, str)
+        The ID the protein to download and which chain to save.
+    out_dir : str, optional
+        The directory where to save the file. The default is './' (current directory).
 
     Returns
     -------
     None.
     '''
-    count = 1
-    for pdb_ch_id in pdb_ch_ids:
-        p_id, c_id = pdb_ch_id
-        if verbose:
-            print(f'Fetching {p_id}, {count}/{len(pdb_ch_ids)}')
-            count += 1
-        pdb_file = fetchPDB(p_id)
-        if pdb_file is not None:
-            ag = parsePDB(pdb_file, chain=c_id)
-            if ag is not None:
-                file_name = out_dir + p_id + '_' + c_id + '.pdb'
-                writePDB(file_name, ag)
-    
-# file = '../../../../../../data/pdb/raw/3DSD.pdb'
-# data_path = '../../../../../../data/pdb/raw/'
-
-# fragment_1 = '1A31_A474.pdb'
-# fragment_2 = '1A31_A475.pdb'
+    p_id, c_id = pdb_ch_id
+    pdb_file = fetchPDB(p_id, chain=c_id)
+    if pdb_file is not None:
+        ag = parsePDB(pdb_file)
+        if ag is not None:
+            file_name = out_dir + p_id + '_' + c_id + '.pdb'
+            writePDB(file_name, ag)
+        # Remove compressed file
+        if os.path.isfile(pdb_file):
+            os.popen('rm ' + pdb_file)
