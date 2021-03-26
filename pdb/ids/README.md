@@ -18,6 +18,8 @@ The query was carried out on March 25th 2021 at approximately 14:45 CET.
 To download the proteins, run the following commands
 
 ```
-./batch_download.sh -f rcsb_pdb_ids_1-25000.txt -o ../raw -p
-./batch_download.sh -f rcsb_pdb_ids_25001-46258.txt -o ../raw -p
+./batch_download.sh -f rcsb_pdb_ids_1-25000.txt -o ../gz -p
+./batch_download.sh -f rcsb_pdb_ids_25001-46258.txt -o ../gz -p
 ```
+
+The output directory path (`-o ../gz`) corresponds to the default directory, which will also be used in the code. The `-p` options specifies that the downloaded files should have the `.pdb.gz` extension.
