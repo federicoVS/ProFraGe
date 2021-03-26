@@ -1,2 +1,5 @@
 .spyproject
 *.pdb
+*.pdb.gz
+*.pyc
+*.pyo
