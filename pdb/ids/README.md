@@ -12,3 +12,12 @@ Experimental Method = "X-RAY DIFFRACTION" AND Data Collection Resolution = [0-3]
 ```
 
 The query was carried out on March 25th 2021 at approximately 14:45 CET.
+
+### Downloading the proteins
+
+To download the proteins, run the following commands
+
+```
+./batch_download.sh -f rcsb_pdb_ids_1-25000.txt -o ../raw -p
+./batch_download.sh -f rcsb_pdb_ids_25001-46258.txt -o ../raw -p
+```
