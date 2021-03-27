@@ -5,10 +5,11 @@ Created on Sat Mar 27 10:30:55 2021
 @author: FVS
 """
 
+import os
 from pdb_file import merge_pdbs, get_files
 import progress_bar
 
-def merge_fragments(frag_dir, pdb_ch_ids, k=2, verbose=False):
+def merge_fragments(frag_dir, pdb_ch_ids, k=2, out_dir='./', verbose=False):
     '''
     Merge individual fragments into non-redundant super-fragments. The super-fragments are composed by the
     specified number of indivdual fragments.
@@ -22,6 +23,8 @@ def merge_fragments(frag_dir, pdb_ch_ids, k=2, verbose=False):
         because of where TERMANAL stores the fragments: <protein_id>_<chain_id>/fragments/.
     k : int, optional
         The number of individual fragments making up a super-fragment. The default is 2.
+    out_dir : str, optional:
+        THe directory where to write the super-fragments. The default is './' (current directory).
     verbose : bool, optional
         Whether to print progress information. The default is False.
 
@@ -44,3 +47,14 @@ def merge_fragments(frag_dir, pdb_ch_ids, k=2, verbose=False):
         pdb_frags = get_files(dir_name)
         # Sort the list to get the correct order of the fragments
         pdb_frags.sort()
+        i = 0
+        while i+k < len(pdb_frags):
+            pdbs = pdb_frags[i:i+k]
+            merge_pdbs(pdbs, out_dir=out_dir)
+            i += k
+        # Check if there are extra fragments left 
+        if i < len(pdb_frags):
+            if len(pdb_frags) - i == 1:
+                a=1
+            else:
+                a=1
