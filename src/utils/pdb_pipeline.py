@@ -10,7 +10,7 @@ from pdb_file import get_files, read_pdb_ids_file, fetch_pdb
 from sequence_cluster import match_clusters, get_clusters
 import progress_bar
 
-def pipeline(pdb_ids, pdb_gz_dir, out_dir, sqid=30, loaded=False, remove_pdb_gz=False, verbose=False):
+def pipeline(pdb_ids, pdb_gz_dir, out_dir, m_pdb_ch_file=None, sqid=30, loaded=False, remove_pdb_gz=False, verbose=False):
     '''
     Performs a full PDB data pipeline.
 
@@ -22,6 +22,8 @@ def pipeline(pdb_ids, pdb_gz_dir, out_dir, sqid=30, loaded=False, remove_pdb_gz=
         The directory where to find the PDB files in .pdb.gz format.
     out_dir : str
         The directory where to save the the PDB files.
+    m_pdb_ch_file : str, optional
+        The file holding the list of the protein chains matching with the clusters. The default is None
     sqid : int, optional
         The sequence identity percentage for the sequence clustering. The default is 30.
     loaded : bool, optional
@@ -38,7 +40,7 @@ def pipeline(pdb_ids, pdb_gz_dir, out_dir, sqid=30, loaded=False, remove_pdb_gz=
     # Get clusters
     clusters = get_clusters(sqid=sqid, loaded=loaded, verbose=verbose)
     # Match the PDB IDs with the clusters
-    m_pdb_ch_ids = match_clusters(pdb_ids, clusters=clusters, sqid=sqid, verbose=verbose)
+    m_pdb_ch_ids = match_clusters(pdb_ids, clusters=clusters, sqid=sqid, out_file=m_pdb_ch_file, verbose=verbose)
     # Fetch the PDB files
     count = 1
     latest_bar = 1
@@ -60,6 +62,7 @@ if __name__ == '__main__':
     arg_parser.add_argument('--ids_dir', type=str, default='../../pdb/ids/', help='The directory containing the .txt files holding the IDs for the PDB. The default is ../../pdb/ids/')
     arg_parser.add_argument('--pdb_gz_dir', type=str, default='../../pdb/gz/', help='The directory containing the downloaded compressed PDB files. The default is ../../pdb/gz/')
     arg_parser.add_argument('--out_dir', type=str, default='../../pdb/data/', help='The directory where to store the PDB files. The default is ../../pdb/data/')
+    arg_parser.add_argument('--m_pdb_ch_file', type=str, default='../../pdb/ids/m_pdb_ch_ids', help='The file holding the list of the protein chains matching with the clusters. The default is ../../pdb/ids/m_pdb_ch_ids')
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
     arg_parser.add_argument('--sqid', type=int, default=30, help='The sequence identity percentage for the sequence clustering. The default is 30.')
     arg_parser.add_argument('--loaded', type=bool, default=False, help='Whether the sequence clusters have already been loaded. The default is False.')
@@ -72,4 +75,4 @@ if __name__ == '__main__':
     for file in files:
         pdb_ids += read_pdb_ids_file(file)
     # Begin pipeline
-    pipeline(pdb_ids, args.pdb_gz_dir, args.out_dir, sqid=args.sqid, loaded=args.loaded, remove_pdb_gz=args.remove_pdb_gz, verbose=args.verbose)
+    pipeline(pdb_ids, args.pdb_gz_dir, args.out_dir, m_pdb_ch_file=args.m_pdb_ch_file, sqid=args.sqid, loaded=args.loaded, remove_pdb_gz=args.remove_pdb_gz, verbose=args.verbose)
