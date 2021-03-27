@@ -49,31 +49,35 @@ def read_pdb_ids_file(file_name):
     pdb_ids = open(file_name, 'r').read().split(',')
     return pdb_ids
         
-def merge_pdbs(pdb_1, pdb_2, out_dir='./', show=False):
+def merge_pdbs(pdbs, out_dir='./', sep='+'):
     '''
     Merges two PDB files into the specified output directory.
     
     Parameters
     ----------
-    pdb_1 : str
-        The first PDB file.
-    pdb_2 : str
-        The second PDB file.
+    pdbs : list of str
+        The PDB files to be merged.
     out_dir : str, optional
         The output directory. The default is the './' (current directory).
-    show : bool, optional
-        Whether to plot the two proteins. The default is False.
+    sep : str, optional
+        The separator used in the filename to explicitly distinguish between the proteins in the newly
+        created PDB file. The default is +.
         
     Returns
     -------
     None.
     '''
-    prot_1 = parsePDB(pdb_1)
-    prot_2 = parsePDB(pdb_2)
-    prots = prot_1 + prot_2
-    if show :
-        showProtein(prot_1, prot_2)
-    file_name = out_dir + os.path.basename(pdb_1)[:-4] + '_' + os.path.basename(pdb_2).split('_')[1]
+    prots = []
+    for pdb in pdbs:
+        prots.append(parsePDB(pdb))
+    merged_prots = prots[0]
+    for i in range(1, len(prots)):
+        merged_prots += prots[i]
+    merged_prot_name = os.path.basename(pdbs[0])[:-4] + sep
+    for i in range(1, len(pdbs)-1):
+        merged_prot_name += os.path.basename(pdbs[i]).split('_')[1][:-4] + sep
+    merged_prot_name += os.path.basename(pdbs[len(pdbs)-1]).split('_')[1]
+    file_name = out_dir + merged_prot_name
     writePDB(file_name, prots)
 
 def fetch_pdb(pdb_ch_id, pdb_gz_dir=None, out_dir='./', remove_pdb_gz=False):
