@@ -1,6 +1,11 @@
 .spyproject
 *.pdb
 *.pdb.gz
+*.cif
+*.cif.gz
+*.mmtf
+*.cmap
+*.list
 *.pyc
 *.pyo
 pdb/ids/m_pdb_ch_ids
