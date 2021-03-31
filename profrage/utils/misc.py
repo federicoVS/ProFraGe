@@ -28,3 +28,22 @@ def get_files(data_dir, ext='.pdb'):
         if file.endswith(ext):
             files.append(data_dir+file)
     return files
+
+def structure_length(structure):
+    '''
+    Returns the length of the specified structure in terms of its number of residues.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure to compute the length of.
+
+    Returns
+    -------
+    count : int
+        The length of the structure measured in number of residues.
+    '''
+    count = 1
+    for residue in structure.get_residues():
+        count += 1
+    return count
