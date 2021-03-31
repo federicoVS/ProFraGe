@@ -27,7 +27,7 @@ def binary_search(target, lst, sorted=False):
     if not sorted:
         lst.sort()
     low = 0
-    high = len(lst)-1
+    high = len(lst) - 1
     while low < high:
         mid = low + (high - low)//2
         if lst[mid] == target:

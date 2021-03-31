@@ -9,7 +9,7 @@ import argparse
 from utils.pdb_file import read_pdb_ids_file, fetch_pdb
 from utils.misc import get_files
 from utils.sequence_cluster import match_clusters, get_clusters
-from utils import progress_bar
+from utils.ProgressBar import ProgressBar
 
 def pipeline(pdb_ids, pdb_gz_dir, out_dir='./', m_pdb_ch_file=None, sqid=30, loaded=False, remove_pdb_gz=False, verbose=False):
     '''
@@ -44,18 +44,18 @@ def pipeline(pdb_ids, pdb_gz_dir, out_dir='./', m_pdb_ch_file=None, sqid=30, loa
     m_pdb_ch_ids = match_clusters(pdb_ids, clusters=clusters, sqid=sqid, out_file=m_pdb_ch_file, verbose=verbose)
     # Fetch the PDB files
     count = 1
-    latest_bar = 1
+    progress_bar = ProgressBar()
     if verbose:
         print('Fetching PDBs...')
         progress_bar.start()
     for m_pdb_ch_id in m_pdb_ch_ids:
         if verbose:
-            latest_bar = progress_bar.progress(count, len(m_pdb_ch_ids), latest_bar)
+            progress_bar.progress(count, len(m_pdb_ch_ids))
             count += 1
         fetch_pdb(m_pdb_ch_id, pdb_gz_dir=pdb_gz_dir, out_dir=out_dir, remove_pdb_gz=remove_pdb_gz)
     if verbose:
         progress_bar.end()
-            
+
 
 if __name__ == '__main__':
     # Argument parser initialization

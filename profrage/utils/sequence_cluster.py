@@ -9,7 +9,7 @@ import pickle
 import matplotlib.pyplot as plt
 from prody.proteins.pdbclusters import fetchPDBClusters, loadPDBClusters
 from search import binary_search
-import progress_bar
+from utils.ProgressBar import ProgressBar
 
 def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False):
     '''
@@ -46,13 +46,13 @@ def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False
     pdb_ids.sort()
     m_pdb_ch_ids = []
     count = 1
-    latest_bar = 1
+    progress_bar = ProgressBar()
     if verbose:
         print('Matching clusters with protein chains...')
         progress_bar.start()
     for cluster in clusters:
         if verbose:
-            latest_bar = progress_bar.progress(count, len(clusters), latest_bar)
+            progress_bar.progress(count, len(clusters))
             count += 1
         last_p = None
         for i in range(len(cluster)):

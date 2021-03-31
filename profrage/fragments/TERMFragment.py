@@ -8,9 +8,9 @@ Created on Sat Mar 27 10:30:55 2021
 import os
 import numpy as np
 from Bio.PDB import NeighborSearch, Selection
-from Bio.PDB.mmtf.mmtfio import MMTFIO
 from Bio.PDB.mmtf import MMTFParser
 from Bio.PDB.PDBIO import PDBIO
+from utils.misc import structure_length
 
 class TERMFragment:
     '''
@@ -102,6 +102,24 @@ class TERMFragment:
             coords.append(atom.get_coord())
         coords = np.array(coords)
         return np.mean(coords, axis=0)
+    
+    def is_complex(self, grade=12):
+        '''
+        Checks whether the fragment is complex, according to its complexity grade, that is,
+        how many residues compose it.
+
+        Parameters
+        ----------
+        grade : int, optional
+            The minimal number of residues for the fragment to be considered complex. The default is 12.
+
+        Returns
+        -------
+        bool
+            Whether the fragment is complex.
+            True if |residues| >= grade, False otherwise.
+        '''
+        return structure_length(self.fragment) >= grade
 
     def is_connected(self, radius=5):
         '''
@@ -116,6 +134,7 @@ class TERMFragment:
         Returns
         -------
         bool
+            Whether the fragment is connected.
             True if the length connected components if 1, False otherwise.
         '''
         # Create dictionary which encodes residues as integers
