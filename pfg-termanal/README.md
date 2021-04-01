@@ -9,7 +9,7 @@ Copy the files `multi_term.sh` and `pfg_run.py` to the TERMANAL directory.
 Once in the TERMANAL directory, run the following command
 
 ```
-./multi_term.sh path/to/pdb/data/ path/to/pdb/fragments/all/
+./multi_term.sh path/to/pdb/data/ path/to/pdb/fragments/terms/
 ```
 
 This command could take a while.
