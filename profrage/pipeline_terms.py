@@ -81,6 +81,9 @@ def pipeline(fragments_dir, pdb_ch_ids, method, radius, grade, seq_score_thr, le
     frags_list = []
     for frag in fragments.keys():
         frags_list.append(frag)
+    if verbose:
+        print(f'Resulting fragments: {len(frags_list)}.')
+    # print(len(frags_list))
     sac = SACluster(frags_list, seq_score_thr, length_pct_thr, verbose=verbose)
     sac.cluster()
     typicals = sac.get_typicals()
@@ -88,7 +91,7 @@ def pipeline(fragments_dir, pdb_ch_ids, method, radius, grade, seq_score_thr, le
         frag = typicals[index]
         shutil.copy(fragments[frag], out_dir + os.path.basename(fragments[frag]))
         term = TERMFragment(fragments[frag])
-        term.to_pdb()
+        term.to_pdb(out_dir='lol/')
     # Show clusters
     sac.show_clusters()
     # Return success

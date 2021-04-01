@@ -107,8 +107,7 @@ class SACluster:
         # Print the frequencies
         plt.bar(freqs.keys(), freqs.values(), 1.0, color='b')
         plt.show()
-        
-        
+            
     def cluster(self):
         # Initialize
         self.clusters = {}
@@ -231,17 +230,15 @@ class SACluster:
         '''
         score_matrix = np.zeros(shape=(len(self.structures), len(self.structures)))
         for i in range(len(self.structures)-1):
+            score_matrix[i,i] = structure_length(self.structures[i])
             for j in range(i+1, len(self.structures)):
-                if j != i:
-                    if self._structure_lengths_within(i, j):
-                        score = self._align(i, j)
-                        score_matrix[i,j] = score
-                        score_matrix[j,i] = score
-                    else:
-                        score_matrix[i,j] = -1
-                        score_matrix[j,i] = -1
+                if self._structure_lengths_within(i, j):
+                    score = self._align(i, j)
+                    score_matrix[i,j] = score
+                    score_matrix[j,i] = score
                 else:
-                    score_matrix[i,i] = structure_length(self.structures[i])
+                    score_matrix[i,j] = -1
+                    score_matrix[j,i] = -1
         return score_matrix
     
     def _compute_typical(self, cluster_id):
