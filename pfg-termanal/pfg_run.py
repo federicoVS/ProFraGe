@@ -63,6 +63,9 @@ if not args.o == None:
     dir = args.o
     if not os.path.isdir(dir):
         os.makedirs(dir)
+        
+if os.path.isdir(dir + '/' + base + '/fragments'):
+    sys.exit() # directory already exists so no need to run everything
 
 # set up and create working directory paths
 FRAGMENTS_OUT = dir + '/' + base + '/fragments'
@@ -70,12 +73,12 @@ SCORES_OUT = dir
 os.makedirs(FRAGMENTS_OUT, mode=0o777)
 
 # run confind to get contacts
-print('Running ConFind...')
+# print('Running ConFind...')
 cmap_file = base + '.cmap'
 if not os.path.isfile(cmap_file):
     cmd_confind = [CONFIND, '--p', pdbf, '--o', cmap_file, '--rLib', ROTLIB]
     sub.call(cmd_confind)
-print('Done with ConFind...')
+# print('Done with ConFind...')
 
 # read in PDB file
 protein = parsePDB(pdbf).select('protein').copy()
@@ -85,7 +88,7 @@ for res in protein.iterResidues():
 head = ['t1k', 'uniq_t1k', 'hit1', 't1k_hit1', 'uniq_t1k_hit1']
 
 # # generate TERMs
-print('Generating TERMs...')
+# print('Generating TERMs...')
 for res in residues:
     cid, resnum = res.getChid(), res.getResnum()
     fragment_pdb = ''
@@ -99,4 +102,4 @@ for res in residues:
         seeds = contactList(cmap_file, cid, resnum, FRAGMENTS_OUT + '/' + listname, dcut = 0.1)
         seeds.insert(0, cid + ',' + str(resnum))
         makeFragment(pdbf, seeds, FRAGMENTS_OUT + '/' + fragment_pdb)
-print('Done generating TERMs...')
+# print('Done generating TERMs...')
