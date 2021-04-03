@@ -1,8 +1,8 @@
-## PFG-TERMANAL
+## PFG TERMANAL
 
 This directory contains tools which should be used with TERMANAL.
 
-Copy the files `multi_term.sh` and `pfg_run.py` to the TERMANAL directory.
+Copy the files `multi_term.sh`, `pfg_run.py`, and `pfg_functions.py` to the TERMANAL directory.
 
 ### Running the script
 
