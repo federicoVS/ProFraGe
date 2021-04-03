@@ -6,6 +6,7 @@ Created on Sun Mar 28 15:46:37 2021
 """
 
 import os
+from Bio.PDB.PDBIO import PDBIO
 
 def get_files(data_dir, ext='.pdb'):
     '''
@@ -47,3 +48,25 @@ def structure_length(structure):
     for residue in structure.get_residues():
         count += 1
     return count
+
+def to_pdb(structure, name, out_dir='./'):
+    '''
+    Writes the fragment into a PDB file. This can be useful for human analysis and
+    visualization.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure to convert into PDB format.
+    name : str
+        The name of the file. It should not contain the '.pdb' extension.
+    out_dir : str, optional
+        The directory where to save the PDB file. The default is './' (current directory).
+
+    Returns
+    -------
+    None.
+    '''
+    io = PDBIO()
+    io.set_structure(structure)
+    io.save(out_dir + name + '.pdb')
