@@ -8,4 +8,5 @@
 *.list
 *.pyc
 *.pyo
+*.class
 pdb/ids/m_pdb_ch_ids
