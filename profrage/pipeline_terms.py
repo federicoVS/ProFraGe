@@ -10,7 +10,7 @@ import shutil
 import argparse
 import pickle
 from fragments.TERMFragment import TERMFragment
-from similarity.SACluster import SACluster
+from cluster.greedy import SACluster
 from utils.ProgressBar import ProgressBar
 from utils.misc import get_files
 
@@ -86,9 +86,13 @@ def pipeline(fragments_dir, pdb_ch_ids, method, radius, grade, seq_score_thr, le
     # print(len(frags_list))
     sac = SACluster(frags_list, seq_score_thr, length_pct_thr, verbose=verbose)
     sac.cluster()
-    typicals = sac.get_typicals()
-    for index in typicals:
-        frag = typicals[index]
+    clusters = sac.get_clusters()
+    if verbose:
+        print(f'Resulting clusters: {len(clusters)}.')
+    for cluster_id in clusters:
+        frag = sac.get_clustered_structure(cluster_id, 0)
+        if verbose:
+            print(f'Cluster {cluster_id} has representative {frag}')
         shutil.copy(fragments[frag], out_dir + os.path.basename(fragments[frag]))
         term = TERMFragment(fragments[frag])
         term.to_pdb(out_dir='lol/')
@@ -105,7 +109,7 @@ if __name__ == '__main__':
     arg_parser.add_argument('--pdb_ch_ids', type=str, default='../pdb/ids/m_pdb_ch_ids', help='The file holding the IDs of the proteins and their chains. The default is ../pdb/ids/m_pdb_ch_ids')
     arg_parser.add_argument('--out_dir', type=str, default='../pdb/fragments/terms-filtered/', help='The directory where the super-fragments will be saved. The default is ../pdb/fragments/merged/')
     arg_parser.add_argument('--method', type=str, default='connected', help='The filtering method to apply to the fragments. The options are [connected, complex]. The default is connected.')
-    arg_parser.add_argument('--radius', type=float, default=5, help='The minimal radius to consider two residues belonging to different segments. The default is 5.')
+    arg_parser.add_argument('--radius', type=float, default=5, help='The minimal radius in Angstroms to consider two residues belonging to different segments. The default is 5A.')
     arg_parser.add_argument('--grade', type=float, default=12, help='The minimal number of residues for a fragment to be complex. The default is 12.')
     arg_parser.add_argument('--seq_score_thr', type=int, default=10, help='The score alignment threshold for two fragments to be considered similar. The default is 150.')
     arg_parser.add_argument('--length_pct_thr', type=float, default=0.5, help='The percentage of length two fragments need to share to be considered similar. The default is 0.8, with acceptable value belonging to the interval [0,1].')
