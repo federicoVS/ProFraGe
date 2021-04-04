@@ -86,8 +86,6 @@ class SeqAlign(Cluster):
         -------
         None.
         '''
-        # Initialize
-        self.clusters = {}
         cluster_id = 1
         placed = [False for i in range(len(self.structures))]
         score_cache = {}
@@ -192,7 +190,6 @@ class CASuperImpose(Cluster):
             return np.min(rmsds)
         
     def cluster(self):
-        self.clusters = {}
         cluster_id = 1
         placed = [False for i in range(len(self.structures))]
         rmsd_cache = {}

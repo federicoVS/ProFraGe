@@ -42,6 +42,17 @@ class Cluster:
         self.structures = structures
         self.verbose = verbose
         
+    def __len__(self):
+        '''
+        Returns the number of clusters.
+
+        Returns
+        -------
+        int
+            The number of clusters.
+        '''
+        return len(self.cluster)
+        
     def get_clusters(self):
         '''
         Returns the generated clusters.

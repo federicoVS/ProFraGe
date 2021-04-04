@@ -27,7 +27,7 @@ def get_files(data_dir, ext='.pdb'):
     files = []
     for file in os.listdir(data_dir):
         if file.endswith(ext):
-            files.append(data_dir+file)
+            files.append(data_dir + file)
     return files
 
 def structure_length(structure):
