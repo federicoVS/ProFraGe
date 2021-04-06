@@ -75,6 +75,19 @@ class Cluster:
             print(f'Cluster {cluster_id} has representative {structure.get_full_id()[0]}')
         return structure
     
+    def print_clusters_statistics(self):
+        '''
+        Prints clusters statistics.
+
+        Returns
+        -------
+        None.
+        '''
+        freqs = {}
+        for cluster_id in self.clusters:
+            freqs[cluster_id] = len(self.clusters[cluster_id])
+            print(f'Cluster {cluster_id} has size {len(self.clusters[cluster_id])}')
+    
     def show_clusters(self):
         '''
         Plots the size of each cluster as an histogram. The plot should indicate whether the

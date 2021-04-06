@@ -73,8 +73,8 @@ if __name__ == '__main__':
 
     # parse arguments
     par = argparse.ArgumentParser()
-    par.add_argument('--p', type=str, required=True, help='The input PDB directory.')
-    par.add_argument('--o', type=str, required=True, help='The output directory.')
+    par.add_argument('p', type=str, required=True, help='The input PDB directory.')
+    par.add_argument('o', type=str, required=True, help='The output directory.')
     par.add_argument('--s', type=str, default=None, help='The PDB file from which to start creating the fragments.')
     par.add_argument('--v', type=bool, default=False, help='Verbose.')
     args = par.parse_args()

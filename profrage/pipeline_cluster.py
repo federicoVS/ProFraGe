@@ -16,7 +16,7 @@ from utils.io import get_files, to_pdb, from_mmtf
 from utils.tm_align import tm_align
 from utils.ProgressBar import ProgressBar
 
-def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix_file, k, rmsd_thr=0.5, score_thr=10, length_pct_thr=0.5, verbose=False):
+def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix_file, k, rmsd_thr=0.5, score_thr=10, length_pct_thr=0.5, verbose=False, show=False):
     '''
     This pipeline takes filtered fragments from the specified directory and clusters them using the
     specified algorithm.
@@ -48,6 +48,8 @@ def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix
         The percentage of length two structures must share to be considered similar. The default is 0.5.
     verbose : bool, optional
         Whether to print progress information. The default is False.
+    show : bool, optional
+        Whether to show a plot of the distribution of the clusters. The default is False.
 
     Returns
     -------
@@ -96,6 +98,8 @@ def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix
         shutil.copy(fragments_dir + structure.get_full_id()[0] + '.mmtf', out_dir + structure.get_full_id()[0] + '.mmtf')
         to_pdb(structure, structure.get_full_id()[0], out_dir='lol/')
     if verbose:
+        cluster.print_clusters_statistics()
+    if show:
         cluster.show_clusters()
     
 
@@ -113,8 +117,9 @@ if __name__ == '__main__':
     arg_parser.add_argument('--score_thr', type=int, default=10, help='The alignment score threshold above which two fragments are considered similar. The default is 10.')
     arg_parser.add_argument('--length_pct_thr', type=float, default=0.5, help='The percentage of length two fragments must share in order to be considered similar. The default is 0.5.')
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
+    arg_parser.add_argument('--show', type=bool, default=False, help='Whether to show a plot of the distribution of the clusters. The default is False.')
     # Parse arguments
     args = arg_parser.parse_args()
     # Perform the pipeline
-    pipeline(args.method, args.data_get, args.fragments_dir, args.out_dir, args.tm_align_dir, args.dist_matrix_file, args.k, rmsd_thr=args.rmsd_thr, score_thr=args.score_thr, length_pct_thr=args.length_pct_thr, verbose=args.verbose)
+    pipeline(args.method, args.data_get, args.fragments_dir, args.out_dir, args.tm_align_dir, args.dist_matrix_file, args.k, rmsd_thr=args.rmsd_thr, score_thr=args.score_thr, length_pct_thr=args.length_pct_thr, verbose=args.verbose, show=args.show)
     
