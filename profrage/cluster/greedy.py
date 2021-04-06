@@ -11,7 +11,7 @@ from Bio.PDB.Polypeptide import CaPPBuilder
 from Bio.PDB.Superimposer import Superimposer
 from cluster.Cluster import Cluster
 from utils.ProgressBar import ProgressBar
-from utils.misc import structure_length
+from utils.structure import lengths_within
 
 class SeqAlign(Cluster):
     '''
@@ -36,7 +36,7 @@ class SeqAlign(Cluster):
         Parameters
         ----------
         structures : list of Bio.PDB.Structure
-            The list of structures to cluster.
+            The structures to cluster.
         seq_score_thr : int
             The threshold score for two sequences to be considered similar.
         length_pct_thr : float in [0,1]
@@ -53,30 +53,6 @@ class SeqAlign(Cluster):
         self.seq_score_thr = seq_score_thr
         self.length_pct_thr = length_pct_thr
         self.verbose = verbose
-        
-    def _compare(self, index_1, index_2):
-        '''
-        Compares the specified structures by aligning them.
-
-        Parameters
-        ----------
-        index_1 : int
-            The index of the first structure.
-        index_2 : TYPE
-            The second of the first structure..
-
-        Returns
-        -------
-        int
-            The best score, i.e. the largest one among all sequences.
-        '''
-        seq_1 = self._get_sequences(index_1)
-        seq_2 = self._get_sequences(index_2)
-        score = 0
-        for s_1 in seq_1:
-            for s_2 in seq_2:
-                score += pairwise2.align.globalxx(s_1, s_2, score_only=True)
-        return score
             
     def cluster(self):
         '''
@@ -102,7 +78,7 @@ class SeqAlign(Cluster):
                 self.clusters[cluster_id] = []
                 self.clusters[cluster_id].append(i)
                 for j in range(len(self.structures)):
-                    if j != i and self._structure_lengths_within(i, j) and not placed[j]:
+                    if j != i and lengths_within(self.structures[i], self.structures[j], self.length_pct_thr) and not placed[j]:
                         score = 0
                         if (i,j) not in score_cache:
                             score = self.compare(i, j)
@@ -116,29 +92,29 @@ class SeqAlign(Cluster):
         if self.verbose:
             progress_bar.end()
             
-    def _structure_lengths_within(self, index_1, index_2):
+    def _compare(self, index_1, index_2):
         '''
-        Returns whether the specified structures have comparable length.
+        Compares the specified structures by aligning them.
 
         Parameters
         ----------
         index_1 : int
             The index of the first structure.
-        index_2 : int
-            The index of the first structure.
+        index_2 : TYPE
+            The second of the first structure..
 
         Returns
         -------
-        bool
-            Whether the structures have comparable length.
+        int
+            The best score, i.e. the largest one among all sequences.
         '''
-        small = structure_length(self.structures[index_1])
-        large = structure_length(self.structures[index_2])
-        if small > large:
-            temp = large
-            large = small
-            small = temp
-        return (small/large) >= self.length_pct_thr
+        seq_1 = self._get_sequences(index_1)
+        seq_2 = self._get_sequences(index_2)
+        score = 0
+        for s_1 in seq_1:
+            for s_2 in seq_2:
+                score += pairwise2.align.globalxx(s_1, s_2, score_only=True)
+        return score
         
     def _get_sequences(self, index):
         '''
@@ -163,13 +139,94 @@ class SeqAlign(Cluster):
         return sequences
     
 class CASuperImpose(Cluster):
+    '''
+    Performs clustering of the structures based on the superimposition of their alpha-carbon (CA) atoms.
+    Two structuress are then considered similar and clustered together if the resulting RMSD is higher
+    than the specified threshold.
+    
+    Attributes
+    ----------
+    rmsd_thr : float
+        The RMSD threshold for two structures to be considered similar.
+    length_pct_thr : float in [0,1]
+        The percentage of length two structures should share to be considered similar.
+    '''
     
     def __init__(self, structures, rmsd_thr, length_pct_thr, verbose=False):
+        '''
+        Initializes the class.
+
+        Parameters
+        ----------
+        structures : list of Bio.PDB.Structure
+            The structures to cluster.
+        rmsd_thr : float
+            The RMSD threshold.
+        length_pct_thr : float in [0,1]
+            The length percentage threshold.
+        verbose : TYPE, optional
+            Whether to print progress information. The default is False.
+
+        Returns
+        -------
+        None.
+        '''
         super(CASuperImpose, self).__init__(structures, verbose)
         self.rmsd_thr = rmsd_thr
         self.length_pct_thr = length_pct_thr
         
-    def compare(self, index_1, index_2):
+    def cluster(self):
+        '''
+        Performs the clustering.
+
+        Returns
+        -------
+        None.
+        '''
+        cluster_id = 1
+        placed = [False for i in range(len(self.structures))]
+        rmsd_cache = {}
+        progress_bar = ProgressBar()
+        if self.verbose:
+            print('Clustering...')
+            progress_bar.start()
+        for i in range(len(self.structures)):
+            if self.verbose:
+                progress_bar.step(i, len(self.structures))
+            if not placed[i]:
+                placed[i] = True
+                self.clusters[cluster_id] = []
+                self.clusters[cluster_id].append(i)
+                for j in range(len(self.structures)):
+                    if j != i and lengths_within(self.structures[i], self.structures[j], self.length_pct_thr) and not placed[j]:
+                        rmsd = 0
+                        if (i,j) not in rmsd_cache:
+                            rmsd = self.compare(i, j)
+                            rmsd_cache[(i,j)] = rmsd
+                        else:
+                            rmsd = rmsd_cache[(i,j)]
+                        if rmsd <= self.rmsd_thr:
+                            self.clusters[cluster_id].append(j)
+                cluster_id += 1
+        if self.verbose:
+            progress_bar.end()
+            
+    def _compare(self, index_1, index_2):
+        '''
+        Compares the specified structures by superimposing them.
+
+        Parameters
+        ----------
+        index_1 : int
+            The index of the first structure.
+        index_2 : int
+            The index of the second structure.
+
+        Returns
+        -------
+        float
+            The minimum RMSD value across the computed superimpositions .
+        '''
         ca_atoms_1 = self._get_ca_atoms(index_1)
         ca_atoms_2 = self._get_ca_atoms(index_2)
         if len(ca_atoms_1) == len(ca_atoms_2):
@@ -189,80 +246,25 @@ class CASuperImpose(Cluster):
             rmsds = np.array(rmsds)
             return np.min(rmsds)
         
-    def cluster(self):
-        cluster_id = 1
-        placed = [False for i in range(len(self.structures))]
-        rmsd_cache = {}
-        progress_bar = ProgressBar()
-        if self.verbose:
-            print('Clustering...')
-            progress_bar.start()
-        for i in range(len(self.structures)):
-            if self.verbose:
-                progress_bar.step(i, len(self.structures))
-            if not placed[i]:
-                placed[i] = True
-                self.clusters[cluster_id] = []
-                self.clusters[cluster_id].append(i)
-                for j in range(len(self.structures)):
-                    if j != i and self._length_within(i, j) and not placed[j]:
-                        rmsd = 0
-                        if (i,j) not in rmsd_cache:
-                            rmsd = self.compare(i, j)
-                            rmsd_cache[(i,j)] = rmsd
-                        else:
-                            rmsd = rmsd_cache[(i,j)]
-                        if rmsd <= self.rmsd_thr:
-                            self.clusters[cluster_id].append(j)
-                cluster_id += 1
-        if self.verbose:
-            progress_bar.end()
-                        
-    def _length_within(self, index_1, index_2):
+    def _superimpose(self, index, atoms_fixed, atoms_moving):
         '''
-        Returns whether the specified structures have comparable length.
+        Performs superimposition between the specified structures.
 
         Parameters
         ----------
-        index_1 : int
-            The index of the first structure.
-        index_2 : int
-            The index of the first structure.
+        index : int
+            The index of the reference structure.
+        atoms_fixed : list of Bio.PDB.Atoms
+            The list of the fixed (reference) atoms.
+        atoms_moving : numpy.ndarray
+            The list of the moving atoms.
 
         Returns
         -------
-        bool
-            Whether the structures have comparable length.
+        float
+            The RMSD. In case of errors numpy.inf is returned.
         '''
-        small = structure_length(self.structures[index_1])
-        large = structure_length(self.structures[index_2])
-        if small > large:
-            temp = large
-            large = small
-            small = temp
-        return (small/large) >= self.length_pct_thr
-        
-    def _get_ca_atoms(self, index):
-        structure = self.structures[index]
-        ca_atoms = []
-        for model in structure:
-            for chain in model:
-                for residue in chain:
-                    ca_atoms.append(residue['CA'].copy())
-        return ca_atoms
-    
-    def _get_shifted_atoms_subsets(self, ca_atoms_long, ca_atoms_short):
-        shifted_atoms = []
-        for i in range(len(ca_atoms_long) - len(ca_atoms_short)):
-            s_atoms = []
-            for j in range(i, i+len(ca_atoms_short)):
-                s_atoms.append(ca_atoms_long[j])
-            shifted_atoms.append(s_atoms)
-        return shifted_atoms
-    
-    def _superimpose(self, index, atoms_fixed, atoms_moving):
         si = Superimposer()
-        # print(atoms_fixed)
         try:
             np.seterr(all='ignore')
             si.set_atoms(atoms_fixed, atoms_moving)
@@ -270,5 +272,52 @@ class CASuperImpose(Cluster):
             return si.rms
         except np.linalg.LinAlgError:
             return np.inf
+        
+    def _get_shifted_atoms_subsets(self, ca_atoms_long, ca_atoms_short):
+        '''
+        Computes all subsets of contiguous CA atoms for the longer chain. This is necessary
+        because superimposition requires structures of the same length.
+
+        Parameters
+        ----------
+        ca_atoms_long : list of Bio.PDB.Atoms 
+            The list of the CA atoms of the larger structure.
+        ca_atoms_short : list of Bio.PDB.Atoms
+            The list of the CA atoms of the shorter structure..
+
+        Returns
+        -------
+        shifted_atoms : list of list of Bio.PDB.Atoms
+            The list of shifted CA atoms.
+        '''
+        shifted_atoms = []
+        for i in range(len(ca_atoms_long) - len(ca_atoms_short)):
+            s_atoms = []
+            for j in range(i, i+len(ca_atoms_short)):
+                s_atoms.append(ca_atoms_long[j])
+            shifted_atoms.append(s_atoms)
+        return shifted_atoms
+        
+    def _get_ca_atoms(self, index):
+        '''
+        Gets the CA atoms from the specified structure.
+
+        Parameters
+        ----------
+        index : int
+            The index of the structure.
+
+        Returns
+        -------
+        ca_atoms : list of Bio.PDB.Atoms
+            The CA atoms of the structure.
+        '''
+        structure = self.structures[index]
+        ca_atoms = []
+        for model in structure:
+            for chain in model:
+                for residue in chain:
+                    ca_atoms.append(residue['CA'].copy())
+        return ca_atoms
     
     

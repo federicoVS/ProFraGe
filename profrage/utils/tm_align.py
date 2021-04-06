@@ -9,16 +9,16 @@ import os
 import subprocess
 import numpy as np
 from utils.ProgressBar import ProgressBar
-from utils.misc import to_pdb
+from utils.io import to_pdb
 
-def tm_align(fragments, tm_align_dir, outfile, out_dir='./', save=True, verbose=False):
+def tm_align(structures, tm_align_dir, outfile, out_dir='./', save=True, verbose=False):
     '''
     Call the TM-align structural comparison for all fragments.
 
     Parameters
     ----------
-    fragments : fragments.Fragment
-        The fragments to compare.
+    structures : list of Bio.PDB.Structure
+        The structures to compare.
     tm_align_dir : str
         The directory where the TMalign tool is located.
     outfile : str
@@ -34,10 +34,9 @@ def tm_align(fragments, tm_align_dir, outfile, out_dir='./', save=True, verbose=
     -------
     tm_score_matrix : numpy.ndarray
         The (symmetric) distance matrix.
-
     '''
-    n = len(fragments)
-    tm_score_matrix = np.zeros((n,n))
+    n = len(structures)
+    tm_score_matrix = np.ones((n,n)) # 1 means the structures are equal
     progress_bar = ProgressBar()
     if verbose:
         print('Computing TM-score matrix...')
@@ -46,10 +45,10 @@ def tm_align(fragments, tm_align_dir, outfile, out_dir='./', save=True, verbose=
         if verbose:
             progress_bar.step(i, n-1)
         for j in range(i+1, n):
-            pdb_i = fragments[i].get_name() + '.pdb'
-            pdb_j = fragments[j].get_name() + '.pdb'
-            to_pdb(fragments[i].get_fragment(), pdb_i[:-4])
-            to_pdb(fragments[j].get_fragment(), pdb_j[:-4])
+            pdb_i = structures[i].get_full_id()[0] + '.pdb'
+            pdb_j = structures[j].get_full_id()[0] + '.pdb'
+            to_pdb(structures[i], pdb_i[:-4])
+            to_pdb(structures[j], pdb_j[:-4])
             command = [tm_align_dir + 'TMalignMac', pdb_i, pdb_j, '-a', 'T']
             command = tm_align_dir + 'TMalignMac ' + pdb_i + ' ' + pdb_j + ' -a T'
             ps = subprocess.Popen(command,shell=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)

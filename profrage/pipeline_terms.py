@@ -9,11 +9,11 @@ import os
 import shutil
 import argparse
 import pickle
-from fragments.Fragment import Fragment
+from fragments.filtering import is_complex, is_connected
 from utils.ProgressBar import ProgressBar
-from utils.misc import get_files
+from utils.io import get_files, from_mmtf
 
-def pipeline(fragments_dir, pdb_ch_ids, method, radius, grade, out_dir='./', verbose=False):
+def pipeline(fragments_dir, pdb_ch_ids, method, radius=5, grade=12, out_dir='./', verbose=False):
     '''
     This pipeline takes a directory of fragments and filters them in order to retain ones which
     are composed of multiple segments.
@@ -26,10 +26,10 @@ def pipeline(fragments_dir, pdb_ch_ids, method, radius, grade, out_dir='./', ver
         The file holding the IDs of proteins and chains.
     method : str
         The filtering method to apply to the fragments.
-    radius : float
-        The minimal radius to consider two redidues belonging to different segments.
-    grade : int
-        The minimal number of residues for a fragment to be complex.
+    radius : float, optional
+        The minimal radius to consider two redidues belonging to different segments.The default is 5 A.
+    grade : int, optional
+        The minimal number of residues for a fragment to be complex. The default is 12.
     out_dir : str, optional
         The directory where to save the results. The default is './' (current directory).
     verbose : bool, optional
@@ -58,13 +58,13 @@ def pipeline(fragments_dir, pdb_ch_ids, method, radius, grade, out_dir='./', ver
             mmtfs = get_files(dir_name, ext='.mmtf')
             # Iterate through each MMTF file
             for mmtf in mmtfs:
-                term = Fragment(mmtf)
+                term = from_mmtf(mmtf)
                 if method == 'connected':
-                    if not term.is_connected(radius=radius):
+                    if not is_connected(term, radius=radius):
                         n_fragments += 1
                         shutil.copy(mmtf, out_dir + os.path.basename(mmtf)[:-5] + '.mmtf')
                 elif method == 'complex':
-                    if term.is_complex(grade=grade):
+                    if is_complex(term, grade=grade):
                         n_fragments += 1
                         shutil.copy(mmtf, out_dir + os.path.basename(mmtf)[:-5] + '.mmtf')
                 else:
@@ -78,7 +78,7 @@ def pipeline(fragments_dir, pdb_ch_ids, method, radius, grade, out_dir='./', ver
 
 if __name__ == '__main__':
     # Argument parser initialization
-    arg_parser = argparse.ArgumentParser(description='Merging of fragments')
+    arg_parser = argparse.ArgumentParser(description='Filtering the fragments.')
     arg_parser.add_argument('--fragments_dir', type=str, default='../pdb/fragments/terms/', help='The directory where the fragments are held. The default is ../pdb/fragments/terms/')
     arg_parser.add_argument('--pdb_ch_ids', type=str, default='../pdb/ids/m_pdb_ch_ids', help='The file holding the IDs of the proteins and their chains. The default is ../pdb/ids/m_pdb_ch_ids')
     arg_parser.add_argument('--out_dir', type=str, default='../pdb/fragments/terms-filtered/', help='The directory where the filtered fragments will be saved. The default is ../pdb/fragments/terms-filtered/')

@@ -8,7 +8,7 @@ Created on Thu Mar 25 15:09:40 2021
 import pickle
 import matplotlib.pyplot as plt
 from prody.proteins.pdbclusters import fetchPDBClusters, loadPDBClusters
-from search import binary_search
+from utils.search import binary_search
 from utils.ProgressBar import ProgressBar
 
 def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False):
