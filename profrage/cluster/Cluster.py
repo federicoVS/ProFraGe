@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Fri Apr  2 17:55:07 2021
@@ -10,7 +9,7 @@ import matplotlib.pyplot as plt
 
 class Cluster:
     '''
-    A generic cluster class.
+    The abstract cluster class.
     
     Attributes
     ----------
@@ -106,7 +105,7 @@ class Cluster:
         
     def cluster(self):
         '''
-        Performs the clustering.
+        Performs the clustering. This method is meant to be overridden by subclasses.
 
         Returns
         -------

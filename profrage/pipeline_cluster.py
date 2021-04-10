@@ -80,6 +80,9 @@ def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix
             coords_matrix[i,:] = usr.momenta
         if verbose:
             progress_bar.end()
+    else:
+        print('Invalid data.')
+        return
     cluster = None
     if method == 'spectral':
         cluster = Spectral(structures, dist_matrix, k, to_invert=True, verbose=verbose)
@@ -91,6 +94,9 @@ def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix
         cluster = SeqAlign(structures, score_thr, length_pct_thr)
     elif method == 'super_imp':
         cluster = CASuperImpose(structures, rmsd_thr, length_pct_thr)
+    else:
+        print('Invalid clustering method.')
+        return
     cluster.cluster()
     # Iterate over the clusters and get representative
     for cluster_id in range(len(cluster)):
@@ -108,8 +114,8 @@ if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser(description='Clustering of fragments.')
     arg_parser.add_argument('method', type=str, help='The clustering method to apply to the fragments. The options are [spectral, kmeans, gmm, seq_align, super_imp].')
     arg_parser.add_argument('data_get', type=str, help='Which data to use for the clustering. The options are [structural, tm_align, usr].')
-    arg_parser.add_argument('--fragments_dir', type=str, default='../pdb/fragments/terms-filtered/', help='The directory where the fragments are held. The default is ../pdb/fragments/terms/')
-    arg_parser.add_argument('--out_dir', type=str, default='../pdb/fragments/terms-clustered/', help='The directory where the clustered fragments will be saved. The default is ../pdb/fragments/terms-clustered/')
+    arg_parser.add_argument('fragments_dir', type=str, help='The directory where the fragments are held in MMTF format.')
+    arg_parser.add_argument('out_dir', type=str, help='The directory where the clustered fragments will be saved.')
     arg_parser.add_argument('--tm_align_dir', type=str, default=None, help='The directory where the TM-align tool is located.')
     arg_parser.add_argument('--dist_matrix_file', type=str, default='../pdb/ids/tm_align.npy', help='The directory where the TM-align distance matrix is located. The default is ../pdb/ids/tm_align.npy')
     arg_parser.add_argument('--k', type=int, default=30, help='The number of clusters, should kNN or spectral clustering be chosen.')
@@ -120,6 +126,6 @@ if __name__ == '__main__':
     arg_parser.add_argument('--show', type=bool, default=False, help='Whether to show a plot of the distribution of the clusters. The default is False.')
     # Parse arguments
     args = arg_parser.parse_args()
-    # Perform the pipeline
+    # Begin pipeline
     pipeline(args.method, args.data_get, args.fragments_dir, args.out_dir, args.tm_align_dir, args.dist_matrix_file, args.k, rmsd_thr=args.rmsd_thr, score_thr=args.score_thr, length_pct_thr=args.length_pct_thr, verbose=args.verbose, show=args.show)
     

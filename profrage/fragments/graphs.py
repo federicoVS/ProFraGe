@@ -5,11 +5,9 @@ Created on Tue Apr  6 00:37:42 2021
 @author: FVS
 """
 
-class ComponentsGraph:
+class UUGraph:
     '''
-    A class which represents a fragment as a graph. The goal of this class is
-    to compute the connected components of the fragment to determine whether it is composed
-    of multiple fragments.
+    A generic undirected, unweighted graph class.
     
     Source
     ------
@@ -24,8 +22,7 @@ class ComponentsGraph:
     N : int
         The number of vetices.
     adj : list of list of int
-        The adjacency matrix. Because a a fragment has a median of 12 residues and a
-        maximum of 41, it is feasible to use a list of lists.
+        The adjacency matrix represented as a list of lists.
     '''
     
     def __init__(self, N):
@@ -44,17 +41,6 @@ class ComponentsGraph:
         self.connected_components = []
         self.N = N
         self.adj = [[] for i in range(N)]
-        
-    def get_components(self):
-        '''
-        Returns the connected components
-
-        Returns
-        -------
-        list of list of int
-            The connected components.
-        '''
-        return self.connected_components
     
     def add_edge(self, v, w):
         '''
@@ -111,8 +97,6 @@ class ComponentsGraph:
         '''
         # Create component for v
         v_component = []
-        # Update visited list
-        visited[v] = True
         # DFS stack
         stack = []
         # Push v

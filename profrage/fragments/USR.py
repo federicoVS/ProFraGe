@@ -130,7 +130,7 @@ class USR:
         
     def compute_all(self):
         '''
-        Computes the features and their momenta
+        Computes the features and their momenta.
 
         Returns
         -------

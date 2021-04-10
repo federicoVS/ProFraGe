@@ -6,7 +6,7 @@ Created on Tue Apr  6 02:10:15 2021
 """
 
 from Bio.PDB import NeighborSearch, Selection
-from fragments.graphs import ComponentsGraph
+from fragments.graphs import UUGraph
 from utils.structure import structure_length, get_residue_center
 
 def is_complex(structure, grade=12):
@@ -40,7 +40,7 @@ def is_connected(structure, radius=5):
     Returns
     -------
     bool
-    Whether the fragment is connected.
+        Whether the fragment is connected.
     '''
     # Create dictionary which encodes residues as integers
     index = 0
@@ -49,7 +49,7 @@ def is_connected(structure, radius=5):
         vertex_dict[residue] = index
         index += 1
     # Create graph
-    graph = ComponentsGraph(index)
+    graph = UUGraph(index)
     # Iterate over the residues
     for target_residue in structure.get_residues():
         center_coord = get_residue_center(target_residue)
@@ -62,7 +62,6 @@ def is_connected(structure, radius=5):
         for cr in close_residues:
             graph.add_edge(vertex_dict[target_residue], vertex_dict[cr])
     # Compute the connected components
-    graph.connected_components()
-    connected_components = graph.get_components()
-    return len(connected_components) == 1
+    graph.compute_connected_components()
+    return len(graph.connected_components) == 1
 
