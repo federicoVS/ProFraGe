@@ -21,7 +21,7 @@ def structure_length(structure):
     count : int
         The length of the structure measured in number of residues.
     '''
-    count = 1
+    count = 0
     for residue in structure.get_residues():
         count += 1
     return count
@@ -49,7 +49,7 @@ def get_atoms_coords(structure):
         count += 1
     return np.array(atoms_coords).reshape((count,3))
 
-def get_residue_center(self, residue):
+def get_residue_center(residue):
     '''
     Computes the coordinates of the center of the given residue.
 
