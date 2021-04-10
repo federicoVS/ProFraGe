@@ -25,6 +25,18 @@ class ProgressBar:
     '''
     
     def __init__(self, current=1):
+        '''
+        Initializes the class.
+
+        Parameters
+        ----------
+        current : int, optional
+            The current value for the progression. The default is 1.
+
+        Returns
+        -------
+        None.
+        '''
         self.current = current
         self.BAR_WIDTH = 100
 
@@ -55,10 +67,13 @@ class ProgressBar:
         -------
         None.
         '''
-        should_bar = self.BAR_WIDTH*(count/total)
-        if math.floor(should_bar) >= self.current:
-            self.current += 1
-            sys.stdout.write('#')
+        should_bar = math.floor(self.BAR_WIDTH*(count/total))
+        # print(self.current, should_bar)
+        if should_bar >= self.current:
+            delta = should_bar - self.current
+            for i in range(delta):
+                sys.stdout.write('#')
+            self.current += delta
             sys.stdout.flush()
             
     def end(self):
@@ -69,5 +84,6 @@ class ProgressBar:
         -------
         None.
         '''
+        sys.stdout.write('#')
         sys.stdout.write('\n')
     
