@@ -6,8 +6,9 @@ Created on Sun Mar 28 15:46:37 2021
 """
 
 import os
+from Bio.PDB import PDBParser
 from Bio.PDB.PDBIO import PDBIO
-from Bio.PDB.mmtf import MMTFParser
+from Bio.PDB.mmtf import MMTFParser, MMTFIO
 
 def get_files(data_dir, ext='.pdb'):
     '''
@@ -53,6 +54,27 @@ def to_pdb(structure, name, out_dir='./'):
     io.set_structure(structure)
     io.save(out_dir + name + '.pdb')
     
+def to_mmtf(structure, name, out_dir='./'):
+    '''
+    Writes the fragment into a MMTF file.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure to convert into MMTF format.
+    name : str
+        The name of the file. It should not contain the '.mmtf' extension.
+    out_dir : str, optional
+        The directory where to save the MMTF file. The default is './' (current directory).
+
+    Returns
+    -------
+    None.
+    '''
+    io = MMTFIO()
+    io.set_structure(structure)
+    io.save(out_dir + name + '.mmtf')
+    
 def from_mmtf(mmtf):
     '''
     Reads the structure from a MMTF file.
@@ -60,7 +82,7 @@ def from_mmtf(mmtf):
     Parameters
     ----------
     mmtf : str
-        The MMTF to read from.
+        The MMTF file to read from.
 
     Returns
     -------
@@ -69,6 +91,28 @@ def from_mmtf(mmtf):
     '''
     parser = MMTFParser()
     structure = parser.get_structure(mmtf)
+    return structure
+
+def from_pdb(name, pdb, quiet=False):
+    '''
+    Reads the structure from a PDB file.
+
+    Parameters
+    ----------
+    name : str
+        The name of the structure.
+    pdb : str
+        The PDB file to read from.
+    quiet : bool, optional
+        Whether not to pring warnings. The default is False.
+
+    Returns
+    -------
+    structure : Bio.PDB.Structure
+        The structure.
+    '''
+    parser = PDBParser(QUIET=quiet)
+    structure = parser.get_structure(name, pdb)
     return structure
     
     
