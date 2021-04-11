@@ -9,6 +9,7 @@
 *.pyc
 *.pyo
 *.class
+profrage/test.py
 pdb/ids/m_pdb_ch_ids
 pdb/ids/tm_align.npy
 pfg-tm-align/TMalign
