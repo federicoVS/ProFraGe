@@ -16,7 +16,7 @@ from utils.io import get_files, to_pdb, from_mmtf
 from utils.tm_align import tm_align
 from utils.ProgressBar import ProgressBar
 
-def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix_file, k, rmsd_thr=0.5, score_thr=10, length_pct_thr=0.5, verbose=False, show=False):
+def pipeline(method, clustering, cluster_data, base_dir, tm_align_dir, dist_matrix_file, k, rmsd_thr=0.5, score_thr=10, length_pct_thr=0.5, verbose=False, show=False):
     '''
     This pipeline takes filtered fragments from the specified directory and clusters them using the
     specified algorithm.
@@ -24,16 +24,16 @@ def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix
     Parameters
     ----------
     method : str
-        The clustering method to apply to the structures. The options are [spectral, kmeans, gmm, seq_align, super_imp].
-    data_get : str
+        The method used to generate the fragments.
+    clustering : str
+        The clustering algorithm to use.
+    cluster_data : str
         The data to use for the clustering. The options are [structural, tm_align, usr]. Option `structural`
         should be used with clustering methods `seq_align` and `super_imp`. Option `tm_align` should
         be used with clustering method `spectral`. Option `usr` should be used with clustering method
         `gmm`.
-    fragments_dir : str
-        The directory containing the fragments. The fragments are assumed to be stored in MMTF format.
-    out_dir : str
-        The directory where the clustered fragments will be saved.
+    base_dir : str
+        The directory for input and output. The fragments are assumed to be stored in MMTF format.
     tm_align_dir : str
         The directory where the TM-align tool is to be found.
     dist_matrix_file : str
@@ -55,18 +55,18 @@ def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix
     -------
     None.
     '''
-    mmtfs = get_files(fragments_dir, ext='.mmtf')
+    mmtfs = get_files(base_dir + method + '-filtered/', ext='.mmtf')
     structures = [None for i in range(len(mmtfs))]
     for i in range(len(mmtfs)):
         structures[i] = from_mmtf(mmtfs[i])
     dist_matrix = None
     coords_matrix = None
-    if data_get == 'tm_align':
+    if cluster_data == 'tm_align':
         if os.path.isfile(dist_matrix_file):
             dist_matrix = np.load(dist_matrix_file)
         else:
             dist_matrix = tm_align(structures, tm_align_dir, 'tm_align', out_dir='../pdb/ids/', verbose=verbose)
-    elif data_get == 'usr':
+    elif cluster_data == 'usr':
         coords_matrix = np.zeros(shape=(len(structures),12))
         progress_bar = ProgressBar()
         if verbose:
@@ -98,10 +98,13 @@ def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix
         print('Invalid clustering method.')
         return
     cluster.cluster()
+    # Create output directory
+    if not os.path.exists(base_dir+method+'-clustered/'):
+        os.makedirs(base_dir+method+'-clustered/')
     # Iterate over the clusters and get representative
     for cluster_id in range(len(cluster)):
         structure = cluster.get_clustered_structure(cluster_id, 0)
-        shutil.copy(fragments_dir + structure.get_full_id()[0] + '.mmtf', out_dir + structure.get_full_id()[0] + '.mmtf')
+        shutil.copy(base_dir + method + '-filtered/' + structure.get_full_id()[0] + '.mmtf', base_dir + method + '-clustered/' + structure.get_full_id()[0] + '.mmtf')
         to_pdb(structure, structure.get_full_id()[0], out_dir='lol/')
     if verbose:
         cluster.print_clusters_statistics()
@@ -112,10 +115,10 @@ def pipeline(method, data_get, fragments_dir, out_dir, tm_align_dir, dist_matrix
 if __name__ == '__main__':
     # Argument parser initialization
     arg_parser = argparse.ArgumentParser(description='Clustering of fragments.')
-    arg_parser.add_argument('method', type=str, help='The clustering method to apply to the fragments. The options are [spectral, kmeans, gmm, seq_align, super_imp].')
-    arg_parser.add_argument('data_get', type=str, help='Which data to use for the clustering. The options are [structural, tm_align, usr].')
-    arg_parser.add_argument('fragments_dir', type=str, help='The directory where the fragments are held in MMTF format.')
-    arg_parser.add_argument('out_dir', type=str, help='The directory where the clustered fragments will be saved.')
+    arg_parser.add_argument('method', type=str, help='The method used to generate the fragments.')
+    arg_parser.add_argument('clustering', type=str, help='The clustering method to apply to the fragments. The options are [spectral, kmeans, gmm, seq_align, super_imp].')
+    arg_parser.add_argument('cluster_data', type=str, help='Which data to use for the clustering. The options are [structural, tm_align, usr].')
+    arg_parser.add_argument('--base_dir', type=str, default='../pdb/fragments/', help='The base directory for input and output. The default is ../pdb/fragments/.')
     arg_parser.add_argument('--tm_align_dir', type=str, default=None, help='The directory where the TM-align tool is located.')
     arg_parser.add_argument('--dist_matrix_file', type=str, default='../pdb/ids/tm_align.npy', help='The directory where the TM-align distance matrix is located. The default is ../pdb/ids/tm_align.npy')
     arg_parser.add_argument('--k', type=int, default=30, help='The number of clusters, should kNN or spectral clustering be chosen.')
@@ -127,5 +130,5 @@ if __name__ == '__main__':
     # Parse arguments
     args = arg_parser.parse_args()
     # Begin pipeline
-    pipeline(args.method, args.data_get, args.fragments_dir, args.out_dir, args.tm_align_dir, args.dist_matrix_file, args.k, rmsd_thr=args.rmsd_thr, score_thr=args.score_thr, length_pct_thr=args.length_pct_thr, verbose=args.verbose, show=args.show)
+    pipeline(args.method, args.clustering, args.cluster_data, args.base_dir, args.tm_align_dir, args.dist_matrix_file, args.k, rmsd_thr=args.rmsd_thr, score_thr=args.score_thr, length_pct_thr=args.length_pct_thr, verbose=args.verbose, show=args.show)
     
