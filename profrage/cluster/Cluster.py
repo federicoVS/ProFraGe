@@ -99,7 +99,6 @@ class Cluster:
         freqs = {}
         for cluster_id in self.clusters:
             freqs[cluster_id] = len(self.clusters[cluster_id])
-            print(f'Cluster {cluster_id} has size {len(self.clusters[cluster_id])}')
         plt.bar(freqs.keys(), freqs.values(), 1.0, color='b')
         plt.show()
         

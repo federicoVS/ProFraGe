@@ -34,6 +34,8 @@ def is_connected(structure, radius=5):
 
     Parameters
     ----------
+    structure : Bio.PDB.Structure
+        The structure of which to compute the complexity.
     radius : float, optional
         Search radius in Angstroms. The default is 5.
 
