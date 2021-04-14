@@ -11,8 +11,8 @@ from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB.mmtf import MMTFParser, MMTFIO
 
 def get_files(data_dir, ext='.pdb'):
-    '''
-    Returns a list of files with the desired extension from the specified directory.
+    """
+    Return a list of files with the desired extension from the specified directory.
     
     Parameters
     ----------
@@ -25,17 +25,44 @@ def get_files(data_dir, ext='.pdb'):
     -------
     files : list of str
         The list containing the files.
-    '''
+    """
     files = []
     for file in os.listdir(data_dir):
         if file.endswith(ext):
             files.append(data_dir + file)
     return files
 
+def parse_cmap(cmap_file):
+    """
+    Parse a CMAP file holding interaction information and return its entries.
+
+    Parameters
+    ----------
+    cmap_file : str
+        The CMAP file holding the interaction informations among residues of the same structure.
+
+    Returns
+    -------
+    entries : list of (str, str, str, str, float)
+        The list of entries. Each entry is a tuple of the form
+        (chain_id_1, chain_id_2, residue_id_1, residue_id_2, f), where `f` belongs to [0,1] and is a
+        measure of whether residues 1 and 2 are interacting. Usually value of `f` larger than 0.1
+        indicate interaction.
+    """
+    entries = []
+    cmap = open(cmap_file)
+    for line in cmap:
+        fields = line.split()
+        if fields[0] == 'contact':
+            chain_id_1, res_idx_1 = int(fields[1].split(',')[0]), int(fields[1].split(',')[1])
+            chain_id_2, res_idx_2 = int(fields[2].split(',')[0]), int(fields[2].split(',')[1])
+            dist = float(fields[3])
+            entries.append(chain_id_1, chain_id_2, res_idx_1, res_idx_2, dist)
+    return entries
+
 def to_pdb(structure, name, out_dir='./'):
-    '''
-    Writes the fragment into a PDB file. This can be useful for human analysis and
-    visualization.
+    """
+    Write the fragment into a PDB file.
 
     Parameters
     ----------
@@ -49,14 +76,14 @@ def to_pdb(structure, name, out_dir='./'):
     Returns
     -------
     None.
-    '''
+    """
     io = PDBIO()
     io.set_structure(structure)
     io.save(out_dir + name + '.pdb')
     
 def to_mmtf(structure, name, out_dir='./'):
-    '''
-    Writes the fragment into a MMTF file.
+    """
+    Write the fragment into a MMTF file.
 
     Parameters
     ----------
@@ -70,14 +97,14 @@ def to_mmtf(structure, name, out_dir='./'):
     Returns
     -------
     None.
-    '''
+    """
     io = MMTFIO()
     io.set_structure(structure)
     io.save(out_dir + name + '.mmtf')
     
 def from_mmtf(mmtf):
-    '''
-    Reads the structure from a MMTF file.
+    """
+    Read the structure from a MMTF file.
 
     Parameters
     ----------
@@ -88,14 +115,14 @@ def from_mmtf(mmtf):
     -------
     structure : Bio.PDB.Structure
         The structure.
-    '''
+    """
     parser = MMTFParser()
     structure = parser.get_structure(mmtf)
     return structure
 
 def from_pdb(name, pdb, quiet=False):
-    '''
-    Reads the structure from a PDB file.
+    """
+    Read the structure from a PDB file.
 
     Parameters
     ----------
@@ -110,7 +137,7 @@ def from_pdb(name, pdb, quiet=False):
     -------
     structure : Bio.PDB.Structure
         The structure.
-    '''
+    """
     parser = PDBParser(QUIET=quiet)
     structure = parser.get_structure(name, pdb)
     return structure

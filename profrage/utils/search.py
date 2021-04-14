@@ -6,9 +6,10 @@ Created on Fri Mar 26 10:28:27 2021
 """
 
 def binary_search(target, lst, sorted=False):
-    '''
-    Performs binary search over the specified list with the specified target. The type of the target should
-    match the types of the elements of the list.
+    """
+    Perform binary search over the specified list with the specified target.
+    
+    The type of the target should match the types of the elements of the list.
 
     Parameters
     ----------
@@ -23,7 +24,7 @@ def binary_search(target, lst, sorted=False):
     -------
     bool
         A boolean value indicating whether the target is found in the list.
-    '''
+    """
     if not sorted:
         lst.sort()
     low = 0

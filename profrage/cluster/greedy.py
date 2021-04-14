@@ -14,8 +14,9 @@ from utils.ProgressBar import ProgressBar
 from utils.structure import lengths_within
 
 class SeqAlign(Cluster):
-    '''
-    Performs clustering of the structures based on the their sequence alignement.
+    """
+    Perform clustering of the structures based on the their sequence alignement.
+    
     Each structure is matched against the others, with the ones falling within the score
     threshold being added to its cluster.
     The clustering is greedy in that once a structure is assigned to a cluster, it cannot
@@ -27,11 +28,11 @@ class SeqAlign(Cluster):
         The threshold score for two sequences to be considered similar.
     length_pct_thr : float
         The percentage of length two structures have to share to be considered similar.
-    '''
+    """
     
     def __init__(self, structures, seq_score_thr, length_pct_thr, verbose=False):
-        '''
-        Initializes the class.
+        """
+        Initialize the class.
 
         Parameters
         ----------
@@ -48,20 +49,20 @@ class SeqAlign(Cluster):
         Returns
         -------
         None.
-        '''
+        """
         super(SeqAlign, self).__init__(structures, verbose)
         self.seq_score_thr = seq_score_thr
         self.length_pct_thr = length_pct_thr
         self.verbose = verbose
             
     def cluster(self):
-        '''
-        Performs the clustering.
+        """
+        Perform the clustering.
 
         Returns
         -------
         None.
-        '''
+        """
         cluster_id = 1
         placed = [False for i in range(len(self.structures))]
         score_cache = {}
@@ -93,8 +94,8 @@ class SeqAlign(Cluster):
             progress_bar.end()
             
     def _compare(self, index_1, index_2):
-        '''
-        Compares the specified structures by aligning them.
+        """
+        Compare the specified structures by aligning them.
 
         Parameters
         ----------
@@ -107,7 +108,7 @@ class SeqAlign(Cluster):
         -------
         int
             The best score, i.e. the largest one among all sequences.
-        '''
+        """
         seq_1 = self._get_sequences(index_1)
         seq_2 = self._get_sequences(index_2)
         score = 0
@@ -117,8 +118,9 @@ class SeqAlign(Cluster):
         return score
         
     def _get_sequences(self, index):
-        '''
-        Returns the sequences of the specified structure.
+        """
+        Return the sequences of the specified structure.
+        
         The sequence is that of its polypeptides, which are computed based on the
         distances of its Ca atoms.
 
@@ -131,7 +133,7 @@ class SeqAlign(Cluster):
         -------
         sequences : list of Bio.Seq.Seq
             The list of sequences of the structure.
-        '''
+        """
         sequences = []
         ppb = CaPPBuilder()
         for pp in ppb.build_peptides(self.structures[index]):
@@ -139,8 +141,9 @@ class SeqAlign(Cluster):
         return sequences
     
 class CASuperImpose(Cluster):
-    '''
-    Performs clustering of the structures based on the superimposition of their alpha-carbon (CA) atoms.
+    """
+    Perform clustering of the structures based on the superimposition of their alpha-carbon (CA) atoms.
+    
     Two structuress are then considered similar and clustered together if the resulting RMSD is higher
     than the specified threshold.
     
@@ -150,11 +153,11 @@ class CASuperImpose(Cluster):
         The RMSD threshold for two structures to be considered similar.
     length_pct_thr : float in [0,1]
         The percentage of length two structures should share to be considered similar.
-    '''
+    """
     
     def __init__(self, structures, rmsd_thr, length_pct_thr, verbose=False):
-        '''
-        Initializes the class.
+        """
+        Initialize the class.
 
         Parameters
         ----------
@@ -170,19 +173,19 @@ class CASuperImpose(Cluster):
         Returns
         -------
         None.
-        '''
+        """
         super(CASuperImpose, self).__init__(structures, verbose)
         self.rmsd_thr = rmsd_thr
         self.length_pct_thr = length_pct_thr
         
     def cluster(self):
-        '''
-        Performs the clustering.
+        """
+        Perform the clustering.
 
         Returns
         -------
         None.
-        '''
+        """
         cluster_id = 1
         placed = [False for i in range(len(self.structures))]
         rmsd_cache = {}
@@ -212,8 +215,8 @@ class CASuperImpose(Cluster):
             progress_bar.end()
             
     def _compare(self, index_1, index_2):
-        '''
-        Compares the specified structures by superimposing them.
+        """
+        Compare the specified structures by superimposing them.
 
         Parameters
         ----------
@@ -226,7 +229,7 @@ class CASuperImpose(Cluster):
         -------
         float
             The minimum RMSD value across the computed superimpositions .
-        '''
+        """
         ca_atoms_1 = self._get_ca_atoms(index_1)
         ca_atoms_2 = self._get_ca_atoms(index_2)
         if len(ca_atoms_1) == len(ca_atoms_2):
@@ -247,8 +250,8 @@ class CASuperImpose(Cluster):
             return np.min(rmsds)
         
     def _superimpose(self, index, atoms_fixed, atoms_moving):
-        '''
-        Performs superimposition between the specified structures.
+        """
+        Perform superimposition between the specified structures.
 
         Parameters
         ----------
@@ -263,7 +266,7 @@ class CASuperImpose(Cluster):
         -------
         float
             The RMSD. In case of errors numpy.inf is returned.
-        '''
+        """
         si = Superimposer()
         try:
             np.seterr(all='ignore')
@@ -274,9 +277,10 @@ class CASuperImpose(Cluster):
             return np.inf
         
     def _get_shifted_atoms_subsets(self, ca_atoms_long, ca_atoms_short):
-        '''
-        Computes all subsets of contiguous CA atoms for the longer chain. This is necessary
-        because superimposition requires structures of the same length.
+        """
+        Compute all subsets of contiguous CA atoms for the longer chain.
+        
+        This may be necessary because superimposition requires structures of the same length.
 
         Parameters
         ----------
@@ -289,7 +293,7 @@ class CASuperImpose(Cluster):
         -------
         shifted_atoms : list of list of Bio.PDB.Atoms
             The list of shifted CA atoms.
-        '''
+        """
         shifted_atoms = []
         for i in range(len(ca_atoms_long) - len(ca_atoms_short)):
             s_atoms = []
@@ -299,8 +303,8 @@ class CASuperImpose(Cluster):
         return shifted_atoms
         
     def _get_ca_atoms(self, index):
-        '''
-        Gets the CA atoms from the specified structure.
+        """
+        Get the CA atoms from the specified structure.
 
         Parameters
         ----------
@@ -311,7 +315,7 @@ class CASuperImpose(Cluster):
         -------
         ca_atoms : list of Bio.PDB.Atoms
             The CA atoms of the structure.
-        '''
+        """
         structure = self.structures[index]
         ca_atoms = []
         for model in structure:

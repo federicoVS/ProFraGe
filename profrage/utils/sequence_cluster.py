@@ -12,8 +12,9 @@ from utils.search import binary_search
 from utils.ProgressBar import ProgressBar
 
 def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False):
-    '''
+    """
     For each cluster, take the all the chains of the first protein, if it is matched to any in the database.
+    
     If the first is not is the database, take the second, third, and so on.
     The need for this function is that the proteins contained in the cluster may not match the proteins
     found at https://www.rcsb.org/search using the Advance Search settings.
@@ -36,7 +37,7 @@ def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False
     m_pdb_ch_ids : list of (string, string)
         A list of tuples of string, each holding the ID of the matching protein in the dataset and the ID of
         one of its chains.
-    '''    
+    """    
     if clusters is None:
         if verbose:
             print('Fetching clusters...')
@@ -74,7 +75,7 @@ def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False
     return m_pdb_ch_ids
 
 def get_clusters(sqid=30, loaded=False, show=False, verbose=False):
-    '''
+    """
     Get the sequence clusters resulting from the weekly BLAST clustering.
     
     Parameters
@@ -92,7 +93,7 @@ def get_clusters(sqid=30, loaded=False, show=False, verbose=False):
     -------
     clusters : list of object
         The list of clusters.
-    '''
+    """
     if verbose:
         print('Fetching clusters...')
     if not loaded:

@@ -6,7 +6,7 @@ Created on Tue Apr  6 00:37:42 2021
 """
 
 class UUGraph:
-    '''
+    """
     A generic undirected, unweighted graph class.
     
     Source
@@ -23,11 +23,11 @@ class UUGraph:
         The number of vetices.
     adj : list of list of int
         The adjacency matrix represented as a list of lists.
-    '''
+    """
     
     def __init__(self, N):
-        '''
-        Initializes the graph by creating an empty adjacency list.
+        """
+        Initialize the graph by creating an empty adjacency list.
 
         Parameters
         ----------
@@ -37,15 +37,16 @@ class UUGraph:
         Returns
         -------
         None.
-        '''
+        """
         self.connected_components = []
         self.N = N
         self.adj = [[] for i in range(N)]
     
     def add_edge(self, v, w):
-        '''
-        Adds an edge between the specified vertices. Note that the addition goes only one
-        way, i.e. v->w, and not the other way around.
+        """
+        Add an edge between the specified vertices.
+        
+        Note that the addition goes only one way, i.e. v->w, and not the other way around.
 
         Parameters
         ----------
@@ -57,17 +58,17 @@ class UUGraph:
         Returns
         -------
         None.
-        '''
+        """
         self.adj[v].append(w)
         
     def compute_connected_components(self):
-        '''
-        Computes the connected components.
+        """
+        Compute the connected components.
 
         Returns
         -------
         None.
-        '''
+        """
         # Initialize visited
         visited = []
         for i in range(self.N):
@@ -79,9 +80,10 @@ class UUGraph:
                 self.connected_components.append(v_component)
         
     def _dfs(self, v, visited):
-        '''
-        Performs DFS (iteratively) starting from the specified node. The procedure is only
-        called for nodes not already visited.
+        """
+        Perform DFS (iteratively) starting from the specified node.
+        
+        The procedure is only called for nodes not already visited.
 
         Parameters
         ----------
@@ -94,7 +96,7 @@ class UUGraph:
         -------
         v_component, visited : (list of int, list of bool)
             The connected component for node v, the updated list of visited nodes.
-        '''
+        """
         # Create component for v
         v_component = []
         # DFS stack

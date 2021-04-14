@@ -14,9 +14,8 @@ from utils.ProgressBar import ProgressBar
 from utils.io import get_files, from_mmtf
 
 def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, grade=12, verbose=False):
-    '''
-    This pipeline takes a directory of fragments and filters them in order to retain ones which
-    are composed of multiple segments.
+    """
+    Take a directory of fragments and filters them in order to retain ones which are composed of multiple segments.
 
     Parameters
     ----------
@@ -38,7 +37,7 @@ def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, grade=12,
     Returns
     -------
     None.
-    '''
+    """
     # Define proper output directory
     out_name = method + '-filtered/'
     count = 1

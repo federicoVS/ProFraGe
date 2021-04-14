@@ -17,9 +17,8 @@ from utils.tm_align import tm_align
 from utils.ProgressBar import ProgressBar
 
 def pipeline(method, clustering, cluster_data, base_dir, tm_align_dir, dist_matrix_file, k, rmsd_thr=0.5, score_thr=10, length_pct_thr=0.5, verbose=False, show=False):
-    '''
-    This pipeline takes filtered fragments from the specified directory and clusters them using the
-    specified algorithm.
+    """
+    Take filtered fragments from the specified directory and clusters them using the specified algorithm.
 
     Parameters
     ----------
@@ -54,7 +53,7 @@ def pipeline(method, clustering, cluster_data, base_dir, tm_align_dir, dist_matr
     Returns
     -------
     None.
-    '''
+    """
     mmtfs = get_files(base_dir + method + '-filtered/', ext='.mmtf')
     structures = [None for i in range(len(mmtfs))]
     for i in range(len(mmtfs)):

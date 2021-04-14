@@ -8,7 +8,7 @@ Created on Fri Apr  2 17:55:07 2021
 import matplotlib.pyplot as plt
 
 class Cluster:
-    '''
+    """
     The abstract cluster class.
     
     Attributes
@@ -20,11 +20,11 @@ class Cluster:
         The list of structures.
     verbose : bool
         Whether to print progress information.
-    '''
+    """
     
     def __init__(self, structures, verbose=False):
-        '''
-        Initializes the class.
+        """
+        Initialize the class.
 
         Parameters
         ----------
@@ -36,25 +36,25 @@ class Cluster:
         Returns
         -------
         None.
-        '''
+        """
         self.clusters = {}
         self.structures = structures
         self.verbose = verbose
         
     def __len__(self):
-        '''
-        Returns the number of clusters.
+        """
+        Return the number of clusters.
 
         Returns
         -------
         int
             The number of clusters.
-        '''
+        """
         return len(self.clusters)
     
     def get_clustered_structure(self, cluster_id, index):
-        '''
-        Returns the specified structure from the specified cluster.
+        """
+        Return the specified structure from the specified cluster.
 
         Parameters
         ----------
@@ -67,7 +67,7 @@ class Cluster:
         -------
         structure : Bio.PDB.Structure
             The structure.
-        '''
+        """
         s_id = self.clusters[cluster_id][index]
         structure = self.structures[s_id]
         if self.verbose:
@@ -75,27 +75,28 @@ class Cluster:
         return structure
     
     def print_clusters_statistics(self):
-        '''
-        Prints clusters statistics.
+        """
+        Print clusters statistics.
 
         Returns
         -------
         None.
-        '''
+        """
         freqs = {}
         for cluster_id in self.clusters:
             freqs[cluster_id] = len(self.clusters[cluster_id])
             print(f'Cluster {cluster_id} has size {len(self.clusters[cluster_id])}')
     
     def show_clusters(self):
-        '''
-        Plots the size of each cluster as an histogram. The plot should indicate whether the
-        clusters are balanced.
+        """
+        Plot the size of each cluster as an histogram.
+        
+        The plot should indicate whether the clusters are balanced.
 
         Returns
         -------
         None.
-        '''
+        """
         freqs = {}
         for cluster_id in self.clusters:
             freqs[cluster_id] = len(self.clusters[cluster_id])
@@ -103,11 +104,11 @@ class Cluster:
         plt.show()
         
     def cluster(self):
-        '''
-        Performs the clustering. This method is meant to be overridden by subclasses.
+        """
+        Perform the clustering. This method is meant to be overridden by subclasses.
 
         Returns
         -------
         None.
-        '''
+        """
         pass

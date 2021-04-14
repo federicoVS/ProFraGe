@@ -10,7 +10,7 @@ from scipy.stats import skew
 from utils.structure import get_atoms_coords
 
 class USR:
-    '''
+    """
     Implements Ultrafast Shape Recognition (USR).
     
     Source
@@ -35,11 +35,11 @@ class USR:
         The array containing the momenta for the previous four features. The array is organized in four
         blocks of (mean, varriance, skewness)_f, where each element in the tuple is computed relative to
         f, with f being `ctd`, `cst`, `fct`, and `ftf` respecitvely. 
-    '''
+    """
     
     def __init__(self, structure):
-        '''
-        Initializes the class
+        """
+        Initialize the class.
 
         Parameters
         ----------
@@ -49,7 +49,7 @@ class USR:
         Returns
         -------
         None.
-        '''
+        """
         self.coords = get_atoms_coords(structure)
         self.ctd = None
         self.cst = None
@@ -58,56 +58,56 @@ class USR:
         self.momenta = np.zeros(shape=(12,))
         
     def get_ctd(self):
-        '''
-        Computes the coordinates of `ctd`.
+        """
+        Compute the coordinates of `ctd`.
 
         Returns
         -------
         None.
-        '''
+        """
         self.ctd = np.mean(self.coords, axis=0)
         
     def get_cst(self):
-        '''
-        Computes the coordinates of `cst`.
+        """
+        Compute the coordinates of `cst`.
 
         Returns
         -------
         None.
-        '''
+        """
         squared_dist = np.sum((self.coords-self.ctd)**2, axis=1)
         self.cst = self.coords[np.argmin(squared_dist),:]
     
     def get_fct(self):
-        '''
-        Computes the coordinates of `fct`.
+        """
+        Compute the coordinates of `fct`.
 
         Returns
         -------
         None.
-        '''
+        """
         squared_dist = np.sum((self.coords-self.ctd)**2, axis=1)
         self.fct = self.coords[np.argmax(squared_dist),:]
     
     def get_ftf(self):
-        '''
-        Computes the coordinates of `ftf`.
+        """
+        Compute the coordinates of `ftf`.
 
         Returns
         -------
         None.
-        '''
+        """
         squared_dist = np.sum((self.coords-self.fct)**2, axis=1)
         self.ftf = self.coords[np.argmax(squared_dist),:]
         
     def compute_momenta(self):
-        '''
-        Computes the momenta.
+        """
+        Compute the momenta.
 
         Returns
         -------
         None.
-        '''
+        """
         dist_ctd = np.sum((self.coords-self.ctd)**2, axis=1)
         dist_cst = np.sum((self.coords-self.cst)**2, axis=1)
         dist_fct = np.sum((self.coords-self.fct)**2, axis=1)
@@ -129,13 +129,13 @@ class USR:
         self.momenta[11] = skew(dist_ftf) # ftf
         
     def compute_all(self):
-        '''
-        Computes the features and their momenta.
+        """
+        Compute the features and their momenta.
 
         Returns
         -------
         None.
-        '''
+        """
         self.get_ctd()
         self.get_cst()
         self.get_fct()

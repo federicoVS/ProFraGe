@@ -12,9 +12,8 @@ from utils.io import get_files, from_mmtf, from_pdb
 from utils.ProgressBar import ProgressBar
 
 def pipeline(method, data_dir, out_dir, radius, k, fuzzle_json, ext, verbose=False):
-    '''
-    This pipeline generates fragments from the specified proteins with the specified generation
-    method.
+    """
+    Generate fragments from the specified proteins with the specified generation method.
 
     Parameters
     ----------
@@ -38,7 +37,7 @@ def pipeline(method, data_dir, out_dir, radius, k, fuzzle_json, ext, verbose=Fal
     Returns
     -------
     None.
-    '''
+    """
     if ext is not None:
         s_files = get_files(data_dir, ext=ext)
         progress_bar = ProgressBar()

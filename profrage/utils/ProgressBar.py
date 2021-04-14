@@ -9,8 +9,8 @@ import math
 import sys
 
 class ProgressBar:
-    '''
-    Writes a progress bar on the standard output.
+    """
+    Write a progress bar on the standard output.
     
     Source
     ------
@@ -22,11 +22,11 @@ class ProgressBar:
         The current progression of the progress.
     BAR_WIDTH : int
         The maximum width of the progress bar.
-    '''
+    """
     
     def __init__(self, current=1):
-        '''
-        Initializes the class.
+        """
+        Initialize the class.
 
         Parameters
         ----------
@@ -36,25 +36,25 @@ class ProgressBar:
         Returns
         -------
         None.
-        '''
+        """
         self.current = current
         self.BAR_WIDTH = 100
 
     def start(self):
-        '''
-        Starts with the progress bar on the standard output.
+        """
+        Start with the progress bar on the standard output.
     
         Returns
         -------
         None.
-        '''
+        """
         sys.stdout.write('[%s]' % (' '*self.BAR_WIDTH))
         sys.stdout.flush()
         sys.stdout.write('\b' * (self.BAR_WIDTH+1))
     
     def step(self, count, total):
-        '''
-        Computes and writes the progress bar onto the standard output.
+        """
+        Compute and write the progress bar onto the standard output.
 
         Parameters
         ----------
@@ -66,7 +66,7 @@ class ProgressBar:
         Returns
         -------
         None.
-        '''
+        """
         should_bar = math.floor(self.BAR_WIDTH*(count/total))
         # print(self.current, should_bar)
         if should_bar >= self.current:
@@ -77,13 +77,13 @@ class ProgressBar:
             sys.stdout.flush()
             
     def end(self):
-        '''
-        Ends the progress bar.
+        """
+        End the progress bar.
 
         Returns
         -------
         None.
-        '''
+        """
         sys.stdout.write('#')
         sys.stdout.write('\n')
     

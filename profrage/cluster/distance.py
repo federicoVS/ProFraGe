@@ -13,10 +13,11 @@ from sklearn.mixture import GaussianMixture
 from cluster.Cluster import Cluster
 
 class Spectral(Cluster):
-    '''
-    Performs spectral clustering based on the specified distance matrix. The clustering is
-    then based on either the Laplacian matrix - representing a weighted graph - or on the similarity
-    matrix - built using the Gaussian kernel.
+    """
+    Perform spectral clustering based on the specified distance matrix.
+    
+    The clustering is then based on either the Laplacian matrix - representing a weighted graph - or on
+    the similarity matrix - built using the Gaussian kernel.
     
     Attributes
     ----------
@@ -28,11 +29,11 @@ class Spectral(Cluster):
         The width of the Gaussian kernel.
     to_invert : bool
         Whether to print progress information.
-    '''
+    """
     
     def __init__(self, structures, dist_matrix, k, g_delta=16, to_invert=False, verbose=False):
-        '''
-        Initializes the class.
+        """
+        Initialize the class.
 
         Parameters
         ----------
@@ -52,16 +53,16 @@ class Spectral(Cluster):
         Returns
         -------
         None.
-        '''
+        """
         super(Spectral, self).__init__(structures, verbose)
         self.dist_matrix = dist_matrix.astype(np.float64)
         self.k = k
         self.g_delta = g_delta
         self.to_invert = to_invert
     
-    def get_similarity(self):
-        '''
-        Computes the similarity matrix based on the distance matrix.
+    def _get_similarity(self):
+        """
+        Compute the similarity matrix based on the distance matrix.
         
         Source
         ------
@@ -71,7 +72,7 @@ class Spectral(Cluster):
         -------
         scipy.sparse.csr_matrix
             The similarity matrix.
-        '''
+        """
         matrix = self.dist_matrix
         if self.to_invert:
             matrix[matrix==0] = 1e-09
@@ -79,16 +80,16 @@ class Spectral(Cluster):
         return csr_matrix(np.exp(-matrix**2/(2*self.g_delta**2)))
 
     def cluster(self):
-        '''
-        Performs the clustering.
+        """
+        Perform the clustering.
 
         Returns
         -------
         None.
-        '''
+        """
         if self.verbose:
             print('Clustering...')
-        matrix = self.get_similarity()
+        matrix = self._get_similarity()
         sc = SpectralClustering(n_clusters=self.k, random_state=0, affinity='precomputed', assign_labels='discretize', n_jobs=4)
         sc.fit(matrix)
         # Retrieve clusters
@@ -101,9 +102,10 @@ class Spectral(Cluster):
                 self.clusters[cluster_id].append(i)
 
 class KMean(Cluster):
-    '''
-    Performs KMeans clustering based on the given coordinates matrix. The sklearn.cluster.KMeans
-    algorithm is used.
+    """
+    Perform KMeans clustering based on the given coordinates matrix.
+    
+    The sklearn.cluster.KMeans algorithm is used.
     
     Attributes
     ----------
@@ -111,11 +113,11 @@ class KMean(Cluster):
         The matrix representing the coordinates.
     k : int
         The number of clusters.
-    '''
+    """
     
     def __init__(self, structures, coords_matrix, k, verbose=False):
-        '''
-        Initializes the class.
+        """
+        Initialize the class.
 
         Parameters
         ----------
@@ -131,19 +133,19 @@ class KMean(Cluster):
         Returns
         -------
         None.
-        '''
+        """
         super(KMean, self).__init__(structures, verbose)
         self.coords_matrix = coords_matrix
         self.k = k
         
     def cluster(self):
-        '''
-        Performs the clustering.
+        """
+        Perform the clustering.
 
         Returns
         -------
         None.
-        '''
+        """
         if self.verbose:
             print('Clustering...')
         km = KMeans(n_clusters=self.k, verbose=self.verbose)
@@ -158,9 +160,10 @@ class KMean(Cluster):
                 self.clusters[cluster_id].append(i)
                 
 class GMM(Cluster):
-    '''
-    Performs clustering using Gaussian mixture models. The sklearn.mixture.GaussianMixture
-    algorithm is used.
+    """
+    Perform clustering using Gaussian mixture models.
+    
+    The sklearn.mixture.GaussianMixture algorithm is used.
     
     Attributes
     ----------
@@ -170,11 +173,11 @@ class GMM(Cluster):
         The number of clusters.
     n_init : int
         The number of initializations.
-    '''
+    """
     
     def __init__(self, structures, features, k, n_init=1, verbose=False):
-        '''
-        Initializes the class.
+        """
+        Initialize the class.
 
         Parameters
         ----------
@@ -192,20 +195,20 @@ class GMM(Cluster):
         Returns
         -------
         None.
-        '''
+        """
         super(GMM, self).__init__(structures, verbose)
         self.features = features
         self.k = k
         self.n_init = n_init
         
     def cluster(self):
-        '''
-        Performs the clustering
+        """
+        Perform the clustering.
 
         Returns
         -------
         None.
-        '''
+        """
         if self.verbose:
             print('Clustering...')
         gm = GaussianMixture(n_components=self.k, n_init=self.n_init, verbose=self.verbose)

@@ -7,10 +7,11 @@ import os
 from prody.proteins.pdbfile import fetchPDB, parsePDB, writePDB
 
 def read_pdb_ids_file(file_name):
-    '''
-    Reads the content of the file holding the IDs of the proteins. Such file is downloaded from
-    https://www.rcsb.org/search, after having specified criteria for the proteins to download via the
-    Advance Search settings.
+    """
+    Read the content of the file holding the IDs of the proteins.
+    
+    Such file is downloaded from  https://www.rcsb.org/search, after having specified criteria for
+    the proteins to download via the Advance Search settings.
     
     Parameters
     ----------
@@ -21,15 +22,13 @@ def read_pdb_ids_file(file_name):
     -------
     pdb_ids : list of str
         The list holding the protein IDs.
-    '''
+    """
     pdb_ids = open(file_name, 'r').read().split(',')
     return pdb_ids
         
 def merge_pdbs(pdbs, out_dir='./', sep='+'):
-    '''
-    Merges the specified PDB files into the specified output directory.
-    
-    TODO: See how the mmtf_file merging go, if it works then remove this.
+    """
+    Merge the specified PDB files into the specified output directory.
     
     Parameters
     ----------
@@ -44,7 +43,7 @@ def merge_pdbs(pdbs, out_dir='./', sep='+'):
     Returns
     -------
     None.
-    '''
+    """
     prots = []
     for pdb in pdbs:
         prots.append(parsePDB(pdb))
@@ -59,9 +58,10 @@ def merge_pdbs(pdbs, out_dir='./', sep='+'):
     writePDB(file_name, prots)
 
 def fetch_pdb(pdb_ch_id, pdb_gz_dir=None, out_dir='./', remove_pdb_gz=False):
-    '''
-    Fetches the specified chains of the specified proteins from the PDB using the ProDy API. The fetched
-    PDB file <pdb_id>_<chain_id>.pdb is then written to the specified location.
+    """
+    Fetch the specified chains of the specified proteins from the PDB using the ProDy API.
+    
+    The fetched PDB file <pdb_id>_<chain_id>.pdb is then written to the specified location.
     
     Parameters
     ----------
@@ -79,7 +79,7 @@ def fetch_pdb(pdb_ch_id, pdb_gz_dir=None, out_dir='./', remove_pdb_gz=False):
     Returns
     -------
     None.
-    '''
+    """
     p_id, c_id = pdb_ch_id
     pdb_file = None
     if pdb_gz_dir is None:

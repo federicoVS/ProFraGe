@@ -12,7 +12,7 @@ from utils.ProgressBar import ProgressBar
 from utils.io import to_pdb
 
 def tm_align(structures, tm_align_dir, outfile, out_dir='./', save=True, verbose=False):
-    '''
+    """
     Call the TM-align structural comparison for all fragments.
 
     Parameters
@@ -34,7 +34,7 @@ def tm_align(structures, tm_align_dir, outfile, out_dir='./', save=True, verbose
     -------
     tm_score_matrix : numpy.ndarray
         The (symmetric) distance matrix.
-    '''
+    """
     n = len(structures)
     tm_score_matrix = np.ones((n,n)) # 1 means the structures are equal
     progress_bar = ProgressBar()

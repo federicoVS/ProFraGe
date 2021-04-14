@@ -12,8 +12,8 @@ from utils.sequence_cluster import match_clusters, get_clusters
 from utils.ProgressBar import ProgressBar
 
 def pipeline(pdb_ids, pdb_gz_dir, out_dir='./', m_pdb_ch_file=None, sqid=30, loaded=False, remove_pdb_gz=False, verbose=False):
-    '''
-    Performs a full PDB data pipeline.
+    """
+    Perform a full PDB data pipeline.
 
     Parameters
     ----------
@@ -37,7 +37,7 @@ def pipeline(pdb_ids, pdb_gz_dir, out_dir='./', m_pdb_ch_file=None, sqid=30, loa
     Returns
     -------
     None.
-    '''
+    """
     # Get clusters
     clusters = get_clusters(sqid=sqid, loaded=loaded, verbose=verbose)
     # Match the PDB IDs with the clusters

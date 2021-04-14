@@ -10,9 +10,8 @@ from fragments.graphs import UUGraph
 from utils.structure import structure_length, get_residue_center
 
 def is_complex(structure, grade=12):
-    '''
-    Checks whether the given structure is complex, according to its complexity grade, that is,
-    how many residues compose it.
+    """
+    Check whether the given structure is complex, according to how many residues compose it.
 
     Parameters
     ----------
@@ -25,12 +24,14 @@ def is_complex(structure, grade=12):
     -------
     bool
         Whether the fragment is complex. True if |residues| >= grade, False otherwise.
-    '''
+    """
     return structure_length(structure) >= grade
 
 def is_connected(structure, radius=5):
-    '''
-    Checks whether the fragment is connected. The search is conducted at the residual level.
+    """
+    Check whether the fragment is connected.
+    
+    The search is conducted at the residual level.
 
     Parameters
     ----------
@@ -43,7 +44,7 @@ def is_connected(structure, radius=5):
     -------
     bool
         Whether the fragment is connected.
-    '''
+    """
     # Create dictionary which encodes residues as integers
     index = 0
     vertex_dict = {}
