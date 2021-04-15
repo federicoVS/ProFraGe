@@ -93,7 +93,7 @@ class Fragment:
         # Get structure residues
         s_residues = []
         for residue in structure.get_residues():
-            s_residues.append(s_residues)
+            s_residues.append(residue)
         # Sort structure residues
         s_residues = sorted(s_residues, key=lambda x: x.get_id()[1])
         # Get fragment instance

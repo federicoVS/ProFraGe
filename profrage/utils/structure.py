@@ -134,12 +134,13 @@ def generate_structure(s_id, residues, header):
                 for chain in model:
                     if chain.get_id() == r_full_id[2]:
                         r_id = r_full_id[3]
-                        r = Residue(r_id, residue.get_resname(), residue.get_segid())
-                        for atom in residue:
-                            r.add(atom)
-                        chain.add(r)
-                        been_added = True
-                        break
+                        if not chain.has_id(r_id):
+                            r = Residue(r_id, residue.get_resname(), residue.get_segid())
+                            for atom in residue:
+                                r.add(atom)
+                            chain.add(r)
+                            been_added = True
+                            break
                 # If residue has been added then we can exit the loop
                 if been_added:
                     break

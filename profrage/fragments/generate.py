@@ -71,12 +71,12 @@ class Generator:
                 os.makedirs(out_dir+dir_name)
             for fragment in self.fragments[pdb_id]:
                 # Generate fragment
-                fragment = generate_structure(self.f_id, self.residues, self.structure.header)
+                s_frag = generate_structure(fragment.f_id, fragment.residues, fragment.structure.header)
                 # Save structure to specified format
                 if ext == '.mmtf':
-                    to_mmtf(fragment, self.f_id, out_dir=out_dir+dir_name)
+                    to_mmtf(s_frag, fragment.f_id, out_dir=out_dir+dir_name)
                 elif ext == '.pdb':
-                    to_pdb(fragment, self.f_id, out_dir=out_dir+dir_name)
+                    to_pdb(s_frag, fragment.f_id, out_dir=out_dir+dir_name)
         
     def generate(self):
         """
@@ -407,6 +407,7 @@ class ConFindGen(SingleGenerator):
             _, _, res_idx_1, res_idx_2, dist = entry
             if dist > self.dcut:
                 graph.add_edge(residue_dict[res_idx_1], residue_dict[res_idx_2])
+                graph.add_edge(residue_dict[res_idx_2], residue_dict[res_idx_1])
         # Compute the connected components
         graph.compute_connected_components()
         # Retrieve the residues

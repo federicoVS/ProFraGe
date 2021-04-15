@@ -175,7 +175,7 @@ class GMM(Cluster):
         The number of initializations.
     """
     
-    def __init__(self, structures, features, k, n_init=1, verbose=False):
+    def __init__(self, structures, features, k, reg_covar=1e-6, n_init=1, verbose=False):
         """
         Initialize the class.
 
@@ -187,6 +187,8 @@ class GMM(Cluster):
             The matrix of features. It should have shape n_samples, n_features.
         k : int
             The number of clusters.
+        reg_covar : float, optional
+            Regularization added to the covariance matrix to ensure its its positiveness.
         n_init : int, optional
             The number of initializations. The default is 1.
         verbose : bool, optional
@@ -199,6 +201,7 @@ class GMM(Cluster):
         super(GMM, self).__init__(structures, verbose)
         self.features = features
         self.k = k
+        self.reg_covar = reg_covar
         self.n_init = n_init
         
     def cluster(self):
@@ -211,7 +214,7 @@ class GMM(Cluster):
         """
         if self.verbose:
             print('Clustering...')
-        gm = GaussianMixture(n_components=self.k, n_init=self.n_init, verbose=self.verbose)
+        gm = GaussianMixture(n_components=self.k, reg_covar=self.reg_covar, n_init=self.n_init, verbose=self.verbose)
         gm.fit(self.features)
         labels = gm.predict(self.features)
         # Retrieve clusters
