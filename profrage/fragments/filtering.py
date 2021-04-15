@@ -9,6 +9,30 @@ from Bio.PDB import NeighborSearch, Selection
 from fragments.graphs import UUGraph
 from utils.structure import structure_length, get_residue_center
 
+def has_hetatoms(structure, pct=1):
+    """
+    Check whether the percentage of hetatoms within the structure is higher of the allowed one.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure of which to check its percentage composition of hetatoms.
+    pct : float in [0,1], optional
+        The maximum allowed percentage of hetatoms within the structure. The default is 1.
+
+    Returns
+    -------
+    bool
+         Whether the percentage of hetatoms is higher than the allowed one.
+    """
+    count = 0
+    n = structure_length(structure)
+    for residue in structure.get_residues():
+        r_id = residue.get_id()
+        if r_id[0] != ' ' and r_id[0] != '':
+            count += 1
+    return float(count/n) > pct
+
 def is_complex(structure, grade=12):
     """
     Check whether the given structure is complex, according to how many residues compose it.
