@@ -2,7 +2,7 @@
 """
 Created on Thu Mar 25 15:20:13 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 import argparse

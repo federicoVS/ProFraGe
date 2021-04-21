@@ -2,7 +2,7 @@
 """
 Created on Sat Apr  3 00:41:51 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 import os
@@ -49,8 +49,7 @@ def tm_align(structures, tm_align_dir, outfile, out_dir='./', save=True, verbose
             pdb_j = structures[j].get_full_id()[0] + '.pdb'
             to_pdb(structures[i], pdb_i[:-4])
             to_pdb(structures[j], pdb_j[:-4])
-            command = [tm_align_dir + 'TMalignMac', pdb_i, pdb_j, '-a', 'T']
-            command = tm_align_dir + 'TMalignMac ' + pdb_i + ' ' + pdb_j + ' -a T'
+            command = tm_align_dir + 'TMalign ' + pdb_i + ' ' + pdb_j + ' -a T'
             ps = subprocess.Popen(command,shell=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
             output = ps.communicate()[0]
             lines = output.split(b'\n')

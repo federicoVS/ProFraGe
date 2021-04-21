@@ -2,7 +2,7 @@
 """
 Created on Wed Mar 31 15:11:01 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 import numpy as np
@@ -54,7 +54,54 @@ class SeqAlign(Cluster):
         self.seq_score_thr = seq_score_thr
         self.length_pct_thr = length_pct_thr
         self.verbose = verbose
-            
+        
+    def get_sequences(self, index):
+        """
+        Return the sequences of the specified structure.
+        
+        The sequence is that of its polypeptides, which are computed based on the
+        distances of its Ca atoms.
+
+        Parameters
+        ----------
+        index : int
+            The index of the structure.
+
+        Returns
+        -------
+        sequences : list of Bio.Seq.Seq
+            The list of sequences of the structure.
+        """
+        sequences = []
+        ppb = CaPPBuilder()
+        for pp in ppb.build_peptides(self.structures[index]):
+            sequences.append(pp.get_sequence())
+        return sequences
+    
+    def compare(self, index_1, index_2):
+        """
+        Compare the specified structures by aligning them.
+
+        Parameters
+        ----------
+        index_1 : int
+            The index of the first structure.
+        index_2 : TYPE
+            The second of the first structure..
+
+        Returns
+        -------
+        int
+            The best score, i.e. the largest one among all sequences.
+        """
+        seq_1 = self.get_sequences(index_1)
+        seq_2 = self.get_sequences(index_2)
+        score = 0
+        for s_1 in seq_1:
+            for s_2 in seq_2:
+                score += pairwise2.align.globalxx(s_1, s_2, score_only=True)
+        return score
+    
     def cluster(self):
         """
         Perform the clustering.
@@ -92,53 +139,6 @@ class SeqAlign(Cluster):
                 cluster_id += 1
         if self.verbose:
             progress_bar.end()
-            
-    def _compare(self, index_1, index_2):
-        """
-        Compare the specified structures by aligning them.
-
-        Parameters
-        ----------
-        index_1 : int
-            The index of the first structure.
-        index_2 : TYPE
-            The second of the first structure..
-
-        Returns
-        -------
-        int
-            The best score, i.e. the largest one among all sequences.
-        """
-        seq_1 = self._get_sequences(index_1)
-        seq_2 = self._get_sequences(index_2)
-        score = 0
-        for s_1 in seq_1:
-            for s_2 in seq_2:
-                score += pairwise2.align.globalxx(s_1, s_2, score_only=True)
-        return score
-        
-    def _get_sequences(self, index):
-        """
-        Return the sequences of the specified structure.
-        
-        The sequence is that of its polypeptides, which are computed based on the
-        distances of its Ca atoms.
-
-        Parameters
-        ----------
-        index : int
-            The index of the structure.
-
-        Returns
-        -------
-        sequences : list of Bio.Seq.Seq
-            The list of sequences of the structure.
-        """
-        sequences = []
-        ppb = CaPPBuilder()
-        for pp in ppb.build_peptides(self.structures[index]):
-            sequences.append(pp.get_sequence())
-        return sequences
     
 class CASuperImpose(Cluster):
     """
@@ -178,6 +178,116 @@ class CASuperImpose(Cluster):
         self.rmsd_thr = rmsd_thr
         self.length_pct_thr = length_pct_thr
         
+    def get_ca_atoms(self, index):
+        """
+        Get the CA atoms from the specified structure.
+
+        Parameters
+        ----------
+        index : int
+            The index of the structure.
+
+        Returns
+        -------
+        ca_atoms : list of Bio.PDB.Atoms
+            The CA atoms of the structure.
+        """
+        structure = self.structures[index]
+        ca_atoms = []
+        for model in structure:
+            for chain in model:
+                for residue in chain:
+                    ca_atoms.append(residue['CA'].copy())
+        return ca_atoms
+    
+    def get_shifted_atoms_subsets(self, ca_atoms_long, ca_atoms_short):
+        """
+        Compute all subsets of contiguous CA atoms for the longer chain.
+        
+        This may be necessary because superimposition requires structures of the same length.
+
+        Parameters
+        ----------
+        ca_atoms_long : list of Bio.PDB.Atoms 
+            The list of the CA atoms of the larger structure.
+        ca_atoms_short : list of Bio.PDB.Atoms
+            The list of the CA atoms of the shorter structure..
+
+        Returns
+        -------
+        shifted_atoms : list of list of Bio.PDB.Atoms
+            The list of shifted CA atoms.
+        """
+        shifted_atoms = []
+        for i in range(len(ca_atoms_long) - len(ca_atoms_short)):
+            s_atoms = []
+            for j in range(i, i+len(ca_atoms_short)):
+                s_atoms.append(ca_atoms_long[j])
+            shifted_atoms.append(s_atoms)
+        return shifted_atoms
+    
+    def superimpose(self, index, atoms_fixed, atoms_moving):
+        """
+        Perform superimposition between the specified structures.
+
+        Parameters
+        ----------
+        index : int
+            The index of the reference structure.
+        atoms_fixed : list of Bio.PDB.Atoms
+            The list of the fixed (reference) atoms.
+        atoms_moving : numpy.ndarray
+            The list of the moving atoms.
+
+        Returns
+        -------
+        float
+            The RMSD. In case of errors numpy.inf is returned.
+        """
+        si = Superimposer()
+        try:
+            np.seterr(all='ignore')
+            si.set_atoms(atoms_fixed, atoms_moving)
+            si.apply(self.structures[index])
+            return si.rms
+        except np.linalg.LinAlgError:
+            return np.inf
+        
+    def compare(self, index_1, index_2):
+        """
+        Compare the specified structures by superimposing them.
+
+        Parameters
+        ----------
+        index_1 : int
+            The index of the first structure.
+        index_2 : int
+            The index of the second structure.
+
+        Returns
+        -------
+        float
+            The minimum RMSD value across the computed superimpositions .
+        """
+        ca_atoms_1 = self.get_ca_atoms(index_1)
+        ca_atoms_2 = self.get_ca_atoms(index_2)
+        if len(ca_atoms_1) == len(ca_atoms_2):
+            return self.superimpose(index_1, ca_atoms_1, ca_atoms_2)
+        elif len(ca_atoms_1) > len(ca_atoms_2):
+            shifted_atoms = self.get_shifted_atoms_subsets(ca_atoms_1, ca_atoms_2)
+            rmsds = []
+            for sas in shifted_atoms:
+                rmsds.append(self.superimpose(index_1, sas, ca_atoms_2))
+            rmsds = np.array(rmsds)
+            return np.min(rmsds)
+        else:
+            shifted_atoms = self.get_shifted_atoms_subsets(ca_atoms_2, ca_atoms_1)
+            rmsds = []
+            for sas in shifted_atoms:
+                rmsds.append(self.superimpose(index_1, ca_atoms_1, sas))
+            rmsds = np.array(rmsds)
+            return np.min(rmsds)
+        
     def cluster(self):
         """
         Perform the clustering.
@@ -213,115 +323,5 @@ class CASuperImpose(Cluster):
                 cluster_id += 1
         if self.verbose:
             progress_bar.end()
-            
-    def _compare(self, index_1, index_2):
-        """
-        Compare the specified structures by superimposing them.
-
-        Parameters
-        ----------
-        index_1 : int
-            The index of the first structure.
-        index_2 : int
-            The index of the second structure.
-
-        Returns
-        -------
-        float
-            The minimum RMSD value across the computed superimpositions .
-        """
-        ca_atoms_1 = self._get_ca_atoms(index_1)
-        ca_atoms_2 = self._get_ca_atoms(index_2)
-        if len(ca_atoms_1) == len(ca_atoms_2):
-            return self._superimpose(index_1, ca_atoms_1, ca_atoms_2)
-        elif len(ca_atoms_1) > len(ca_atoms_2):
-            shifted_atoms = self._get_shifted_atoms_subsets(ca_atoms_1, ca_atoms_2)
-            rmsds = []
-            for sas in shifted_atoms:
-                rmsds.append(self._superimpose(index_1, sas, ca_atoms_2))
-            rmsds = np.array(rmsds)
-            return np.min(rmsds)
-        else:
-            shifted_atoms = self._get_shifted_atoms_subsets(ca_atoms_2, ca_atoms_1)
-            rmsds = []
-            for sas in shifted_atoms:
-                rmsds.append(self._superimpose(index_1, ca_atoms_1, sas))
-            rmsds = np.array(rmsds)
-            return np.min(rmsds)
-        
-    def _superimpose(self, index, atoms_fixed, atoms_moving):
-        """
-        Perform superimposition between the specified structures.
-
-        Parameters
-        ----------
-        index : int
-            The index of the reference structure.
-        atoms_fixed : list of Bio.PDB.Atoms
-            The list of the fixed (reference) atoms.
-        atoms_moving : numpy.ndarray
-            The list of the moving atoms.
-
-        Returns
-        -------
-        float
-            The RMSD. In case of errors numpy.inf is returned.
-        """
-        si = Superimposer()
-        try:
-            np.seterr(all='ignore')
-            si.set_atoms(atoms_fixed, atoms_moving)
-            si.apply(self.structures[index])
-            return si.rms
-        except np.linalg.LinAlgError:
-            return np.inf
-        
-    def _get_shifted_atoms_subsets(self, ca_atoms_long, ca_atoms_short):
-        """
-        Compute all subsets of contiguous CA atoms for the longer chain.
-        
-        This may be necessary because superimposition requires structures of the same length.
-
-        Parameters
-        ----------
-        ca_atoms_long : list of Bio.PDB.Atoms 
-            The list of the CA atoms of the larger structure.
-        ca_atoms_short : list of Bio.PDB.Atoms
-            The list of the CA atoms of the shorter structure..
-
-        Returns
-        -------
-        shifted_atoms : list of list of Bio.PDB.Atoms
-            The list of shifted CA atoms.
-        """
-        shifted_atoms = []
-        for i in range(len(ca_atoms_long) - len(ca_atoms_short)):
-            s_atoms = []
-            for j in range(i, i+len(ca_atoms_short)):
-                s_atoms.append(ca_atoms_long[j])
-            shifted_atoms.append(s_atoms)
-        return shifted_atoms
-        
-    def _get_ca_atoms(self, index):
-        """
-        Get the CA atoms from the specified structure.
-
-        Parameters
-        ----------
-        index : int
-            The index of the structure.
-
-        Returns
-        -------
-        ca_atoms : list of Bio.PDB.Atoms
-            The CA atoms of the structure.
-        """
-        structure = self.structures[index]
-        ca_atoms = []
-        for model in structure:
-            for chain in model:
-                for residue in chain:
-                    ca_atoms.append(residue['CA'].copy())
-        return ca_atoms
     
     

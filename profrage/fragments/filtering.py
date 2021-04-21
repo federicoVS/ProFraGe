@@ -2,7 +2,7 @@
 """
 Created on Tue Apr  6 02:10:15 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 from Bio.PDB import NeighborSearch, Selection

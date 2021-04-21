@@ -2,7 +2,7 @@
 """
 Created on Fri Mar 26 10:28:27 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 def binary_search(target, lst, sorted=False):

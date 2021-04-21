@@ -2,7 +2,7 @@
 """
 Created on Thu Mar 25 15:09:40 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 import pickle

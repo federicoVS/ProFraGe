@@ -2,7 +2,7 @@
 """
 Created on Fri Apr  2 16:42:01 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 from scipy.sparse import csr_matrix

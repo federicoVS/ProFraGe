@@ -2,7 +2,7 @@
 """
 Created on Thu Mar 25 22:46:55 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 import math

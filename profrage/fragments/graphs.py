@@ -2,7 +2,7 @@
 """
 Created on Tue Apr  6 00:37:42 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 class UUGraph:
@@ -76,10 +76,10 @@ class UUGraph:
         # Iterate over nodes, find for each its components
         for v in range(self.N):
             if not visited[v]:
-                v_component, visited = self._dfs(v, visited)
+                v_component, visited = self.dfs(v, visited)
                 self.connected_components.append(v_component)
         
-    def _dfs(self, v, visited):
+    def dfs(self, v, visited):
         """
         Perform DFS (iteratively) starting from the specified node.
         

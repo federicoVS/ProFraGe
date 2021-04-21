@@ -2,7 +2,7 @@
 """
 Created on Sun Mar 28 15:46:37 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 import os
@@ -43,7 +43,7 @@ def parse_cmap(cmap_file):
 
     Returns
     -------
-    entries : list of (str, str, str, str, float)
+    entries : list of (str, str, int, int, float)
         The list of entries. Each entry is a tuple of the form
         (chain_id_1, chain_id_2, residue_id_1, residue_id_2, f), where `f` belongs to [0,1] and is a
         measure of whether residues 1 and 2 are interacting. Usually value of `f` larger than 0.1
@@ -54,10 +54,13 @@ def parse_cmap(cmap_file):
     for line in cmap:
         fields = line.split()
         if fields[0] == 'contact':
-            chain_id_1, res_idx_1 = int(fields[1].split(',')[0]), int(fields[1].split(',')[1])
-            chain_id_2, res_idx_2 = int(fields[2].split(',')[0]), int(fields[2].split(',')[1])
-            dist = float(fields[3])
-            entries.append(chain_id_1, chain_id_2, res_idx_1, res_idx_2, dist)
+            fs_1_2_1, fs_1_2_2 =  fields[1].split(','), fields[2].split(',')
+            if len(fs_1_2_1) != 2 or len(fs_1_2_2) != 2 or not fs_1_2_1[1].isdigit() or not fs_1_2_2[1].isdigit():
+                return
+            chain_id_1, res_idx_1 = fs_1_2_1[0], int(fs_1_2_1[1])
+            chain_id_2, res_idx_2 = fs_1_2_2[0], int(fs_1_2_2[1])
+            f = float(fields[3])
+            entries.append((chain_id_1, chain_id_2, res_idx_1, res_idx_2, f))
     return entries
 
 def to_pdb(structure, name, out_dir='./'):

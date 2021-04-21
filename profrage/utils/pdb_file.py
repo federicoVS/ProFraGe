@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-@author: FVS
+@author: Federico van Swaaij
 """
 
 import os

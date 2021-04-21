@@ -2,7 +2,7 @@
 """
 Created on Wed Apr  7 10:01:08 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 import os
