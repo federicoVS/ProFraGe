@@ -2,20 +2,16 @@
 """
 Created on Tue Apr  6 17:59:26 2021
 
-@author: FVS
+@author: Federico van Swaaij
 """
 
 import os
+import itertools
 import json
 from scipy.spatial import distance
 from Bio.PDB import NeighborSearch, Selection
 from Bio.PDB.mmtf import MMTFParser
-from Bio.PDB.Structure import Structure
-from Bio.PDB.Model import Model
-from Bio.PDB.Chain import Chain
-from Bio.PDB.Residue import Residue
-from fragments.Fragment import Fragment
-from fragments.USR import USR
+from fragments.data import Fragment, Neighborhood
 from fragments.graphs import UUGraph
 from utils.structure import get_residue_center, structure_length, generate_structure
 from utils.io import to_mmtf, to_pdb, parse_cmap
@@ -197,7 +193,7 @@ class CCGen(SingleGenerator):
             
 class KSeqGen(SingleGenerator):
     """
-    Generates fragments by in sequential fashion.
+    Generates fragments by clustering similar neighborhoods, each of which composed by 2k+1 residues.
     
     Each residue is paired with its k neighbors to the left and right (if any), resulting in a substructure.
     This structure is then analyzed using Ultrafast Shape Recognition and compared to other neighborhoods.
@@ -205,13 +201,16 @@ class KSeqGen(SingleGenerator):
     
     Attributes
     ----------
+    neighborhoods : dict of int -> Neighborhood
+        A dictionary mapping the index of the centroid residue to a Neighborhood instance, representing
+        the sequential neighborhood.
     k : int
         The number of neighbors for each residue.
-    thr : float in [0,1]
+    usr_thr : float in [0,1]
         The similarity threshold under which two neighborhoods are considered to be similar.
     """
     
-    def __init__(self, structure, k, thr):
+    def __init__(self, structure, k, usr_thr):
         """
         Initialize the class.
 
@@ -220,8 +219,8 @@ class KSeqGen(SingleGenerator):
         structure : Bio.PDB.Structure
             The structure of which to generate fragments.
         k : int
-            The number of neighbors for each residue.
-        thr : float in [0,1]
+            The number of residues for each neighbor.
+        usr_thr : float in [0,1]
             The similarity threshold between two neighborhoods. The smaller the better.
 
         Returns
@@ -229,65 +228,19 @@ class KSeqGen(SingleGenerator):
         None.
         """
         super(KSeqGen, self).__init__(structure)
+        self.neighborhoods = {}
         self.k = k
-        self.thr = thr
-        
-    def _get_neighborhoods(self):
-        """
-        Compute the neighborhoods for each residue.
-
-        Returns
-        -------
-        neighborhoods : dict of int -> (list of Bio.PDB.Residue, [numpy.ndarray])
-            A dictionary mapping the index of the centroid residue to a tuple, the first element being
-            the residues composing the neighborhoods (including the centroid residue itself), and the
-            second element being the USR representation of the neighborhood. The reason why the second
-            element is an array is that Python does not support tuple assignment.
-        """
-        # Get residues and define data structures
-        n = structure_length(self.structure)
-        residues = []
-        neighborhoods = {}
-        for residue in self.structure.get_residues():
-            residues.append(residue)
-        # Sort to ensure the sequence is correct
-        residues = sorted(residues, key=lambda x: x.get_id()[1])
-        # Compute neighborhoods
-        for i in range(n):
-            neighborhoods[i] = ([], [])
-            min_idx = max(0, i-self.k)
-            max_idx = min(i+self.k+1, n) # add one b/c later int range the upper index is exclusive
-            for j in range(min_idx, max_idx):
-                neighborhoods[i][0].append(residues[j]) # residue i is also added here
-        # For each centroid, define a dummy Structure object and compute its USR
-        for n_id in neighborhoods:
-            neighborhood = neighborhoods[n_id][0]
-            c_structure = Structure('S')
-            model = Model(0)
-            chain = Chain('A')
-            for residue in neighborhood:
-                r = Residue(residue.get_id(), residue.get_resname(), residue.get_segid())
-                for atom in residue:
-                    r.add(atom)
-                chain.add(r)
-            model.add(chain)
-            c_structure.add(model)
-            usr = USR(c_structure)
-            usr.compute_all()
-            neighborhoods[n_id][1].append(usr.momenta)
-        return neighborhoods
+        self.usr_thr = usr_thr
     
-    def _all_similarity(self, neighborhoods, fragment, candidate):
+    def all_similarity(self, fragment, candidate):
         """
         Check if the candidate neighborhood is similar to all other neighborhoods in the cluster.
 
         Parameters
         ----------
-        neighborhoods : dict of int -> (list of Bio.PDB.Residue, numpy.ndarray)
-            The dictionary holding the neighborhoods.
-        fragment : list of (list of Bio.PDB.Residue, numpy.ndarray)
+        fragment : list of fragments.data.Neighborhood
             The list of neighborhoods, which represents a fragment.
-        candidate : (list of Bio.PDB.Residue, numpy.ndarray)
+        candidate : fragments.data.Neighborhood
             The candidate neighborhood.
 
         Returns
@@ -296,12 +249,36 @@ class KSeqGen(SingleGenerator):
             Whether the candidate neighborhood is to be added to the fragment.
         """
         for n_id in fragment:
-            momenta_n = neighborhoods[n_id][1][0]
-            momenta_c = candidate[1][0]
+            momenta_n = self.neighborhoods[n_id].usr_momenta
+            momenta_c = candidate.usr_momenta
             cosine = distance.cosine(momenta_n, momenta_c)
-            if cosine > self.thr:
+            if cosine > self.usr_thr:
                 return False
         return True
+    
+    def compute_neighborhoods(self):
+        """
+        Compute the neighborhoods for each residue.
+
+        Returns
+        -------
+        None.
+        """
+        # Get residues and define data structures
+        n = structure_length(self.structure)
+        residues = []
+        for residue in self.structure.get_residues():
+            residues.append(residue)
+        # Sort to ensure the sequence is correct
+        residues = sorted(residues, key=lambda x: x.get_id()[1])
+        # Compute neighborhoods
+        for i in range(n):
+            min_idx = max(0, i-self.k)
+            max_idx = min(i+self.k+1, n) # add one b/c later int range the upper index is exclusive
+            self.neighborhoods[i] = Neighborhood(i, residues[min_idx:max_idx]) # residue i is also added here
+        # For each centroid, define a dummy Structure object and compute its USR
+        for n_id in self.neighborhoods:
+            self.neighborhoods[n_id].compute_momenta()
         
     def generate(self):
         """
@@ -311,22 +288,22 @@ class KSeqGen(SingleGenerator):
         -------
         None.
         """
-        # Get neighborhoods
-        neighborhoods = self._get_neighborhoods()
+        # Compute neighborhoods
+        self.compute_neighborhoods()
         # Define fragment dictionary which points to the indices of the neighborhood
         frag_dict = {} # int -> list of int
         frag_id = 1
         # Iterate over each neighbor of neighborhoods
-        for i in range(len(neighborhoods)-1): # TODO is it correct?
+        for i in range(len(self.neighborhoods)):
             frag_dict[frag_id] = []
             frag_dict[frag_id].append(i)
-            for j in range(i+1, len(neighborhoods)):
-                if self._all_similarity(neighborhoods, frag_dict[frag_id], neighborhoods[j]):
+            for j in range(i+1, len(self.neighborhoods)):
+                if self.all_similarity(frag_dict[frag_id], self.neighborhoods[j]):
                     frag_dict[frag_id].append(j)
                 else:
                     break
             for j in range(i-1, -1, -1):
-                if self._all_similarity(neighborhoods, frag_dict[frag_id], neighborhoods[j]):
+                if self.all_similarity(frag_dict[frag_id], self.neighborhoods[j]):
                     frag_dict[frag_id].append(j)
                 else:
                     break
@@ -339,9 +316,238 @@ class KSeqGen(SingleGenerator):
             f_id = self.structure.get_id() + '_' + self.structure.get_id()[-1] + str(frag_id)
             fragment = Fragment(self.structure, f_id)
             for n_id in n_ids:
-                neighbor = neighborhoods[n_id]
-                for residue in neighbor[0]:
+                neighbor = self.neighborhoods[n_id]
+                for residue in neighbor.residues:
                     fragment.add_residue(residue)
+            self.fragments[self.structure.get_id()].append(fragment)
+            
+class KSeqTerGen(SingleGenerator):
+    """
+    Generates fragments by clustering similar neighborhoods, each of which composed by 2k+1 residues.
+    
+    Differently from `KSeqGen`, this version considers tertiary structure information in the form
+    of interactions between residues belonging to the different residues.
+    
+    Attributes
+    ----------
+    neighborhoods : dict of int -> Neighborhood
+        A dictionary mapping the index of the centroid residue to a Neighborhood instance, representing
+        the sequential neighborhood.
+    k : int
+        The number of residues for each neighbor.
+    usr_thr : float in [0,1]
+        The similarity threshold between two neighborhoods. A small USR score means two neighborhoods are
+        very similar.
+    cmap_file : str
+        The CMAP file containing interaction information.
+    f_thr : float in [0,1]
+        The interaction threshold between two residues. A high interaction score means two residues have
+        a very high interaction.
+    max_size : int
+        The maximum number of neighborhoods per fragment.
+    """
+    
+    def __init__(self, structure, k, usr_thr, cmap_file, f_thr=0.1, max_size=5):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        structure : Bio.PDB.Structure
+            The structure of which to compute the fragments.
+        k : int
+            The number of residues for each neighbor.
+        usr_thr : float in [0,1]
+            The similarity threshold between two neighborhoods.
+        cmap_file : str
+            The contact map file.
+        f_thr : float in [0,1], optional
+            The interaction threshold between two residues. The default is 0.1.
+        max_size : int, optional
+            The maximum number of neighborhoods per fragment. The default is 5.
+
+        Returns
+        -------
+        None.
+        """
+        super(KSeqTerGen, self).__init__(structure)
+        self.neighborhoods = {}
+        self.k = k
+        self.usr_thr = usr_thr
+        self.cmap_file = cmap_file
+        self.f_thr = f_thr
+        self.max_size = max_size
+        
+    def all_similarity(self, fragment, candidate):
+        """
+        Check if the candidate neighborhood is similar to all other neighborhoods in the cluster.
+
+        Parameters
+        ----------
+        fragment : list of fragments.data.Neighborhood
+            The list of neighborhoods, which represents a fragment.
+        candidate : fragments.data.Neighborhood
+            The candidate neighborhood.
+
+        Returns
+        -------
+        bool
+            Whether the candidate neighborhood is to be added to the fragment..
+        float
+            The sum of the cosine score. A lower sum indicates stronger similarity.
+        """
+        cosine_sum = 0
+        for n_id in fragment:
+            momenta_n = self.neighborhoods[n_id].usr_momenta
+            momenta_c = candidate.usr_momenta
+            cosine = distance.cosine(momenta_n, momenta_c)
+            if cosine > self.usr_thr:
+                return False, -1
+            cosine_sum += cosine
+        return True, cosine_sum
+        
+    def detect_interactions(self, entries, neigh_1, neigh_2):
+        """
+        Detect interaction between residues belonging to the specified neighborhoods.
+
+        Parameters
+        ----------
+        entries : list of (str, str, int, int, float)
+            The list containing the entries in the CMAP.
+        neigh_1 : fragments.data.Neighborhood
+            The first neighborhood.
+        neigh_2 : fragments.data.Neighborhood
+            The second neighborhood.
+
+        Returns
+        -------
+        interact : bool
+            Whether there is interaction between the two neighborhoods.
+        best_f : float
+            The sum of the interaction scores. A higher sum indicates stronger interaction.
+        """
+        interact, f_sum = False, 0
+        r_pairs = list(itertools.product(neigh_1.residues, neigh_2.residues))
+        for entry in entries:
+            _, _, r_idx_1, r_idx_2, f = entry
+            for res_1, res_2 in r_pairs:
+                r_1_id_1, r_2_id_1 = res_1.get_id()[1], res_2.get_id()[1]
+                r_idx_1_match = r_1_id_1 == r_idx_1 or r_2_id_1 == r_idx_1
+                r_idx_2_match = r_1_id_1 == r_idx_2 or r_2_id_1 == r_idx_2
+                if r_1_id_1 != r_2_id_1 and r_idx_1_match and r_idx_2_match and f > self.f_thr:
+                    interact = True
+                    f_sum += f
+        return interact, f_sum
+        
+    def compute_neighborhoods(self, entries):
+        """
+        Generate the neighborhoods by grouping 2k+1 sequential residues and keeping track of interacting neighborhoods.
+
+        Parameters
+        ----------
+        entries : list of (str, str, int, int, float)
+            The list containing the entries in the CMAP.
+
+        Returns
+        -------
+        None.
+        """
+        # Get residues and define data structures
+        n = structure_length(self.structure)
+        residues = []
+        for residue in self.structure.get_residues():
+            residues.append(residue)
+        # Sort to ensure the sequence is correct
+        residues = sorted(residues, key=lambda x: x.get_id()[1])
+        # Compute neighborhoods
+        for i in range(n):
+            min_idx = max(0, i-self.k)
+            max_idx = min(i+self.k+1, n) # add one b/c later int range the upper index is exclusive
+            self.neighborhoods[i] = Neighborhood(i, residues[min_idx:max_idx]) # residue i is also added here
+        # For each neighborhood compute its USR momenta
+        for n_id in self.neighborhoods:
+            self.neighborhoods[n_id].compute_momenta()
+        # For each neighborhood, check if it has interaction with any residue of any other neighborhood
+        for i in range(len(self.neighborhoods)-1):
+            for j in range(i+1, len(self.neighborhoods)):
+                neigh_1, neigh_2 = self.neighborhoods[i], self.neighborhoods[j]
+                interact, f_sum = self.detect_interactions(entries, neigh_1, neigh_2)
+                if interact:
+                    self.neighborhoods[i].add_interaction(self.neighborhoods[j], f_sum)
+                    self.neighborhoods[j].add_interaction(self.neighborhoods[i], f_sum)
+        for i in range(len(self.neighborhoods)):
+            self.neighborhoods[i].filter_interactions()
+    
+    def generate(self):
+        """
+        Generate the fragments.
+        
+        Returns in case of errors in reading the contact map.
+
+        Returns
+        -------
+        None.
+        """
+        # Parse the CMAP file and get all the entries
+        entries = parse_cmap(self.cmap_file)
+        # Check if the entries are valid, if not just exit
+        if entries is None:
+            return
+        # Compute the neighborhoods
+        self.compute_neighborhoods(entries)
+        # Define fragment dictionary which points to the indices of the neighborhood
+        frag_dict = {} # int -> list of int
+        frag_id = 1
+        n = len(self.neighborhoods)
+        # Iterate over each neighbor of neighborhoods
+        for i in range(n):
+            frag_dict[frag_id] = []
+            frag_dict[frag_id].append(i)
+            upper_size = int(self.max_size/(len(self.neighborhoods[i].interactions)+1))
+            l_idx, u_idx = 1, 1
+            # Iterate over possible combinations
+            for j in range(1, upper_size):
+                lower = i - l_idx
+                upper = i + u_idx
+                sl, su = False, False
+                if lower < 0 and upper < n:
+                    su, c_sum_u = self.all_similarity(frag_dict[frag_id], self.neighborhoods[upper])
+                elif lower >= 0 and upper >= n:
+                    sl, c_sum_l = self.all_similarity(frag_dict[frag_id], self.neighborhoods[lower])
+                elif lower >= 0 and upper < n:
+                    sl, c_sum_l = self.all_similarity(frag_dict[frag_id], self.neighborhoods[lower])
+                    su, c_sum_u = self.all_similarity(frag_dict[frag_id], self.neighborhoods[upper])
+                # Find the best match
+                if sl and su:
+                    if c_sum_l < c_sum_u:
+                        frag_dict[frag_id].append(lower)
+                        l_idx += 1
+                    else:
+                        frag_dict[frag_id].append(upper)
+                        u_idx += 1
+                elif sl and not su:
+                    frag_dict[frag_id].append(lower)
+                    l_idx += 1
+                elif not sl and su:
+                    frag_dict[frag_id].append(upper)
+                    u_idx += 1
+                else:
+                    break # not suitable candidate found
+            frag_id += 1
+        # Retrieve fragments
+        self.fragments[self.structure.get_id()] = []
+        for frag_id in frag_dict:
+            n_ids = frag_dict[frag_id]
+            # The structure of the structure is (<pdb_id>_<chain_id>_<chain_id><frag_id>)
+            f_id = self.structure.get_id() + '_' + self.structure.get_id()[-1] + str(frag_id)
+            fragment = Fragment(self.structure, f_id)
+            for n_id in n_ids:
+                neighbor = self.neighborhoods[n_id]
+                for residue in neighbor.residues:
+                    fragment.add_residue(residue)
+                for inter in neighbor.interactions:
+                    for residue in inter[0].residues:
+                        fragment.add_residue(residue)
             self.fragments[self.structure.get_id()].append(fragment)
             
 class ConFindGen(SingleGenerator):
