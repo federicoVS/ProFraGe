@@ -11,9 +11,10 @@ import json
 from scipy.spatial import distance
 from Bio.PDB import NeighborSearch, Selection
 from Bio.PDB.mmtf import MMTFParser
-from fragments.data import Fragment, Neighborhood
+from fragments.structures import Fragment, Neighborhoods
 from fragments.graphs import UUGraph
 from utils.structure import get_residue_center, structure_length, generate_structure
+from utils.search import binary_search
 from utils.io import to_mmtf, to_pdb, parse_cmap
 from utils.ProgressBar import ProgressBar
 
@@ -201,8 +202,8 @@ class KSeqGen(SingleGenerator):
     
     Attributes
     ----------
-    neighborhoods : dict of int -> Neighborhood
-        A dictionary mapping the index of the centroid residue to a Neighborhood instance, representing
+    neighborhoods : fragments.structures.Neighborhoods
+        An object represeting the neighborhoods
         the sequential neighborhood.
     k : int
         The number of neighbors for each residue.
@@ -228,7 +229,7 @@ class KSeqGen(SingleGenerator):
         None.
         """
         super(KSeqGen, self).__init__(structure)
-        self.neighborhoods = {}
+        self.neighborhoods = Neighborhoods(structure, k)
         self.k = k
         self.usr_thr = usr_thr
     
@@ -255,30 +256,6 @@ class KSeqGen(SingleGenerator):
             if cosine > self.usr_thr:
                 return False
         return True
-    
-    def compute_neighborhoods(self):
-        """
-        Compute the neighborhoods for each residue.
-
-        Returns
-        -------
-        None.
-        """
-        # Get residues and define data structures
-        n = structure_length(self.structure)
-        residues = []
-        for residue in self.structure.get_residues():
-            residues.append(residue)
-        # Sort to ensure the sequence is correct
-        residues = sorted(residues, key=lambda x: x.get_id()[1])
-        # Compute neighborhoods
-        for i in range(n):
-            min_idx = max(0, i-self.k)
-            max_idx = min(i+self.k+1, n) # add one b/c later int range the upper index is exclusive
-            self.neighborhoods[i] = Neighborhood(i, residues[min_idx:max_idx]) # residue i is also added here
-        # For each centroid, define a dummy Structure object and compute its USR
-        for n_id in self.neighborhoods:
-            self.neighborhoods[n_id].compute_momenta()
         
     def generate(self):
         """
@@ -289,7 +266,7 @@ class KSeqGen(SingleGenerator):
         None.
         """
         # Compute neighborhoods
-        self.compute_neighborhoods()
+        self.neighborhoods.generate()
         # Define fragment dictionary which points to the indices of the neighborhood
         frag_dict = {} # int -> list of int
         frag_id = 1
@@ -330,9 +307,10 @@ class KSeqTerGen(SingleGenerator):
     
     Attributes
     ----------
-    neighborhoods : dict of int -> Neighborhood
-        A dictionary mapping the index of the centroid residue to a Neighborhood instance, representing
-        the sequential neighborhood.
+    neighborhoods : fragments.structures.Neighborhoods
+        An object represeting the neighborhoods
+    intr_cache : dict of int -> bool
+        A cache storing whether a certain residue-residue interaction has already been tested
     k : int
         The number of residues for each neighbor.
     usr_thr : float in [0,1]
@@ -356,7 +334,7 @@ class KSeqTerGen(SingleGenerator):
         structure : Bio.PDB.Structure
             The structure of which to compute the fragments.
         k : int
-            The number of residues for each neighbor.
+            The number of residues to the left and to the right of the centroid.
         usr_thr : float in [0,1]
             The similarity threshold between two neighborhoods.
         cmap_file : str
@@ -371,7 +349,8 @@ class KSeqTerGen(SingleGenerator):
         None.
         """
         super(KSeqTerGen, self).__init__(structure)
-        self.neighborhoods = {}
+        self.neighborhoods = Neighborhoods(structure, k)
+        self.intr_cache = {}
         self.k = k
         self.usr_thr = usr_thr
         self.cmap_file = cmap_file
@@ -386,7 +365,7 @@ class KSeqTerGen(SingleGenerator):
         ----------
         fragment : list of fragments.data.Neighborhood
             The list of neighborhoods, which represents a fragment.
-        candidate : fragments.data.Neighborhood
+        candidate : fragments.structures.Neighborhood
             The candidate neighborhood.
 
         Returns
@@ -412,11 +391,11 @@ class KSeqTerGen(SingleGenerator):
 
         Parameters
         ----------
-        entries : list of (str, str, int, int, float)
-            The list containing the entries in the CMAP.
-        neigh_1 : fragments.data.Neighborhood
+        entries : list of (int, float)
+            The list containing the processed entries of the CMAP.
+        neigh_1 : fragments.structures.Neighborhood
             The first neighborhood.
-        neigh_2 : fragments.data.Neighborhood
+        neigh_2 : fragments.structures.Neighborhood
             The second neighborhood.
 
         Returns
@@ -428,15 +407,33 @@ class KSeqTerGen(SingleGenerator):
         """
         interact, f_sum = False, 0
         r_pairs = list(itertools.product(neigh_1.residues, neigh_2.residues))
-        for entry in entries:
-            _, _, r_idx_1, r_idx_2, f = entry
-            for res_1, res_2 in r_pairs:
-                r_1_id_1, r_2_id_1 = res_1.get_id()[1], res_2.get_id()[1]
-                r_idx_1_match = r_1_id_1 == r_idx_1 or r_2_id_1 == r_idx_1
-                r_idx_2_match = r_1_id_1 == r_idx_2 or r_2_id_1 == r_idx_2
-                if r_1_id_1 != r_2_id_1 and r_idx_1_match and r_idx_2_match and f > self.f_thr:
+        searchable_list = [x[0] for x in entries]
+        for res_1, res_2 in r_pairs:
+            r_id_1, r_id_2 = res_1.get_id(), res_2.get_id()
+            r_target_1 = int(str(r_id_1[1])+'0'+str(r_id_2[1]))
+            r_target_2 = int(str(r_id_2[1])+'0'+str(r_id_1[1]))
+            if r_target_1 in self.intr_cache:
+                if self.intr_cache[r_target_1] > self.f_thr:
+                    f_sum += self.intr_cache[r_target_1]
+                continue
+            elif r_target_2 in self.intr_cache:
+                if self.intr_cache[r_target_2] > self.f_thr:
+                    f_sum += self.intr_cache[r_target_2]
+                continue 
+            found_1, idx_1 = binary_search(r_target_1, searchable_list)
+            found_2, idx_2 = binary_search(r_target_2, searchable_list)
+            if found_1:
+                f = entries[idx_1][1]
+                if f > self.f_thr:
                     interact = True
                     f_sum += f
+                self.intr_cache[r_target_1] = f
+            elif found_2:
+                f = entries[idx_2][1]
+                if f > self.f_thr:
+                    interact = True
+                    f_sum += f
+                self.intr_cache[r_target_2] = f
         return interact, f_sum
         
     def compute_neighborhoods(self, entries):
@@ -445,28 +442,15 @@ class KSeqTerGen(SingleGenerator):
 
         Parameters
         ----------
-        entries : list of (str, str, int, int, float)
-            The list containing the entries in the CMAP.
+        entries : list of (int, float)
+            The list containing the processed entries of the CMAP.
 
         Returns
         -------
         None.
         """
-        # Get residues and define data structures
-        n = structure_length(self.structure)
-        residues = []
-        for residue in self.structure.get_residues():
-            residues.append(residue)
-        # Sort to ensure the sequence is correct
-        residues = sorted(residues, key=lambda x: x.get_id()[1])
         # Compute neighborhoods
-        for i in range(n):
-            min_idx = max(0, i-self.k)
-            max_idx = min(i+self.k+1, n) # add one b/c later int range the upper index is exclusive
-            self.neighborhoods[i] = Neighborhood(i, residues[min_idx:max_idx]) # residue i is also added here
-        # For each neighborhood compute its USR momenta
-        for n_id in self.neighborhoods:
-            self.neighborhoods[n_id].compute_momenta()
+        self.neighborhoods.generate()
         # For each neighborhood, check if it has interaction with any residue of any other neighborhood
         for i in range(len(self.neighborhoods)-1):
             for j in range(i+1, len(self.neighborhoods)):
@@ -493,6 +477,9 @@ class KSeqTerGen(SingleGenerator):
         # Check if the entries are valid, if not just exit
         if entries is None:
             return
+        # Prepare the entries for binary search
+        entries = [(int(str(x[2])+'0'+str(x[3])), x[4]) for x in entries]
+        entries = sorted(entries, key=lambda x: x[0])
         # Compute the neighborhoods
         self.compute_neighborhoods(entries)
         # Define fragment dictionary which points to the indices of the neighborhood
