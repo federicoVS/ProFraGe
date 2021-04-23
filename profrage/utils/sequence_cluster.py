@@ -63,7 +63,7 @@ def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False
             elif last_p is not None and p_id != last_p:
                 break
             else:
-                if binary_search(p_id, pdb_ids, sorted=True):
+                if binary_search(p_id, pdb_ids, sorted=True)[0]:
                     m_pdb_ch_ids.append((p_id, c_id))
                     last_p = p_id
     if out_file is not None:
