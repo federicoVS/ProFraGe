@@ -34,7 +34,7 @@ def get_files(data_dir, ext='.pdb'):
 
 def parse_cmap(cmap_file):
     """
-    Parse a CMAP file holding interaction information and return its entries.
+    Perform parsing of the specified CMAP file holding interaction information and return its entries.
 
     Parameters
     ----------
