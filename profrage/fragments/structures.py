@@ -175,9 +175,9 @@ class Neighborhoods:
     Attributes
     ----------
     structure : Bio.PDB.Structure
-        The structure to represent
-    neighborhoods : dict of int -> fragments.structures.Neighborhood
-        The dictionary mapping an ID to its neighborhood
+        The structure to represent.
+    elements : dict of int -> fragments.structures.Neighborhood
+        The dictionary mapping an ID to its neighborhood.
     k : int
         The number of residues to the left and to the right of the centroid. The maximal number of residues
         per neighborhood is 2k+1.
@@ -203,7 +203,7 @@ class Neighborhoods:
         None.
         """
         self.structure = structure
-        self.neighborhoods = {}
+        self.elements = {}
         self.k = k
         self.max_inters = max_inters
         
@@ -216,23 +216,23 @@ class Neighborhoods:
         int
             The number of neighborhoods.
         """
-        return len(self.neighborhoods)
+        return len(self.elements)
     
-    def __getitem__(self, idx):
+    def __getitem__(self, key):
         """
-        Return the neighborhood at the specified index.
+        Return the neighborhood mapped by the specified key.
 
         Parameters
         ----------
-        idx : int
-            The index.
+        key : int
+            The key.
 
         Returns
         -------
         fragments.structures.Neighborhood
-            The neighborhood at the specified index.
+            The neighborhood mapped by the specified key.
         """
-        return self.neighborhoods[idx]
+        return self.elements[key]
         
     def __iter__(self):
         """
@@ -240,10 +240,10 @@ class Neighborhoods:
 
         Returns
         -------
-        list_iterator
-            The neighborhoods iterator.
+        dict_keyiterator
+            The iterator object.
         """
-        return iter(self.neighborhoods)
+        return iter(self.elements)
         
     def generate(self):
         """
@@ -266,10 +266,10 @@ class Neighborhoods:
         for i in range(n):
             min_idx = max(0, i-self.k)
             max_idx = min(i+self.k+1, n) # add one b/c later int range the upper index is exclusive
-            self.neighborhoods[i] = Neighborhood(i, residues[min_idx:max_idx], max_inters=self.max_inters) # residue i is also added here
+            self.elements[i] = Neighborhood(i, residues[min_idx:max_idx], max_inters=self.max_inters) # residue i is also added here
         # For each neighborhood compute its USR momenta
-        for i in self.neighborhoods:
-            self.neighborhoods[i].compute_momenta()
+        for i in range(len(self.elements)):
+            self.elements[i].compute_momenta()
     
 class Neighborhood:
     """
@@ -348,7 +348,7 @@ class Neighborhood:
         
     def compute_momenta(self):
         """
-        Compute the USR momenta for the neighborhood.
+        Compute the USR representation of the neighborhood.
 
         Returns
         -------

@@ -308,9 +308,10 @@ class KSeqTerGen(SingleGenerator):
     Attributes
     ----------
     neighborhoods : fragments.structures.Neighborhoods
-        An object represeting the neighborhoods
-    intr_cache : dict of int -> bool
-        A cache storing whether a certain residue-residue interaction has already been tested
+        An object represeting the neighborhoods.
+    intr_cache : dict of int -> float
+        A cache storing whether a certain residue-residue interaction has already been tested. The mapped
+        value represents the contact score, which is set to -1 in case there is no residue-residue interaction.
     k : int
         The number of residues for each neighbor.
     usr_thr : float in [0,1]
@@ -336,7 +337,7 @@ class KSeqTerGen(SingleGenerator):
         k : int
             The number of residues to the left and to the right of the centroid.
         usr_thr : float in [0,1]
-            The similarity threshold between two neighborhoods.
+            The similarity threshold between two neighborhoods. The lower the tighter.
         cmap_file : str
             The contact map file.
         f_thr : float in [0,1], optional
@@ -402,38 +403,55 @@ class KSeqTerGen(SingleGenerator):
         -------
         interact : bool
             Whether there is interaction between the two neighborhoods.
-        best_f : float
+        f_sum : float
             The sum of the interaction scores. A higher sum indicates stronger interaction.
         """
+        # Define residues to search and entries to be searched
         interact, f_sum = False, 0
         r_pairs = list(itertools.product(neigh_1.residues, neigh_2.residues))
-        searchable_list = [x[0] for x in entries]
+        searcheable_list = [x[0] for x in entries]
+        seen = {} # as to not count the same thing twice
+        # Iterate over neighborhoods residues
         for res_1, res_2 in r_pairs:
             r_id_1, r_id_2 = res_1.get_id(), res_2.get_id()
+            # Continue if it is the same residue
+            if r_id_1[1] == r_id_2[1]:
+                continue
             r_target_1 = int(str(r_id_1[1])+'0'+str(r_id_2[1]))
             r_target_2 = int(str(r_id_2[1])+'0'+str(r_id_1[1]))
+            # Check if their contribution has already been counted
+            if r_target_1 in seen or r_target_2 in seen:
+                continue
+            # Check if first target is in the cache
             if r_target_1 in self.intr_cache:
                 if self.intr_cache[r_target_1] > self.f_thr:
                     f_sum += self.intr_cache[r_target_1]
+                seen[r_target_1] = True
                 continue
+            # Check if second target is in the cache
             elif r_target_2 in self.intr_cache:
                 if self.intr_cache[r_target_2] > self.f_thr:
                     f_sum += self.intr_cache[r_target_2]
+                seen[r_target_2] = True
                 continue 
-            found_1, idx_1 = binary_search(r_target_1, searchable_list)
-            found_2, idx_2 = binary_search(r_target_2, searchable_list)
+            # If targets are not in the cache, perform binary search and insert results in the cache
+            found_1, idx_1 = binary_search(r_target_1, searcheable_list)
+            found_2, idx_2 = binary_search(r_target_2, searcheable_list)
+            seen[r_target_1] = seen[r_target_2] = True # target been seen this iteration
             if found_1:
                 f = entries[idx_1][1]
                 if f > self.f_thr:
                     interact = True
                     f_sum += f
-                self.intr_cache[r_target_1] = f
+                self.intr_cache[r_target_1] = self.intr_cache[r_target_2] = f
             elif found_2:
                 f = entries[idx_2][1]
                 if f > self.f_thr:
                     interact = True
                     f_sum += f
-                self.intr_cache[r_target_2] = f
+                self.intr_cache[r_target_2] = self.intr_cache[r_target_1] = f
+            else:
+                self.intr_cache[r_target_1] = self.intr_cache[r_target_2] = -1
         return interact, f_sum
         
     def compute_neighborhoods(self, entries):
