@@ -9,7 +9,8 @@ import os
 import shutil
 import argparse
 import numpy as np
-from fragments.USR import USR
+
+from structure.representation import USR
 from cluster.distance import Spectral, KMean, GMM
 from cluster.greedy import SeqAlign, CASuperImpose
 from utils.io import get_files, to_pdb, from_mmtf

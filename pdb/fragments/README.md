@@ -1,3 +1,3 @@
 ## Fragments
 
-This directory will contain the fragments of the proteins resulting from TERMANAL. It contains two subdirectories: `terms/`, where all the generated fragments will be stored, and 'terms-filtered/', where all the filtered TERMs will be stored.
+This directory will contain the mined fragments from the proteins. Given a fragment mining method `m`, three subdirectories will be created: `m/`, where all the mined fragments will be stored, 'm-filtered/', where the filtered fragments will be stored, and `m-clustered`, where the clustered fragments will be stored.

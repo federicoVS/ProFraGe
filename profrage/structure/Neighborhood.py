@@ -86,14 +86,14 @@ class Neighborhood:
         self.interactions = sorted(self.interactions, key=lambda x: x[1], reverse=True)
         self.interactions = self.interactions[0:self.max_inters]
         
-    def compute_features(self, rep):
+    def compute_features(self, Rep):
         """
         Compute the features of the structure using the specified representation.
 
         Parameters
         ----------
-        rep : structure.representation.Representation
-            The representation class.
+        Rep : structure.representation.Representation
+            The class of structure representation.
 
         Returns
         -------
@@ -109,4 +109,4 @@ class Neighborhood:
             chain.add(r)
         model.add(chain)
         c_structure.add(model)
-        self.features = rep(c_structure).get_features()
+        self.features = Rep(c_structure).get_features()

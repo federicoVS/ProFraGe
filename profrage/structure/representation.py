@@ -12,7 +12,7 @@ from Bio.PDB.vectors import calc_dihedral
 from utils.structure import get_atoms_coords
 
 class Representation:
-    """ An abstract class to implement structure representation."""
+    """An abstract class to implement structure representation."""
     
     def __init__(self):
         """

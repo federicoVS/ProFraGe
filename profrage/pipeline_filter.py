@@ -9,7 +9,8 @@ import os
 import shutil
 import argparse
 import pickle
-from fragments.filtering import is_complex, is_connected
+
+from fragment.filtering import is_complex, is_connected
 from utils.ProgressBar import ProgressBar
 from utils.io import get_files, from_mmtf
 

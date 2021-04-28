@@ -8,6 +8,7 @@ Created on Sat Apr  3 00:41:51 2021
 import os
 import subprocess
 import numpy as np
+
 from utils.ProgressBar import ProgressBar
 from utils.io import to_pdb
 

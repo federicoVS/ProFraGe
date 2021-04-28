@@ -6,6 +6,7 @@ Created on Thu Mar 25 15:20:13 2021
 """
 
 import argparse
+
 from utils.pdb_file import read_pdb_ids_file, fetch_pdb
 from utils.io import get_files
 from utils.sequence_cluster import match_clusters, get_clusters
