@@ -5,7 +5,6 @@ Created on Tue Apr  6 02:10:15 2021
 @author: Federico van Swaaij
 """
 import numpy as np
-from sklearn.preprocessing import normalize
 from Bio.PDB import NeighborSearch, Selection
 
 from fragment.graphs import UUGraph
@@ -53,6 +52,28 @@ def is_complex(structure, grade=12):
     """
     return structure_length(structure) >= grade
 
+def in_range(structure, lower=12, upper=40):
+    """
+    Check whether the given structure length is in range with respect to the given bounds.
+    
+    The length of the structure is expressed in the number of residues composing it.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure.
+    lower : int, optional
+        The lower bound. The default is 12.
+    upper : int, optional
+        The upper bound. The default is 40.
+
+    Returns
+    -------
+    bool
+        Whether the structure length is withing the bounds.
+    """
+    return structure_length(structure) >= lower and structure_length(structure) <= upper
+
 def is_connected(structure, radius=5):
     """
     Check whether the fragment is connected.
@@ -94,7 +115,7 @@ def is_connected(structure, radius=5):
     graph.compute_connected_components()
     return len(graph.connected_components) == 1
 
-def is_compact(structure, thr=1):
+def is_compact(structure, pct_thr=0.5):
     """
     Check whether the fragment is compact.
     
@@ -104,8 +125,10 @@ def is_compact(structure, thr=1):
     ----------
     structure : Bio.PDB.Structure
         The structure of which to compute the compactedness.
-    thr : float, optional
-        The variance threshold under which a fragment is considered to be compact. The default is 1.
+    pct_thr : float in [0,1], optional
+        The percentage threshold above which a fragment is considered to be compact. It refers to the
+        ratio between the averge distance from the center of the structure and distance between the center
+        and the farthest point from it. The default is 1.
 
     Returns
     -------
@@ -113,9 +136,15 @@ def is_compact(structure, thr=1):
         Whether the fragment is compact.
     """
     coords = get_atoms_coords(structure)
-    centre = np.mean(coords, axis=0)
-    squared_dist = np.sum((coords-centre)**2, axis=1)
-    squared_dist = normalize(squared_dist)
-    var = np.var(squared_dist)
-    return var < thr
+    center = np.mean(coords, axis=0)
+    norms = []
+    for i in range(coords.shape[0]):
+        norms.append(np.linalg.norm(coords[i,:]-center))
+    norms = np.array(norms)
+    farthest = norms[np.argmax(norms)]
+    # avg = np.mean(norms)
+    med = np.median(norms)
+    # print(avg/farthest, med/farthest)
+    pct = med/farthest
+    return pct > pct_thr
 

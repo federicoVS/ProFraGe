@@ -108,8 +108,7 @@ class Neighborhoods(Builder):
         structure : Bio.PDB.Structure
             The structure to represent.
         Rep : structure.representation.Representation
-            The class to be used to represent the structure. Note that this parameter must be a class,
-            not an instance of a class.
+            The class to be used to represent the structure..
         cmap_file : str
             The contact map file.
         k : int
@@ -206,7 +205,7 @@ class Neighborhoods(Builder):
         # Backbone adjacency
         A[0,1] = A[n-1,n-2] = 1 
         for i in range(1,n-1):
-            A[i-1,i] = A[i,i+1] =1
+            A[i-1,i] = A[i,i+1] = 1
         # Contact map adjancency
         for i in range(n-1):
             current = self.elements[i]

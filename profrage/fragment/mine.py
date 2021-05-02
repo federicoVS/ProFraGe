@@ -9,14 +9,12 @@ import os
 import json
 from scipy.spatial import distance
 from sklearn.cluster import AgglomerativeClustering
-from Bio.PDB import NeighborSearch, Selection
 from Bio.PDB.mmtf import MMTFParser
 
 from fragment.Fragment import Fragment
 from fragment.builders import Neighborhoods
-from fragment.graphs import UUGraph
-from utils.structure import get_residue_center, structure_length, generate_structure
-from utils.io import to_mmtf, to_pdb, parse_cmap
+from utils.structure import generate_structure
+from utils.io import to_mmtf, to_pdb
 from utils.ProgressBar import ProgressBar
 
 class Miner:
@@ -148,15 +146,13 @@ class KSeqMine(SingleMiner):
             The similarity threshold between two neighborhoods. The lower the tighter.
         f_thr : float in [0,1], optional
             The interaction threshold between two residues. The default is 0.1.
-        max_size : int, optional
-            The maximum number of neighborhoods per fragment. The default is 5.
 
         Returns
         -------
         None.
         """
         super(KSeqMine, self).__init__(structure)
-        self.neighborhoods = Neighborhoods(structure, Rep, None, k, f_thr=f_thr, max_size=max_size)
+        self.neighborhoods = Neighborhoods(structure, Rep, None, k, f_thr=f_thr)
         self.k = k
         self.cosine_thr = cosine_thr
     
@@ -244,7 +240,7 @@ class KSeqTerMine(SingleMiner):
         The maximum number of neighborhoods per fragment.
     """
     
-    def __init__(self, structure, Rep, k, cosine_thr, cmap, f_thr=0.1, max_size=5):
+    def __init__(self, structure, Rep, k, cosine_thr, cmap, f_thr=0.1, max_size=4):
         """
         Initialize the class.
 
@@ -263,7 +259,7 @@ class KSeqTerMine(SingleMiner):
         f_thr : float in [0,1], optional
             The interaction threshold between two residues. The default is 0.1.
         max_size : int, optional
-            The maximum number of neighborhoods per fragment. The default is 5.
+            The maximum number of neighborhoods per fragment. The default is 4.
 
         Returns
         -------
@@ -325,10 +321,11 @@ class KSeqTerMine(SingleMiner):
             upper_size = int(self.max_size/(len(self.neighborhoods[i].interactions)+1))
             l_idx, u_idx = 1, 1
             # Iterate over possible combinations
-            for j in range(1, upper_size):
+            for j in range(0, upper_size):
                 lower = i - l_idx
                 upper = i + u_idx
                 sl, su = False, False
+                c_sum_l, c_sum_u = 0, 0
                 if lower < 0 and upper < n:
                     su, c_sum_u = self.all_similarity(frag_dict[frag_id], self.neighborhoods[upper])
                 elif lower >= 0 and upper >= n:
