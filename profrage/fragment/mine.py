@@ -10,11 +10,13 @@ import json
 from scipy.spatial import distance
 from sklearn.cluster import AgglomerativeClustering
 from Bio.PDB.mmtf import MMTFParser
+import leidenalg
+import igraph as ig
 
 from fragment.Fragment import Fragment
 from fragment.builders import Neighborhoods
 from utils.structure import generate_structure
-from utils.io import to_mmtf, to_pdb
+from utils.io import to_mmtf, to_pdb, parse_cmap
 from utils.ProgressBar import ProgressBar
 
 class Miner:
@@ -73,6 +75,23 @@ class Miner:
                     to_mmtf(s_frag, fragment.f_id, out_dir=out_dir+dir_name)
                 elif ext == '.pdb':
                     to_pdb(s_frag, fragment.f_id, out_dir=out_dir+dir_name)
+                    
+    def pre_filter(self, jump_thr=20, min_size=12):
+        """
+        Pre-filters the fragments. This method is meant to be overridden by its subclasses.
+
+        Parameters
+        ----------
+        jump_thr : int, optional
+            The threshold above which two segments in the fragment are considered separated in the pre-filtering. The default is 20.
+        min_size : int, optional
+            The minimum size for a segment to be considered part of the main fragment structure in the pre-filtering. The default is 12.
+
+        Returns
+        -------
+        None.
+        """
+        pass
         
     def mine(self):
         """
@@ -94,6 +113,12 @@ class SingleMiner(Miner):
     ----------
     structure : Bio.PDB.Structure
         The structure from which to mine fragments.
+    do_pre_filter : bool
+        Whether to pre-filter the fragment before saving it.
+    jump_thr : int
+        The threshold above which two segments in the fragment are considered separated in the pre-filtering.
+    min_size : int
+        The minimum size for a segment to be considered part of the main fragment structure in the pre-filtering.
     """
     
     def __init__(self, structure):
@@ -111,6 +136,45 @@ class SingleMiner(Miner):
         """
         super(SingleMiner, self).__init__()
         self.structure = structure
+        
+    def pre_filter(self, jump_thr=20, min_size=12):
+        """
+        Pre-filter the fragments.
+
+        Parameters
+        ----------
+        jump_thr : int, optional
+            The threshold above which two segments in the fragment are considered separated in the pre-filtering. The default is 20.
+        min_size : int, optional
+            The minimum size for a segment to be considered part of the main fragment structure in the pre-filtering. The default is 12.
+
+        Returns
+        -------
+        None.
+        """
+        old_fragments = self.fragments[self.structure.get_id()]
+        self.fragments[self.structure.get_id()] = []
+        for fragment in old_fragments:
+            new_fragment = Fragment(self.structure, fragment.f_id) # the new, filtered fragment
+            temp_res = [] # temporary residues to add to the newly formed
+            residues = fragment.residues
+            if len(residues) <= 0:
+                continue
+            current = residues[0].get_id()[1]
+            for i in range(1, len(residues)):
+                residue = residues[i]
+                r_id = residue.get_id()
+                temp_res.append(residue)
+                if r_id[1] - current > jump_thr:
+                    if len(temp_res) < min_size:
+                        temp_res = []
+                        current = r_id[1]
+                    else:
+                        for tr in temp_res:
+                            new_fragment.add_residue(tr)
+                        temp_res = []
+                        current = r_id[1]
+            self.fragments[self.structure.get_id()].append(new_fragment)
             
 class KSeqMine(SingleMiner):
     """
@@ -130,7 +194,7 @@ class KSeqMine(SingleMiner):
         The similarity threshold under which two neighborhoods are considered to be similar.
     """
     
-    def __init__(self, structure, Rep, k, cosine_thr, f_thr=0.1, max_size=5):
+    def __init__(self, structure, Rep, k, cosine_thr, f_thr=0.1, max_inters=3):
         """
         Initialize the class.
 
@@ -146,13 +210,15 @@ class KSeqMine(SingleMiner):
             The similarity threshold between two neighborhoods. The lower the tighter.
         f_thr : float in [0,1], optional
             The interaction threshold between two residues. The default is 0.1.
+        max_inters : int, optional
+            The maximum number of interactions a neighborhood can have. The default is 3.
 
         Returns
         -------
         None.
         """
         super(KSeqMine, self).__init__(structure)
-        self.neighborhoods = Neighborhoods(structure, Rep, None, k, f_thr=f_thr)
+        self.neighborhoods = Neighborhoods(structure, Rep, None, k, f_thr=f_thr, max_inters=max_inters)
         self.k = k
         self.cosine_thr = cosine_thr
     
@@ -240,7 +306,7 @@ class KSeqTerMine(SingleMiner):
         The maximum number of neighborhoods per fragment.
     """
     
-    def __init__(self, structure, Rep, k, cosine_thr, cmap, f_thr=0.1, max_size=4):
+    def __init__(self, structure, Rep, k, cosine_thr, cmap, f_thr=0.1, max_inters=3, max_size=4):
         """
         Initialize the class.
 
@@ -258,6 +324,8 @@ class KSeqTerMine(SingleMiner):
             The CMAP file.
         f_thr : float in [0,1], optional
             The interaction threshold between two residues. The default is 0.1.
+        max_inters : int, optional
+            The maximum number of interactions a neighborhood can have. The default is 3.
         max_size : int, optional
             The maximum number of neighborhoods per fragment. The default is 4.
 
@@ -266,7 +334,7 @@ class KSeqTerMine(SingleMiner):
         None.
         """
         super(KSeqTerMine, self).__init__(structure)
-        self.neighborhoods = Neighborhoods(structure, Rep, cmap, k, f_thr=f_thr)
+        self.neighborhoods = Neighborhoods(structure, Rep, cmap, k, f_thr=f_thr, max_inters=max_inters)
         self.cosine_thr = cosine_thr
         self.max_size = max_size
         
@@ -366,6 +434,201 @@ class KSeqTerMine(SingleMiner):
                         fragment.add_residue(residue)
             self.fragments[self.structure.get_id()].append(fragment)
             
+class KTerCloseMine(SingleMiner):
+    """
+    Mine fragments by considering close neighborhoods.
+    
+    Each neighborhood is paired with a maximum of m interacting neighborhoods. Then, each of the
+    neighborhoods checks whether it can expand to its left of right, bringing forth a candidate and its
+    associated score. The best of these candidates is selected. This procedure continues until either no
+    further viable candidates are found or the maximum number of residues is reached.
+    
+    Attributes
+    ----------
+    neighborhoods : fragment.builders.Neighborhoods
+        An object represeting the neighborhoods.
+    k : int
+        The number of neighbors for each residue.
+    cosine_thr : float in [0,1]
+        The similarity threshold under which two neighborhoods are considered to be similar.
+    max_residues : int
+        The maximum number of residues accepted in a fragment.
+    """
+    
+    def __init__(self, structure, Rep, k, cosine_thr, cmap, f_thr=0.1, max_inters=3, max_residues=40):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        structure : Bio.PDB.Structure
+            The structure of which to compute the fragments.
+        Rep : structure.representation.Representation
+            The class of structure representation.
+        k : int
+            The number of residues to the left and to the right of the centroid.
+        cosine_thr : float in [0,1]
+            The similarity threshold between two neighborhoods. The lower the tighter.
+        cmap : str
+            The CMAP file.
+        f_thr : float in [0,1], optional
+            The interaction threshold between two residues. The default is 0.1.
+        max_inters : int, optional
+            The maximum number of interactions a neighborhood can have. The default is 3.
+        max_residues : int, optional
+            The maximum number of residues accepted in a fragment. The default is 40.
+
+        Returns
+        -------
+        None.
+        """
+        super(KTerCloseMine, self).__init__(structure)
+        self.neighborhoods = Neighborhoods(structure, Rep, cmap, k, f_thr=f_thr, max_inters=max_inters)
+        self.k = k
+        self.cosine_thr = cosine_thr
+        self.max_residues = max_residues
+        
+    def all_similarity(self, fragment, candidate):
+        """
+        Check if the candidate neighborhood is similar to all other neighborhoods in the cluster.
+
+        Parameters
+        ----------
+        fragment : list of structure.Neighborhood.Neighborhood
+            The list of neighborhoods, which represents a fragment.
+        candidate : structure.Neighborhood.Neighborhood
+            The candidate neighborhood.
+
+        Returns
+        -------
+        bool
+            Whether the candidate neighborhood is to be added to the fragment..
+        float
+            The sum of the cosine score. A lower sum indicates stronger similarity.
+        """
+        cosine_sum = 0
+        for n_id in fragment:
+            features_n = self.neighborhoods[n_id].features
+            features_c = candidate.features
+            cosine = distance.cosine(features_n, features_c)
+            if cosine > self.cosine_thr:
+                return False, -1
+            cosine_sum += cosine
+        return True, cosine_sum
+    
+    def best_neigh_match(self, frag_dict, offsets_dict, idx):
+        """
+        Return the best expansion candidate to either the left or the right of the given fragment.
+        
+        In case no viable candidate is found, a dummy entry if returned.
+
+        Parameters
+        ----------
+        frag_dict : dict of int -> int
+            The temporary fragment dictionary.
+        offsets_dict : dict of int -> [int, int]
+            The dictionary indicating for each fragment the offset to the left and to the right.
+        idx : int
+            The index of the fragment.
+
+        Returns
+        -------
+        float
+            The similarity score. In case of failure, it is set to 1e9.
+        int
+            The index of the neighborhood to be added to the fragment. In case of failure, it is set to -1.
+        int
+            The index of the fragment. Returning this is useful for the later sorting. In case of failure,
+            it is set to -1.
+        int
+            Set to 0 if the neighborhood to the left has been added, 1 if it is the neighborhood to the
+            right. In case of failure, it is set to -1.
+        """
+        n = len(self.neighborhoods)
+        offsets = offsets_dict[idx]
+        lower = idx - offsets[0]
+        upper = idx + offsets[1]
+        sl, su = False, False
+        c_sum_l, c_sum_u = 0, 0
+        if lower < 0 and upper < n:
+            su, c_sum_u = self.all_similarity(frag_dict[idx], self.neighborhoods[upper])
+        elif lower >= 0 and upper >= n:
+            sl, c_sum_l = self.all_similarity(frag_dict[idx], self.neighborhoods[lower])
+        elif lower >= 0 and upper < n:
+            sl, c_sum_l = self.all_similarity(frag_dict[idx], self.neighborhoods[lower])
+            su, c_sum_u = self.all_similarity(frag_dict[idx], self.neighborhoods[upper])
+        if sl and su:
+            if c_sum_l < c_sum_u:
+                return c_sum_l, lower, idx, 0
+            else:
+                return c_sum_u, upper, idx, 1
+        elif sl and not su:
+            return c_sum_l, lower, idx, 0
+        elif not sl and su:
+            return c_sum_u, upper, idx, 1
+        else:
+            return 1e9, -1, -1, -1
+    
+    def mine(self):
+        """
+        Mine the fragments.
+
+        Returns
+        -------
+        None.
+        """
+        # Compute the neighborhoods (including selecting the best interaction)
+        self.neighborhoods.generate()
+        # Define fragment dictionary which points to the indices of the neighborhood
+        frag_dict = {} # int -> list of int
+        full_frag_dict = {} # int -> list of int
+        offsets_dict = {}
+        n = len(self.neighborhoods)
+        # Iterate over neighborhoods to get fragments
+        for i in range(n):
+            # Initialize dictionaries
+            for j in range(n):
+                frag_dict[j] = []
+                frag_dict[j].append(j)
+                offsets_dict[j] = [1,1]
+            n_residues = len(self.neighborhoods[i])
+            for inter in self.neighborhoods[i].interactions:
+                n_residues += len(inter[0])
+            while n_residues <= self.max_residues:
+                candidates = []
+                candidates.append(self.best_neigh_match(frag_dict, offsets_dict, i))
+                for inter in self.neighborhoods[i].interactions:
+                    candidates.append(self.best_neigh_match(frag_dict, offsets_dict, inter[0].idx))
+                best = sorted(candidates, key=lambda x: x[0])[0]
+                if best[1] == -1:
+                    break # no match found
+                else:
+                    frag_dict[best[2]].append(best[1])
+                    offsets_dict[best[2]][best[3]] += 1
+                    n_residues += 1
+            # Compose full fragment
+            full_frag_dict[i+1] = []
+            for frag in frag_dict[i]:
+                full_frag_dict[i+1].append(frag)
+            for inter in self.neighborhoods[i].interactions:
+                idx = inter[0].idx
+                for frag in frag_dict[idx]:
+                    if frag not in full_frag_dict[i+1]:
+                        full_frag_dict[i+1].append(frag)
+            # print(full_frag_dict[i+1])
+        # Retrieve fragments
+        self.fragments[self.structure.get_id()] = []
+        for frag_id in full_frag_dict:
+            n_ids = full_frag_dict[frag_id]
+            # The structure of the structure is (<pdb_id>_<chain_id>_<chain_id><frag_id>)
+            f_id = self.structure.get_id() + '_' + self.structure.get_id()[-1] + str(frag_id)
+            fragment = Fragment(self.structure, f_id)
+            for n_id in n_ids:
+                neighbor = self.neighborhoods[n_id]
+                for residue in neighbor.residues:
+                    fragment.add_residue(residue)
+            self.fragments[self.structure.get_id()].append(fragment)
+            
 class HierarchyMine(SingleMiner):
     """
     Implement hierarchical clustering for fragment mining.
@@ -446,6 +709,153 @@ class HierarchyMine(SingleMiner):
             residues = self.builder.get_residues_at(c_id)
             for residue in residues:
                 self.fragments[self.structure.get_id()][c_id].add_residue(residue)
+                
+class LeidenMine(SingleMiner):
+    """
+    Implement the Leiden community-finding algorithm for detecting fragments.
+    
+    Attributes
+    ----------
+    adjacency : list of (int, int)
+        The adjacency list of the form (node, node). Note it is undirected and unweighted.
+    weights : list of float
+        The list of weights. It is built in such a way that its order matches the edges of the adjacency list.
+    cmap : str
+        The file holding the CMAP.
+    f_thr : float in [0,1]
+        The threshold above which two residues are interacting. It is also used as the weight assigned to
+        the edges.
+    weighted : bool
+        Whether the Leiden algorithm should take into consideration the weight of the edges.
+    bb_weight : float
+        The weight assigned to backbone connections.
+    n_iters : int
+        The number of iterations of the Leiden algorithm.
+    max_size : int
+        The maximum size of a community.
+    _res_dict : dict of int -> Bio.PDB.Residue
+        A dictionary mapping the segment ID of the residue to the residue itself.
+    """
+    
+    def __init__(self, structure, cmap, f_thr=0.1, weighted=False, bb_weight=1.0, n_iters=2, max_size=40):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        structure : Bio.PDB.Stucture
+            The structure from which to generate the fragments.
+        cmap : str
+        The file holding the CMAP.
+        f_thr : float in [0,1], optional
+            The threshold above which two residues are interacting. It is also used as the weight
+            assigned to the edges. The default is 0.1.
+        weighted : bool, optional
+            Whether the Leiden algorithm should take into consideration the weight of the edges.
+            The default is False.
+        bb_weight : float, optional
+            The weight assigned to backbone connections. The higher the more compact the fragments will be.
+            The default is 1.0.
+        n_iters : int, optional
+            The number of iterations of the Leiden algorithm. The default is 2.
+        max_size : int, optional
+            The maximum size of a community. The default is 40.
+
+        Returns
+        -------
+        None.
+        """
+        super(LeidenMine, self).__init__(structure)
+        self.adjacency = []
+        self.weights = None
+        self.cmap = cmap
+        self.f_thr = f_thr
+        self.weighted = weighted
+        self.bb_weight = bb_weight
+        self.n_iters = n_iters
+        self.max_size = max_size
+        self._res_dict = {}
+        
+    def _get_residues(self):
+        """
+        Fill the residue dictionary with the residues.
+        
+        Residues belonging to W-/HET-ATOM are discarded.
+
+        Returns
+        -------
+        None.
+        """
+        for residue in self.structure.get_residues():
+            r_id = residue.get_id()
+            if r_id[0] == ' ':
+                self._res_dict[r_id[1]] = residue
+        
+    def _compute_adjacency(self, entries):
+        """
+        Compute the adjacency matrix.
+        
+        Backbone and interactions are taken into consideration.
+
+        Parameters
+        ----------
+        entries : list of (str, str, int, int, float)
+            The list of entries of the CMAP.
+
+        Returns
+        -------
+        None.
+        """
+        # Check if the graph should be weighted
+        if self.weighted:
+            self.weights = []
+        # Backbone connections
+        keys = self._res_dict.keys()
+        keys = sorted(keys, key=lambda x: x) # should already be sorted but just to be sure
+        for i in range(len(keys)-1):
+            self.adjacency.append((keys[i],keys[i+1]))
+            if self.weighted:
+                self.weights.append(self.bb_weight)
+        # Interaction connections
+        for entry in entries:
+            _, _, res_1, res_2, f = entry
+            if res_1 in self._res_dict and res_2 in self._res_dict and f > self.f_thr:
+                self.adjacency.append((res_1, res_2))
+                if self.weighted:
+                    self.weights.append(f)
+                
+    def mine(self):
+        """
+        Mine the fragments.
+
+        Returns
+        -------
+        None.
+        """
+        # Get the residues
+        self._get_residues()
+        # Get the entries
+        entries = parse_cmap(self.cmap)
+        if entries is None:
+            return
+        # Compute the adjacency
+        self._compute_adjacency(entries)
+        # Define IGraph
+        G = ig.Graph(self.adjacency)
+        # Compute the partitions using the Leiden algorithm
+        partitions = leidenalg.find_partition(G, leidenalg.ModularityVertexPartition, weights=self.weights, n_iterations=self.n_iters, max_comm_size=self.max_size)
+        # Retrieve fragments
+        self.fragments[self.structure.get_id()] = []
+        frag_id = 1
+        for partition in partitions:
+            # The structure of the structure is (<pdb_id>_<chain_id>_<chain_id><frag_id>)
+            f_id = self.structure.get_id() + '_' + self.structure.get_id()[-1] + str(frag_id)
+            fragment = Fragment(self.structure, f_id)
+            for node in partition:
+                if node in self._res_dict:
+                    fragment.add_residue(self._res_dict[node])
+            self.fragments[self.structure.get_id()].append(fragment)
+            frag_id += 1
             
 class FuzzleMine(Miner):
     """
