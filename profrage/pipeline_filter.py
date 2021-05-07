@@ -10,11 +10,11 @@ import shutil
 import argparse
 import pickle
 
-from fragment.filtering import is_complex, is_connected
+from fragment.filtering import in_range, is_connected
 from utils.ProgressBar import ProgressBar
 from utils.io import get_files, from_mmtf
 
-def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, grade=12, verbose=False):
+def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, verbose=False):
     """
     Take a directory of fragments and filters them in order to retain ones which are composed of multiple segments.
 
@@ -30,8 +30,6 @@ def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, grade=12,
         The filtering method to apply to the fragments.
     radius : float, optional
         The minimal radius to consider two redidues belonging to different segments.The default is 5 A.
-    grade : int, optional
-        The minimal number of residues for a fragment to be complex. The default is 12.
     verbose : bool, optional
         Whether to print progress information. The default is False.
 
@@ -70,7 +68,7 @@ def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, grade=12,
                             n_fragments += 1
                             shutil.copy(mmtf, base_dir + out_name + os.path.basename(mmtf)[:-5] + '.mmtf')
                     elif filtering_method == 'complex':
-                        if is_complex(frag, grade=grade):
+                        if in_range(frag):
                             n_fragments += 1
                             shutil.copy(mmtf, base_dir + out_name + os.path.basename(mmtf)[:-5] + '.mmtf')
                     else:
@@ -90,7 +88,7 @@ def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, grade=12,
                             n_fragments += 1
                             shutil.copy(mmtf, base_dir + out_name + os.path.basename(mmtf)[:-5] + '.mmtf')
                     elif filtering_method == 'complex':
-                        if is_complex(frag, grade=grade):
+                        if in_range(frag):
                             n_fragments += 1
                             shutil.copy(mmtf, base_dir + out_name + os.path.basename(mmtf)[:-5] + '.mmtf')
                     else:
@@ -109,7 +107,6 @@ if __name__ == '__main__':
     arg_parser.add_argument('--pdb_ch_ids', type=str, default='../pdb/ids/m_pdb_ch_ids', help='The file holding the IDs of the proteins and their chains. The default is ../pdb/ids/m_pdb_ch_ids')
     arg_parser.add_argument('--filtering_method', type=str, default='complex', help='The filtering method to apply to the fragments. The options are [connected, complex]. The default is complex.')
     arg_parser.add_argument('--radius', type=float, default=5, help='The minimal radius in Angstroms to consider two residues belonging to different segments. The default is 5A.')
-    arg_parser.add_argument('--grade', type=float, default=12, help='The minimal number of residues for a fragment to be complex. The default is 12.')
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
     # Parse arguments
     args = arg_parser.parse_args()
@@ -118,5 +115,5 @@ if __name__ == '__main__':
     with open(args.pdb_ch_ids, 'rb') as f:
         pdb_ch_ids = pickle.load(f)
     # Begin pipeline
-    pipeline(args.method, args.base_dir, pdb_ch_ids, args.filtering_method, args.radius, args.grade, verbose=args.verbose)
+    pipeline(args.method, args.base_dir, pdb_ch_ids, args.filtering_method, args.radius, verbose=args.verbose)
     

@@ -131,6 +131,7 @@ class Neighborhoods(Builder):
         self.k = k
         self.f_thr = f_thr
         self.max_inters = max_inters
+        self.contacts = None
         self.intr_cache = {}
         
     def __len__(self):
@@ -303,6 +304,17 @@ class Neighborhoods(Builder):
             else:
                 self.intr_cache[r_target_1] = self.intr_cache[r_target_2] = -1
         return interact, f_sum
+    
+    def filter_interactions(self):
+        """
+        Filter the interactions of every neighborhood, retaining only the better ones.
+
+        Returns
+        -------
+        None.
+        """
+        for i in range(len(self.elements)):
+            self.elements[i].filter_interactions()
         
     def generate(self):
         """
@@ -337,6 +349,8 @@ class Neighborhoods(Builder):
             entries = parse_cmap(self.cmap)
             if entries is None:
                 return
+            # Initialize contacts matrix
+            self.contacts = np.zeros(shape=(len(self.elements),len(self.elements)))
             # Prepare the entries for binary search
             entries = [(int(str(x[2])+'0'+str(x[3])), x[4]) for x in entries]
             entries = sorted(entries, key=lambda x: x[0])
@@ -345,11 +359,11 @@ class Neighborhoods(Builder):
                 for j in range(i+1, len(self.elements)):
                     neigh_1, neigh_2 = self.elements[i], self.elements[j]
                     interact, f_sum = self.detect_interactions(entries, neigh_1, neigh_2)
+                    self.contacts[i,j] = self.contacts[j,i] = f_sum
                     if interact:
                         self.elements[i].add_interaction(self.elements[j], f_sum)
                         self.elements[j].add_interaction(self.elements[i], f_sum)
-            for i in range(len(self.elements)):
-                self.elements[i].filter_interactions()
+            self.filter_interactions()
         
             
 class MITStructure(Builder):

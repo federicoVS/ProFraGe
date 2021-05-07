@@ -57,6 +57,17 @@ class Neighborhood:
         self.features = None
         self.interactions = []
         
+    def __len__(self):
+        """
+        Return the length of the neighborhood as the number of residues composing it.
+
+        Returns
+        -------
+        int
+            The length of the neighborhood measured as the number of residues in it.
+        """
+        return len(self.residues)
+        
     def add_interaction(self, neighborhood, f_sum):
         """
         Add an interaction to the neighborhood.

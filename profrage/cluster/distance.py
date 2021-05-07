@@ -43,7 +43,7 @@ class Spectral(Cluster):
             The distance matrix.
         k : int
             The number of clusters.
-        g_delta : TYPE, optional
+        g_delta : int, optional
             The width of thr Gaussian kernel. It is only used if m_type is 'similarity'. The default is 16.
         to_invert : bool, optional
             Whether to invert the values of the distance matrix. The default is False.

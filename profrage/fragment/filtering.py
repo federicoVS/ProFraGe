@@ -5,6 +5,7 @@ Created on Tue Apr  6 02:10:15 2021
 @author: Federico van Swaaij
 """
 import numpy as np
+from sklearn.preprocessing import normalize
 from Bio.PDB import NeighborSearch, Selection
 
 from fragment.graphs import UUGraph
@@ -34,25 +35,7 @@ def has_hetatoms(structure, pct=1):
             count += 1
     return float(count/n) > pct
 
-def is_complex(structure, grade=12):
-    """
-    Check whether the given structure is complex, according to how many residues compose it.
-
-    Parameters
-    ----------
-    structure : Bio.PDB.Structure
-        The structure of which to compute the complexity.
-    grade : int, optional
-        The minimal number of residues for the fragment to be considered complex. The default is 12.
-
-    Returns
-    -------
-    bool
-        Whether the fragment is complex. True if |residues| >= grade, False otherwise.
-    """
-    return structure_length(structure) >= grade
-
-def in_range(structure, lower=12, upper=40):
+def in_range(structure, lower=15, upper=40):
     """
     Check whether the given structure length is in range with respect to the given bounds.
     
@@ -63,7 +46,7 @@ def in_range(structure, lower=12, upper=40):
     structure : Bio.PDB.Structure
         The structure.
     lower : int, optional
-        The lower bound. The default is 12.
+        The lower bound. The default is 15.
     upper : int, optional
         The upper bound. The default is 40.
 
@@ -76,7 +59,7 @@ def in_range(structure, lower=12, upper=40):
 
 def is_connected(structure, radius=5):
     """
-    Check whether the fragment is connected.
+    Check whether the structure is connected.
     
     The search is conducted at the residual level.
 
@@ -90,7 +73,7 @@ def is_connected(structure, radius=5):
     Returns
     -------
     bool
-        Whether the fragment is connected.
+        Whether the structure is connected.
     """
     # Create dictionary which encodes residues as integers
     index = 0
@@ -115,11 +98,12 @@ def is_connected(structure, radius=5):
     graph.compute_connected_components()
     return len(graph.connected_components) == 1
 
-def is_compact(structure, pct_thr=0.5):
+def is_compact(structure, pct_thr=0.65):
     """
-    Check whether the fragment is compact.
+    Check whether the structure is compact.
     
-    The check is based on the variance of the squared distances from the centre of the fragment.
+    The check is based on the percentage between the median distance from the center of the structure
+    and the farthest one.
 
     Parameters
     ----------
@@ -128,12 +112,12 @@ def is_compact(structure, pct_thr=0.5):
     pct_thr : float in [0,1], optional
         The percentage threshold above which a fragment is considered to be compact. It refers to the
         ratio between the averge distance from the center of the structure and distance between the center
-        and the farthest point from it. The default is 1.
+        and the farthest point from it. The default is 0.65.
 
     Returns
     -------
     bool
-        Whether the fragment is compact.
+        Whether the structure is compact.
     """
     coords = get_atoms_coords(structure)
     center = np.mean(coords, axis=0)
@@ -142,9 +126,36 @@ def is_compact(structure, pct_thr=0.5):
         norms.append(np.linalg.norm(coords[i,:]-center))
     norms = np.array(norms)
     farthest = norms[np.argmax(norms)]
-    # avg = np.mean(norms)
     med = np.median(norms)
-    # print(avg/farthest, med/farthest)
     pct = med/farthest
     return pct > pct_thr
+
+def is_spherical(structure, var_thr=0.05):
+    """
+    Check whether the structure has a spherical shape.
+    
+    The check is based on whether the variance of the (normalized) distances from the center of the
+    structure is below the threshold value.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure of which to compute the sphericaledness.
+    var_thr : float, optional
+        The variance threshold. The default is 0.05.
+
+    Returns
+    -------
+    bool
+        Whether the structure is spherical.
+    """
+    coords = get_atoms_coords(structure)
+    coords = normalize(coords)
+    center = np.mean(coords, axis=0)
+    norms = []
+    for i in range(coords.shape[0]):
+        norms.append(np.linalg.norm(coords[i,:]-center))
+    norms = np.array(norms)
+    variance = np.var(norms)
+    return variance < var_thr
 

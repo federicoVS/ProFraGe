@@ -30,7 +30,7 @@ class SeqAlign(Cluster):
         The percentage of length two structures have to share to be considered similar.
     """
     
-    def __init__(self, structures, seq_score_thr, length_pct_thr, verbose=False):
+    def __init__(self, structures, seq_score_thr=10, length_pct_thr=0.5, verbose=False):
         """
         Initialize the class.
 
@@ -38,10 +38,10 @@ class SeqAlign(Cluster):
         ----------
         structures : list of Bio.PDB.Structure
             The structures to cluster.
-        seq_score_thr : int
-            The threshold score for two sequences to be considered similar.
-        length_pct_thr : float in [0,1]
-            The mininal percentage of length two structures have share to be considered
+        seq_score_thr : int, optional
+            The threshold score above which two sequences to be considered similar. The default is 10
+        length_pct_thr : float in [0,1], optional
+            The mininal percentage of length two structures have share to be considered. The default is 0.5.
             similar.
         verbose : bool, optional
             Whether to print progress information. The default is False.
@@ -110,7 +110,7 @@ class SeqAlign(Cluster):
         -------
         None.
         """
-        cluster_id = 1
+        cluster_id = 0
         placed = [False for i in range(len(self.structures))]
         score_cache = {}
         progress_bar = ProgressBar()
@@ -155,7 +155,7 @@ class CASuperImpose(Cluster):
         The percentage of length two structures should share to be considered similar.
     """
     
-    def __init__(self, structures, rmsd_thr, length_pct_thr, verbose=False):
+    def __init__(self, structures, rmsd_thr=10, length_pct_thr=0.5, verbose=False):
         """
         Initialize the class.
 
@@ -163,10 +163,10 @@ class CASuperImpose(Cluster):
         ----------
         structures : list of Bio.PDB.Structure
             The structures to cluster.
-        rmsd_thr : float
-            The RMSD threshold.
-        length_pct_thr : float in [0,1]
-            The length percentage threshold.
+        rmsd_thr : float, optional
+            The RMSD threshold below which two fragments are considered similar. The default is 10.
+        length_pct_thr : float in [0,1], optional
+            The length percentage threshold. The default is 0.5.
         verbose : TYPE, optional
             Whether to print progress information. The default is False.
 
@@ -296,7 +296,7 @@ class CASuperImpose(Cluster):
         -------
         None.
         """
-        cluster_id = 1
+        cluster_id = 0
         placed = [False for i in range(len(self.structures))]
         rmsd_cache = {}
         progress_bar = ProgressBar()
