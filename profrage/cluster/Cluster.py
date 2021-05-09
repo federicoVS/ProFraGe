@@ -70,8 +70,6 @@ class Cluster:
         """
         s_id = self.clusters[cluster_id][index]
         structure = self.structures[s_id]
-        if self.verbose:
-            print(f'Cluster {cluster_id} has representative {structure.get_full_id()[0]}')
         return structure
     
     def print_clusters_statistics(self):
@@ -85,7 +83,8 @@ class Cluster:
         freqs = {}
         for cluster_id in self.clusters:
             freqs[cluster_id] = len(self.clusters[cluster_id])
-            print(f'Cluster {cluster_id} has size {len(self.clusters[cluster_id])}')
+            s_id = self.best_representative(cluster_id).get_id()
+            print(f'Cluster {cluster_id} has representative {s_id} and size {len(self.clusters[cluster_id])}')
     
     def show_clusters(self):
         """
@@ -102,6 +101,24 @@ class Cluster:
             freqs[cluster_id] = len(self.clusters[cluster_id])
         plt.bar(freqs.keys(), freqs.values(), 1.0, color='b')
         plt.show()
+        
+    def best_representative(self, cluster_id):
+        """
+        Select the best representative from the specified cluster. This method is meant to be overridden by subclasses.
+
+        Parameters
+        ----------
+        cluster_id : int
+            The cluster ID.
+
+        Returns
+        -------
+        structure : Bio.PDB.Structure
+            The best representative structure for the cluster.
+            If not overridden, it returns the first one by default.
+        """
+        s_id = self.clusters[cluster_id][0]
+        return self.structures[s_id]
         
     def cluster(self):
         """
