@@ -9,7 +9,9 @@ import numpy as np
 from Bio import pairwise2
 from Bio.PDB.Polypeptide import CaPPBuilder
 from Bio.PDB.Superimposer import Superimposer
+
 from cluster.Cluster import Cluster
+from structure.representation import USR
 from utils.ProgressBar import ProgressBar
 from utils.structure import lengths_within
 
@@ -55,7 +57,7 @@ class SeqAlign(Cluster):
         self.length_pct_thr = length_pct_thr
         self.verbose = verbose
         
-    def get_sequences(self, index):
+    def _get_sequences(self, index):
         """
         Return the sequences of the specified structure.
         
@@ -78,7 +80,7 @@ class SeqAlign(Cluster):
             sequences.append(pp.get_sequence())
         return sequences
     
-    def compare(self, index_1, index_2):
+    def _compare(self, index_1, index_2):
         """
         Compare the specified structures by aligning them.
 
@@ -94,8 +96,8 @@ class SeqAlign(Cluster):
         int
             The best score, i.e. the largest one among all sequences.
         """
-        seq_1 = self.get_sequences(index_1)
-        seq_2 = self.get_sequences(index_2)
+        seq_1 = self._get_sequences(index_1)
+        seq_2 = self._get_sequences(index_2)
         score = 0
         for s_1 in seq_1:
             for s_2 in seq_2:
@@ -129,7 +131,7 @@ class SeqAlign(Cluster):
                     if j != i and lengths_within(self.structures[i], self.structures[j], self.length_pct_thr) and not placed[j]:
                         score = 0
                         if (i,j) not in score_cache:
-                            score = self.compare(i, j)
+                            score = self._compare(i, j)
                             score_cache[(i,j)] = score
                         else:
                             score = score_cache[(i,j)]
@@ -178,7 +180,7 @@ class CASuperImpose(Cluster):
         self.rmsd_thr = rmsd_thr
         self.length_pct_thr = length_pct_thr
         
-    def get_ca_atoms(self, index):
+    def _get_ca_atoms(self, index):
         """
         Get the CA atoms from the specified structure.
 
@@ -200,7 +202,7 @@ class CASuperImpose(Cluster):
                     ca_atoms.append(residue['CA'].copy())
         return ca_atoms
     
-    def get_shifted_atoms_subsets(self, ca_atoms_long, ca_atoms_short):
+    def _get_shifted_atoms_subsets(self, ca_atoms_long, ca_atoms_short):
         """
         Compute all subsets of contiguous CA atoms for the longer chain.
         
@@ -226,7 +228,7 @@ class CASuperImpose(Cluster):
             shifted_atoms.append(s_atoms)
         return shifted_atoms
     
-    def superimpose(self, index, atoms_fixed, atoms_moving):
+    def _superimpose(self, index, atoms_fixed, atoms_moving):
         """
         Perform superimposition between the specified structures.
 
@@ -253,7 +255,7 @@ class CASuperImpose(Cluster):
         except np.linalg.LinAlgError:
             return np.inf
         
-    def compare(self, index_1, index_2):
+    def _compare(self, index_1, index_2):
         """
         Compare the specified structures by superimposing them.
 
@@ -269,22 +271,22 @@ class CASuperImpose(Cluster):
         float
             The minimum RMSD value across the computed superimpositions .
         """
-        ca_atoms_1 = self.get_ca_atoms(index_1)
-        ca_atoms_2 = self.get_ca_atoms(index_2)
+        ca_atoms_1 = self._get_ca_atoms(index_1)
+        ca_atoms_2 = self._get_ca_atoms(index_2)
         if len(ca_atoms_1) == len(ca_atoms_2):
-            return self.superimpose(index_1, ca_atoms_1, ca_atoms_2)
+            return self._superimpose(index_1, ca_atoms_1, ca_atoms_2)
         elif len(ca_atoms_1) > len(ca_atoms_2):
-            shifted_atoms = self.get_shifted_atoms_subsets(ca_atoms_1, ca_atoms_2)
+            shifted_atoms = self._get_shifted_atoms_subsets(ca_atoms_1, ca_atoms_2)
             rmsds = []
             for sas in shifted_atoms:
-                rmsds.append(self.superimpose(index_1, sas, ca_atoms_2))
+                rmsds.append(self._superimpose(index_1, sas, ca_atoms_2))
             rmsds = np.array(rmsds)
             return np.min(rmsds)
         else:
-            shifted_atoms = self.get_shifted_atoms_subsets(ca_atoms_2, ca_atoms_1)
+            shifted_atoms = self._get_shifted_atoms_subsets(ca_atoms_2, ca_atoms_1)
             rmsds = []
             for sas in shifted_atoms:
-                rmsds.append(self.superimpose(index_1, ca_atoms_1, sas))
+                rmsds.append(self._superimpose(index_1, ca_atoms_1, sas))
             rmsds = np.array(rmsds)
             return np.min(rmsds)
         
@@ -314,11 +316,116 @@ class CASuperImpose(Cluster):
                     if j != i and lengths_within(self.structures[i], self.structures[j], self.length_pct_thr) and not placed[j]:
                         rmsd = 0
                         if (i,j) not in rmsd_cache:
-                            rmsd = self.compare(i, j)
+                            rmsd = self._compare(i, j)
                             rmsd_cache[(i,j)] = rmsd
                         else:
                             rmsd = rmsd_cache[(i,j)]
                         if rmsd <= self.rmsd_thr:
+                            placed[j] = True
+                            self.clusters[cluster_id].append(j)
+                cluster_id += 1
+        if self.verbose:
+            progress_bar.end()
+            
+class USRCluster(Cluster):
+    """
+    Perform clustering of the structures based on their USR score.
+    
+    Two structures are considered to be similar if the cosine distance between their USR features is
+    below a specified threshold.
+    
+    Attributes
+    ----------
+    score_thr : float in [0,1]
+        The similarity score threshold above which two structures are considered to be similar. The higher
+        the tighter.
+    features : numpy.ndarray
+        A matrix holding the USR features for each structure.
+    """
+    
+    def __init__(self, structures, score_thr=0.4, verbose=False):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        structures : list of Bio.PDB.Structure
+            The structures to be clustered.
+        score_thr : float in [0,1], optional
+            The similarity score threshold. The default is 0.4.
+        verbose : bool, optional
+            Whether to print progress information. The default is False.
+
+        Returns
+        -------
+        None.
+        """
+        super(USRCluster, self).__init__(structures, verbose)
+        self.score_thr = score_thr
+        self.features = None
+        
+    def best_representative(self, cluster_id):
+        """
+        Select the best representative from the specified cluster.
+
+        Parameters
+        ----------
+        cluster_id : int
+            The cluster ID.
+
+        Returns
+        -------
+        structure : Bio.PDB.Structure
+            The best representative structure for the cluster.
+        """
+        best_idx, best_score = -1, -1
+        for i in range(len(self.clusters[cluster_id])):
+            median_score = []
+            for j in range(len(self.clusters[cluster_id])):
+                if j != i:
+                    median_score.append(USR.get_similarity_score(self.features[i], self.features[j]))
+            median_score = np.median(median_score)
+            if median_score > best_score:
+                best_idx = i
+                best_score = median_score
+        s_id = self.clusters[cluster_id][best_idx]
+        return self.structures[s_id]
+        
+    def cluster(self):
+        """
+        Perform the clustering.
+
+        Returns
+        -------
+        None.
+        """
+        # Define n for convenience
+        n = len(self.structures)
+        # Define feature matrices
+        self.features = np.zeros(shape=(n, USR.get_n_features()))
+        # Compute USR for each structure
+        for i in range(n):
+            usr = USR(self.structures[i])
+            self.features[i,:] = usr.get_features()
+        # Data structures for clustering
+        cluster_id = 0
+        placed = [False for i in range(n)]
+        progress_bar = ProgressBar()
+        if self.verbose:
+            print('Clustering...')
+            progress_bar.start()
+        for i in range(n):
+            if self.verbose:
+                progress_bar.step(i, n)
+            if not placed[i]:
+                placed[i] = True
+                self.clusters[cluster_id] = []
+                self.clusters[cluster_id].append(i)
+                for j in range(n):
+                    if j != i and not placed[j]:
+                        score = USR.get_similarity_score(self.features[i], self.features[j])
+                        if score > self.score_thr:
+                            placed[j] = True
                             self.clusters[cluster_id].append(j)
                 cluster_id += 1
         if self.verbose:
