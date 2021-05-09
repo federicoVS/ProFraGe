@@ -56,8 +56,6 @@ class USR(Representation):
     
     Attributes
     ----------
-    coords : numpy.ndarray
-        The matrix of coordinates
     ctd : numpy.ndarray
         The coordinates of the centroid of the structure. Note that it is the average of the atoms, so
         very likely it does not correspond to a real atom.
@@ -70,7 +68,9 @@ class USR(Representation):
     momenta : numpy.ndarray
         The array containing the momenta for the previous four features. The array is organized in four
         blocks of (mean, varriance, skewness)_f, where each element in the tuple is computed relative to
-        f, with f being `ctd`, `cst`, `fct`, and `ftf` respecitvely. 
+        f, with f being `ctd`, `cst`, `fct`, and `ftf` respecitvely.
+    _coords : numpy.ndarray
+        The matrix of coordinates
     """
     
     def __init__(self, structure):
@@ -87,12 +87,36 @@ class USR(Representation):
         None.
         """
         super(USR, self).__init__()
-        self.coords = get_atoms_coords(structure)
+        self._coords = get_atoms_coords(structure)
         self.ctd = None
         self.cst = None
         self.fct = None
         self.ftf = None
         self.momenta = None
+        
+    @staticmethod
+    def get_similarity_score(momenta_1, momenta_2):
+        """
+        Compute the similarity score between two momenta, as described in the source paper.
+
+        Parameters
+        ----------
+        momenta_1 : numpy.ndarray
+            The USR momenta of the first structure.
+        momenta_2 : TYPE
+            The USR momenta of the second structure.
+
+        Returns
+        -------
+        float in (0,1)
+            The similarity score.
+        """
+        score = 0
+        for i in range(12):
+            score += abs(momenta_1[i]-momenta_2[i])
+        score /= 12
+        score += 1
+        return 1/score
         
     @staticmethod
     def get_n_features():
@@ -106,20 +130,7 @@ class USR(Representation):
         """
         return 12
         
-    def get_features(self):
-        """
-        Return the USR-momenta.
-
-        Returns
-        -------
-        numpy.ndarray
-            The USR-momenta.
-        """
-        if self.momenta is None:
-            self.compute_all()
-        return self.momenta
-        
-    def get_ctd(self):
+    def _get_ctd(self):
         """
         Compute the coordinates of `ctd`.
 
@@ -127,9 +138,9 @@ class USR(Representation):
         -------
         None.
         """
-        self.ctd = np.mean(self.coords, axis=0)
+        self.ctd = np.mean(self._coords, axis=0)
         
-    def get_cst(self):
+    def _get_cst(self):
         """
         Compute the coordinates of `cst`.
 
@@ -137,10 +148,10 @@ class USR(Representation):
         -------
         None.
         """
-        squared_dist = np.sum((self.coords-self.ctd)**2, axis=1)
-        self.cst = self.coords[np.argmin(squared_dist),:]
+        squared_dist = np.sum(np.sqrt((self._coords-self.ctd)**2), axis=1)
+        self.cst = self._coords[np.argmin(squared_dist),:]
     
-    def get_fct(self):
+    def _get_fct(self):
         """
         Compute the coordinates of `fct`.
 
@@ -148,10 +159,10 @@ class USR(Representation):
         -------
         None.
         """
-        squared_dist = np.sum((self.coords-self.ctd)**2, axis=1)
-        self.fct = self.coords[np.argmax(squared_dist),:]
+        squared_dist = np.sum(np.sqrt((self._coords-self.ctd)**2), axis=1)
+        self.fct = self._coords[np.argmax(squared_dist),:]
     
-    def get_ftf(self):
+    def _get_ftf(self):
         """
         Compute the coordinates of `ftf`.
 
@@ -159,10 +170,10 @@ class USR(Representation):
         -------
         None.
         """
-        squared_dist = np.sum((self.coords-self.fct)**2, axis=1)
-        self.ftf = self.coords[np.argmax(squared_dist),:]
+        squared_dist = np.sum(np.sqrt((self._coords-self.fct)**2), axis=1)
+        self.ftf = self._coords[np.argmax(squared_dist),:]
         
-    def compute_momenta(self):
+    def _compute_momenta(self):
         """
         Compute the momenta.
 
@@ -173,27 +184,27 @@ class USR(Representation):
         # Initialize momenta
         self.momenta = np.zeros(shape=(12,))
         # Compute distances
-        dist_ctd = np.sum((self.coords-self.ctd)**2, axis=1)
-        dist_cst = np.sum((self.coords-self.cst)**2, axis=1)
-        dist_fct = np.sum((self.coords-self.fct)**2, axis=1)
-        dist_ftf = np.sum((self.coords-self.ftf)**2, axis=1)
+        dist_ctd = np.sum(np.sqrt((self._coords-self.ctd)**2), axis=1)
+        dist_cst = np.sum(np.sqrt((self._coords-self.cst)**2), axis=1)
+        dist_fct = np.sum(np.sqrt((self._coords-self.fct)**2), axis=1)
+        dist_ftf = np.sum(np.sqrt((self._coords-self.ftf)**2), axis=1)
         # Mean
         self.momenta[0] = np.mean(dist_ctd) # ctd
-        self.momenta[3] = np.mean(dist_cst) #cst
+        self.momenta[3] = np.mean(dist_cst) # cst
         self.momenta[6] = np.mean(dist_fct) # fct
         self.momenta[9] = np.mean(dist_ftf) # ftf
         # Variance
         self.momenta[1] = np.var(dist_ctd) # ctd
-        self.momenta[4] = np.var(dist_cst) #cst
+        self.momenta[4] = np.var(dist_cst) # cst
         self.momenta[7] = np.var(dist_fct) # fct
         self.momenta[10] = np.var(dist_ftf) # ftf
         # Skewness
         self.momenta[2] = skew(dist_ctd) # ctd
-        self.momenta[5] = skew(dist_cst) #cst
+        self.momenta[5] = skew(dist_cst) # cst
         self.momenta[8] = skew(dist_fct) # fct
         self.momenta[11] = skew(dist_ftf) # ftf
         
-    def compute_all(self):
+    def _compute_all(self):
         """
         Compute the features and their momenta.
 
@@ -201,11 +212,24 @@ class USR(Representation):
         -------
         None.
         """
-        self.get_ctd()
-        self.get_cst()
-        self.get_fct()
-        self.get_ftf()
-        self.compute_momenta()
+        self._get_ctd()
+        self._get_cst()
+        self._get_fct()
+        self._get_ftf()
+        self._compute_momenta()
+        
+    def get_features(self):
+        """
+        Return the USR-momenta.
+
+        Returns
+        -------
+        numpy.ndarray
+            The USR-momenta.
+        """
+        if self.momenta is None:
+            self._compute_all()
+        return self.momenta
         
 class MITResidue(Representation):
     """
@@ -262,20 +286,7 @@ class MITResidue(Representation):
             The length of a single feature-vector.
         """
         return 7
-        
-    def get_features(self):
-        """
-        Return the structure embeddings.
-
-        Returns
-        -------
-        numpy.ndarray
-            The embeddings.
-        """
-        if self.embeddings is None:
-            self.compute_representation()
-        return self.embeddings
-        
+    
     def compute_contact_map(self):
         """
         Compute the contact map.
@@ -357,4 +368,17 @@ class MITResidue(Representation):
             dist_nm1n = np.linalg.norm(ca_n-ca_nm1)
             neigh_nm1 = int(''.join([str(ord(k)) for k in self.residues[n-2].get_resname()]))
             self.embeddings[n-1,:] = np.array([phi, 0, 0, dist_nm1n, 0, neigh_nm1, 0])
+            
+    def get_features(self):
+        """
+        Return the structure embeddings.
+
+        Returns
+        -------
+        numpy.ndarray
+            The embeddings.
+        """
+        if self.embeddings is None:
+            self.compute_representation()
+        return self.embeddings
     
