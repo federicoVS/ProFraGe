@@ -34,7 +34,7 @@ class Neighborhood:
         neighborhood, and the second being the interaction score.
     """
     
-    def __init__(self, idx, residues, max_inters=3):
+    def __init__(self, idx, residues, max_inters=1):
         """
         Initialize the class.
 
@@ -45,7 +45,7 @@ class Neighborhood:
         residues : list of Bio.PDB.Residue
             The list of residues composing the neighborhood.
         max_inters : int, optional
-            The maximum number of interacting neighborhoods. The default is 3.
+            The maximum number of interacting neighborhoods. The default is 1.
 
         Returns
         -------

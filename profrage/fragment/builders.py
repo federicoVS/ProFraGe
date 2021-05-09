@@ -25,9 +25,14 @@ class Builder:
         """
         pass
     
-    def get_features(self):
+    def get_residues_at(self, idx):
         """
-        Return the features. This method is meant to be overridden by subclasses.
+        Return the residues at the specified index. This method is meant to be overridden by subclasses.
+
+        Parameters
+        ----------
+        idx : int
+            The index.
 
         Returns
         -------
@@ -47,14 +52,9 @@ class Builder:
         """
         pass
     
-    def get_residues_at(self, idx):
+    def get_features(self):
         """
-        Return the residues at the specified index. This method is meant to be overridden by subclasses.
-
-        Parameters
-        ----------
-        idx : int
-            The index.
+        Return the features. This method is meant to be overridden by subclasses.
 
         Returns
         -------
@@ -94,12 +94,12 @@ class Neighborhoods(Builder):
         a very high interaction.
     max_inters : int
         The maximum number of interacting neighborhoods a neighborhood can have.
-    intr_cache : dict of int -> float
+    _intr_cache : dict of int -> float
         A cache storing whether a certain residue-residue interaction has already been tested. The mapped
         value represents the contact score, which is set to -1 in case there is no residue-residue interaction.
     """
     
-    def __init__(self, structure, Rep, cmap, k, f_thr=0.1, max_inters=3):
+    def __init__(self, structure, Rep, cmap, k=3, f_thr=0.1, max_inters=1):
         """
         Initialize the class.
 
@@ -111,13 +111,13 @@ class Neighborhoods(Builder):
             The class to be used to represent the structure..
         cmap_file : str
             The contact map file.
-        k : int
-            The number of residues to the left and to the right of the centroid.
+        k : int, optional
+            The number of residues to the left and to the right of the centroid. The default is 3.
         f_thr : float in [0,1]
             The interaction threshold between two residues. A high interaction score means two residues have
             a very high interaction.
         max_inters : int, optional
-            The maximum number of interacting neighborhoods a neighborhood can have. The default is 3.
+            The maximum number of interacting neighborhoods a neighborhood can have. The default is 1.
 
         Returns
         -------
@@ -131,8 +131,7 @@ class Neighborhoods(Builder):
         self.k = k
         self.f_thr = f_thr
         self.max_inters = max_inters
-        self.contacts = None
-        self.intr_cache = {}
+        self._intr_cache = {}
         
     def __len__(self):
         """
@@ -172,72 +171,7 @@ class Neighborhoods(Builder):
         """
         return iter(self.elements)
     
-    def get_features(self):
-        """
-        Return the feature matrix.
-
-        Returns
-        -------
-        X : numpy.ndarray
-            The features.
-        """
-        # Get shape of features
-        n = len(self.elements)
-        X = np.zeros(shape=(n,self.Rep.get_n_features()))
-        # Add the features
-        for i in range(n):
-            if len(self.elements[0].features.shape) == 2:
-                X[i,:] = np.mean(self.elements[i].features, axis=0)
-            else:
-                X[i,:] = self.elements[i].features
-        return X
-
-    def get_adjacency(self):
-        """
-        Return the adjacency matrix based on the contact map information.
-
-        Returns
-        -------
-        A : numpy.ndarray
-            The adjacency matrix.
-        """
-        n = len(self.elements)
-        A = np.zeros(shape=(n,n))
-        # Backbone adjacency
-        A[0,1] = A[n-1,n-2] = 1 
-        for i in range(1,n-1):
-            A[i-1,i] = A[i,i+1] = 1
-        # Contact map adjancency
-        for i in range(n-1):
-            current = self.elements[i]
-            for inter in current.interactions:
-                A[i,inter.idx] = A[inter.idx,i] = 1
-        return A
-    
-    def get_residues_at(self, idx):
-        """
-        Return the residue at the specified neighborhood, including the ones from the latter interactions.
-
-        Parameters
-        ----------
-        idx : int
-            The index.
-
-        Returns
-        -------
-        residues : list of Bio.PDB.Residue
-            The list of residues belonging to the neighborhood.
-        """
-        residues = []
-        neighbor = self.elements[idx]
-        for residue in neighbor.residues:
-            residues.append(residue)
-            for inter in neighbor.interactions:
-                for residue in inter[0].residues:
-                    residues.append(residue)
-        return residues
-    
-    def detect_interactions(self, entries, neigh_1, neigh_2):
+    def _detect_interactions(self, entries, neigh_1, neigh_2):
         """
         Detect interaction between residues belonging to the specified neighborhoods.
 
@@ -274,15 +208,15 @@ class Neighborhoods(Builder):
             if r_target_1 in seen or r_target_2 in seen:
                 continue
             # Check if first target is in the cache
-            if r_target_1 in self.intr_cache:
-                if self.intr_cache[r_target_1] > self.f_thr:
-                    f_sum += self.intr_cache[r_target_1]
+            if r_target_1 in self._intr_cache:
+                if self._intr_cache[r_target_1] > self.f_thr:
+                    f_sum += self._intr_cache[r_target_1]
                 seen[r_target_1] = seen[r_target_2] =  True
                 continue
             # Check if second target is in the cache
-            elif r_target_2 in self.intr_cache:
-                if self.intr_cache[r_target_2] > self.f_thr:
-                    f_sum += self.intr_cache[r_target_2]
+            elif r_target_2 in self._intr_cache:
+                if self._intr_cache[r_target_2] > self.f_thr:
+                    f_sum += self._intr_cache[r_target_2]
                 seen[r_target_2] = seen[r_target_1] = True
                 continue 
             # If targets are not in the cache, perform binary search and insert results in the cache
@@ -294,18 +228,18 @@ class Neighborhoods(Builder):
                 if f > self.f_thr:
                     interact = True
                     f_sum += f
-                self.intr_cache[r_target_1] = self.intr_cache[r_target_2] = f
+                self._intr_cache[r_target_1] = self._intr_cache[r_target_2] = f
             elif found_2:
                 f = entries[idx_2][1]
                 if f > self.f_thr:
                     interact = True
                     f_sum += f
-                self.intr_cache[r_target_2] = self.intr_cache[r_target_1] = f
+                self._intr_cache[r_target_2] = self._intr_cache[r_target_1] = f
             else:
-                self.intr_cache[r_target_1] = self.intr_cache[r_target_2] = -1
+                self._intr_cache[r_target_1] = self._intr_cache[r_target_2] = -1
         return interact, f_sum
     
-    def filter_interactions(self):
+    def _filter_interactions(self):
         """
         Filter the interactions of every neighborhood, retaining only the better ones.
 
@@ -315,6 +249,71 @@ class Neighborhoods(Builder):
         """
         for i in range(len(self.elements)):
             self.elements[i].filter_interactions()
+            
+    def get_residues_at(self, idx):
+        """
+        Return the residue at the specified neighborhood, including the ones from the latter interactions.
+
+        Parameters
+        ----------
+        idx : int
+            The index.
+
+        Returns
+        -------
+        residues : list of Bio.PDB.Residue
+            The list of residues belonging to the neighborhood.
+        """
+        residues = []
+        neighbor = self.elements[idx]
+        for residue in neighbor.residues:
+            residues.append(residue)
+            for inter in neighbor.interactions:
+                for residue in inter[0].residues:
+                    residues.append(residue)
+        return residues
+
+    def get_adjacency(self):
+        """
+        Return the adjacency matrix based on the contact map information.
+
+        Returns
+        -------
+        A : numpy.ndarray
+            The adjacency matrix.
+        """
+        n = len(self.elements)
+        A = np.zeros(shape=(n,n))
+        # Backbone adjacency
+        A[0,1] = A[n-1,n-2] = 1 
+        for i in range(1,n-1):
+            A[i-1,i] = A[i,i+1] = 1
+        # Contact map adjancency
+        for i in range(n-1):
+            current = self.elements[i]
+            for inter in current.interactions:
+                A[i,inter.idx] = A[inter.idx,i] = 1
+        return A
+    
+    def get_features(self):
+        """
+        Return the feature matrix.
+
+        Returns
+        -------
+        X : numpy.ndarray
+            The features.
+        """
+        # Get shape of features
+        n = len(self.elements)
+        X = np.zeros(shape=(n,self.Rep.get_n_features()))
+        # Add the features
+        for i in range(n):
+            if len(self.elements[0].features.shape) == 2:
+                X[i,:] = np.mean(self.elements[i].features, axis=0)
+            else:
+                X[i,:] = self.elements[i].features
+        return X
         
     def generate(self):
         """
@@ -349,8 +348,6 @@ class Neighborhoods(Builder):
             entries = parse_cmap(self.cmap)
             if entries is None:
                 return
-            # Initialize contacts matrix
-            self.contacts = np.zeros(shape=(len(self.elements),len(self.elements)))
             # Prepare the entries for binary search
             entries = [(int(str(x[2])+'0'+str(x[3])), x[4]) for x in entries]
             entries = sorted(entries, key=lambda x: x[0])
@@ -358,12 +355,11 @@ class Neighborhoods(Builder):
             for i in range(len(self.elements)-1):
                 for j in range(i+1, len(self.elements)):
                     neigh_1, neigh_2 = self.elements[i], self.elements[j]
-                    interact, f_sum = self.detect_interactions(entries, neigh_1, neigh_2)
-                    self.contacts[i,j] = self.contacts[j,i] = f_sum
+                    interact, f_sum = self._detect_interactions(entries, neigh_1, neigh_2)
                     if interact:
                         self.elements[i].add_interaction(self.elements[j], f_sum)
                         self.elements[j].add_interaction(self.elements[i], f_sum)
-            self.filter_interactions()
+            self._filter_interactions()
         
             
 class MITStructure(Builder):
@@ -395,28 +391,21 @@ class MITStructure(Builder):
         super(MITStructure, self).__init__()
         self.structure = structure
         
-    def generate(self):
+    def get_residues_at(self, idx):
         """
-        Generate the MIT representation for each residue in the structure.
+        Return the residue at the given index.
+
+        Parameters
+        ----------
+        idx : int
+            The index.
 
         Returns
         -------
-        None.
+        list of Bio.PDB.Residue
+            The residue at the specified index. It is wrapped in a list so it can be iterated over.
         """
-        self.mitr = MITResidue(self.structure)
-        self.mitr.compute_representation()
-        self.mitr.compute_contact_map()
-        
-    def get_features(self):
-        """
-        Return the computed features.
-
-        Returns
-        -------
-        numpy.ndarray
-            The features..
-        """
-        return self.mitr.embeddings
+        return [self.mitr.residues[idx]]
     
     def get_adjacency(self):
         """
@@ -438,21 +427,28 @@ class MITStructure(Builder):
                 if self.mitr.contact_map[i,j] < 8:
                     A[i,j] = A[j,i] = 1
         return A
-    
-    def get_residues_at(self, idx):
+        
+    def get_features(self):
         """
-        Return the residue at the given index.
-
-        Parameters
-        ----------
-        idx : int
-            The index.
+        Return the computed features.
 
         Returns
         -------
-        list of Bio.PDB.Residue
-            The residue at the specified index. It is wrapped in a list so it can be iterated over.
+        numpy.ndarray
+            The features.
         """
-        return [self.mitr.residues[idx]]
+        return self.mitr.embeddings
+    
+    def generate(self):
+        """
+        Generate the MIT representation for each residue in the structure.
+
+        Returns
+        -------
+        None.
+        """
+        self.mitr = MITResidue(self.structure)
+        self.mitr.compute_representation()
+        self.mitr.compute_contact_map()
     
     

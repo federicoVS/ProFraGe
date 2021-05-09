@@ -7,7 +7,6 @@ Created on Tue Apr  6 17:59:26 2021
 
 import os
 import json
-from scipy.spatial import distance
 from sklearn.cluster import AgglomerativeClustering
 from Bio.PDB.mmtf import MMTFParser
 import leidenalg
@@ -15,6 +14,7 @@ import igraph as ig
 
 from fragment.Fragment import Fragment
 from fragment.builders import Neighborhoods
+from structure.representation import USR
 from utils.structure import generate_structure
 from utils.io import to_mmtf, to_pdb, parse_cmap
 from utils.ProgressBar import ProgressBar
@@ -190,11 +190,11 @@ class KSeqMine(SingleMiner):
         An object represeting the neighborhoods.
     k : int
         The number of neighbors for each residue.
-    cosine_thr : float in [0,1]
-        The similarity threshold under which two neighborhoods are considered to be similar.
+    score_thr : float in [0,1]
+        The similarity threshold above which two neighborhoods are considered to be similar.
     """
     
-    def __init__(self, structure, Rep, k, cosine_thr, f_thr=0.1, max_inters=3):
+    def __init__(self, structure, Rep, k=3, score_thr=0.4, f_thr=0.1, max_inters=3):
         """
         Initialize the class.
 
@@ -204,10 +204,10 @@ class KSeqMine(SingleMiner):
             The structure of which to compute the fragments.
         Rep : structure.representation.Representation
             The class of structure representation.
-        k : int
-            The number of residues to the left and to the right of the centroid.
-        cosine_thr : float in [0,1]
-            The similarity threshold between two neighborhoods. The lower the tighter.
+        k : int, optional
+            The number of residues to the left and to the right of the centroid. The default is 3.
+        score_thr : float in [0,1]
+            The similarity threshold between two neighborhoods, the higher the tighter. The default is 0.4.
         f_thr : float in [0,1], optional
             The interaction threshold between two residues. The default is 0.1.
         max_inters : int, optional
@@ -220,9 +220,9 @@ class KSeqMine(SingleMiner):
         super(KSeqMine, self).__init__(structure)
         self.neighborhoods = Neighborhoods(structure, Rep, None, k, f_thr=f_thr, max_inters=max_inters)
         self.k = k
-        self.cosine_thr = cosine_thr
+        self.score_thr = score_thr
     
-    def all_similarity(self, fragment, candidate):
+    def _all_similarity(self, fragment, candidate):
         """
         Check if the candidate neighborhood is similar to all other neighborhoods in the cluster.
 
@@ -241,8 +241,8 @@ class KSeqMine(SingleMiner):
         for n_id in fragment:
             features_n = self.neighborhoods[n_id].features
             features_c = candidate.features
-            cosine = distance.cosine(features_n, features_c)
-            if cosine > self.cosine_thr:
+            score = USR.get_similarity_score(features_n, features_c)
+            if score < self.score_thr:
                 return False
         return True
         
@@ -264,12 +264,12 @@ class KSeqMine(SingleMiner):
             frag_dict[frag_id] = []
             frag_dict[frag_id].append(i)
             for j in range(i+1, len(self.neighborhoods)):
-                if self.all_similarity(frag_dict[frag_id], self.neighborhoods[j]):
+                if self._all_similarity(frag_dict[frag_id], self.neighborhoods[j]):
                     frag_dict[frag_id].append(j)
                 else:
                     break
             for j in range(i-1, -1, -1):
-                if self.all_similarity(frag_dict[frag_id], self.neighborhoods[j]):
+                if self._all_similarity(frag_dict[frag_id], self.neighborhoods[j]):
                     frag_dict[frag_id].append(j)
                 else:
                     break
@@ -299,14 +299,14 @@ class KSeqTerMine(SingleMiner):
     neighborhoods : fragments.builders.Neighborhoods
         An object represeting the neighborhoods. Note that this parameter must be a class,
         not an instance of a class.
-    cosine_thr : float in [0,1]
-        The similarity threshold between two neighborhoods. A small score means two neighborhoods are
+    score_thr : float in [0,1]
+        The similarity threshold between two neighborhoods. A high score means two neighborhoods are
         very similar.
     max_size : int
         The maximum number of neighborhoods per fragment.
     """
     
-    def __init__(self, structure, Rep, k, cosine_thr, cmap, f_thr=0.1, max_inters=3, max_size=4):
+    def __init__(self, structure, Rep, cmap, k=3, score_thr=0.4, f_thr=0.1, max_inters=1, max_size=4):
         """
         Initialize the class.
 
@@ -316,16 +316,16 @@ class KSeqTerMine(SingleMiner):
             The structure of which to compute the fragments.
         Rep : structure.representation.Representation
             The class of structure representation.
-        k : int
-            The number of residues to the left and to the right of the centroid.
-        cosine_thr : float in [0,1]
-            The similarity threshold between two neighborhoods. The lower the tighter.
         cmap : str
             The CMAP file.
+        k : int, optional
+            The number of residues to the left and to the right of the centroid. The default is 3.
+        score_thr : float in [0,1], optional
+            The similarity threshold between two neighborhoods, the higher the tighter. The default is 0.4.
         f_thr : float in [0,1], optional
             The interaction threshold between two residues. The default is 0.1.
         max_inters : int, optional
-            The maximum number of interactions a neighborhood can have. The default is 3.
+            The maximum number of interactions a neighborhood can have. The default is 1.
         max_size : int, optional
             The maximum number of neighborhoods per fragment. The default is 4.
 
@@ -335,10 +335,10 @@ class KSeqTerMine(SingleMiner):
         """
         super(KSeqTerMine, self).__init__(structure)
         self.neighborhoods = Neighborhoods(structure, Rep, cmap, k, f_thr=f_thr, max_inters=max_inters)
-        self.cosine_thr = cosine_thr
+        self.score_thr = score_thr
         self.max_size = max_size
         
-    def all_similarity(self, fragment, candidate):
+    def _all_similarity(self, fragment, candidate):
         """
         Check if the candidate neighborhood is similar to all other neighborhoods in the cluster.
 
@@ -354,17 +354,17 @@ class KSeqTerMine(SingleMiner):
         bool
             Whether the candidate neighborhood is to be added to the fragment..
         float
-            The sum of the cosine score. A lower sum indicates stronger similarity.
+            The sum of the cosine score. A higher sum indicates stronger similarity.
         """
-        cosine_sum = 0
+        score_sum = 0
         for n_id in fragment:
             features_n = self.neighborhoods[n_id].features
             features_c = candidate.features
-            cosine = distance.cosine(features_n, features_c)
-            if cosine > self.cosine_thr:
+            score = USR.get_similarity_score(features_n, features_c)
+            if score < self.score_thr:
                 return False, -1
-            cosine_sum += cosine
-        return True, cosine_sum
+            score_sum += score
+        return True, score_sum
     
     def mine(self):
         """
@@ -395,15 +395,15 @@ class KSeqTerMine(SingleMiner):
                 sl, su = False, False
                 c_sum_l, c_sum_u = 0, 0
                 if lower < 0 and upper < n:
-                    su, c_sum_u = self.all_similarity(frag_dict[frag_id], self.neighborhoods[upper])
+                    su, c_sum_u = self._all_similarity(frag_dict[frag_id], self.neighborhoods[upper])
                 elif lower >= 0 and upper >= n:
-                    sl, c_sum_l = self.all_similarity(frag_dict[frag_id], self.neighborhoods[lower])
+                    sl, c_sum_l = self._all_similarity(frag_dict[frag_id], self.neighborhoods[lower])
                 elif lower >= 0 and upper < n:
-                    sl, c_sum_l = self.all_similarity(frag_dict[frag_id], self.neighborhoods[lower])
-                    su, c_sum_u = self.all_similarity(frag_dict[frag_id], self.neighborhoods[upper])
+                    sl, c_sum_l = self._all_similarity(frag_dict[frag_id], self.neighborhoods[lower])
+                    su, c_sum_u = self._all_similarity(frag_dict[frag_id], self.neighborhoods[upper])
                 # Find the best match
                 if sl and su:
-                    if c_sum_l < c_sum_u:
+                    if c_sum_l > c_sum_u:
                         frag_dict[frag_id].append(lower)
                         l_idx += 1
                     else:
@@ -449,13 +449,13 @@ class KTerCloseMine(SingleMiner):
         An object represeting the neighborhoods.
     k : int
         The number of neighbors for each residue.
-    cosine_thr : float in [0,1]
-        The similarity threshold under which two neighborhoods are considered to be similar.
+    score_thr : float in [0,1]
+        The similarity threshold above which two neighborhoods are considered to be similar.
     max_residues : int
         The maximum number of residues accepted in a fragment.
     """
     
-    def __init__(self, structure, Rep, k, cosine_thr, cmap, f_thr=0.1, max_inters=3, max_residues=40):
+    def __init__(self, structure, Rep, cmap, k=3, score_thr=0.4, f_thr=0.1, max_inters=1, max_residues=40):
         """
         Initialize the class.
 
@@ -465,16 +465,16 @@ class KTerCloseMine(SingleMiner):
             The structure of which to compute the fragments.
         Rep : structure.representation.Representation
             The class of structure representation.
-        k : int
-            The number of residues to the left and to the right of the centroid.
-        cosine_thr : float in [0,1]
-            The similarity threshold between two neighborhoods. The lower the tighter.
         cmap : str
             The CMAP file.
+        k : int, optional
+            The number of residues to the left and to the right of the centroid. The default is 3.
+        cosine_thr : float in [0,1], optional
+            The similarity threshold between two neighborhoods, the higher the tighter. The default is 0.4.
         f_thr : float in [0,1], optional
             The interaction threshold between two residues. The default is 0.1.
         max_inters : int, optional
-            The maximum number of interactions a neighborhood can have. The default is 3.
+            The maximum number of interactions a neighborhood can have. The default is 1.
         max_residues : int, optional
             The maximum number of residues accepted in a fragment. The default is 40.
 
@@ -485,10 +485,10 @@ class KTerCloseMine(SingleMiner):
         super(KTerCloseMine, self).__init__(structure)
         self.neighborhoods = Neighborhoods(structure, Rep, cmap, k, f_thr=f_thr, max_inters=max_inters)
         self.k = k
-        self.cosine_thr = cosine_thr
+        self.score_thr = score_thr
         self.max_residues = max_residues
         
-    def all_similarity(self, fragment, candidate):
+    def _all_similarity(self, fragment, candidate):
         """
         Check if the candidate neighborhood is similar to all other neighborhoods in the cluster.
 
@@ -506,17 +506,17 @@ class KTerCloseMine(SingleMiner):
         float
             The sum of the cosine score. A lower sum indicates stronger similarity.
         """
-        cosine_sum = 0
+        score_sum = 0
         for n_id in fragment:
             features_n = self.neighborhoods[n_id].features
             features_c = candidate.features
-            cosine = distance.cosine(features_n, features_c)
-            if cosine > self.cosine_thr:
+            score = USR.get_similarity_score(features_n, features_c)
+            if score < self.score_thr:
                 return False, -1
-            cosine_sum += cosine
-        return True, cosine_sum
+            score_sum += score
+        return True, score_sum
     
-    def best_neigh_match(self, frag_dict, offsets_dict, idx):
+    def _best_neigh_match(self, frag_dict, offsets_dict, idx):
         """
         Return the best expansion candidate to either the left or the right of the given fragment.
         
@@ -551,14 +551,14 @@ class KTerCloseMine(SingleMiner):
         sl, su = False, False
         c_sum_l, c_sum_u = 0, 0
         if lower < 0 and upper < n:
-            su, c_sum_u = self.all_similarity(frag_dict[idx], self.neighborhoods[upper])
+            su, c_sum_u = self._all_similarity(frag_dict[idx], self.neighborhoods[upper])
         elif lower >= 0 and upper >= n:
-            sl, c_sum_l = self.all_similarity(frag_dict[idx], self.neighborhoods[lower])
+            sl, c_sum_l = self._all_similarity(frag_dict[idx], self.neighborhoods[lower])
         elif lower >= 0 and upper < n:
-            sl, c_sum_l = self.all_similarity(frag_dict[idx], self.neighborhoods[lower])
-            su, c_sum_u = self.all_similarity(frag_dict[idx], self.neighborhoods[upper])
+            sl, c_sum_l = self._all_similarity(frag_dict[idx], self.neighborhoods[lower])
+            su, c_sum_u = self._all_similarity(frag_dict[idx], self.neighborhoods[upper])
         if sl and su:
-            if c_sum_l < c_sum_u:
+            if c_sum_l > c_sum_u:
                 return c_sum_l, lower, idx, 0
             else:
                 return c_sum_u, upper, idx, 1
@@ -567,7 +567,7 @@ class KTerCloseMine(SingleMiner):
         elif not sl and su:
             return c_sum_u, upper, idx, 1
         else:
-            return 1e9, -1, -1, -1
+            return -1, -1, -1, -1
     
     def mine(self):
         """
@@ -596,10 +596,10 @@ class KTerCloseMine(SingleMiner):
                 n_residues += len(inter[0])
             while n_residues <= self.max_residues:
                 candidates = []
-                candidates.append(self.best_neigh_match(frag_dict, offsets_dict, i))
+                candidates.append(self._best_neigh_match(frag_dict, offsets_dict, i))
                 for inter in self.neighborhoods[i].interactions:
-                    candidates.append(self.best_neigh_match(frag_dict, offsets_dict, inter[0].idx))
-                best = sorted(candidates, key=lambda x: x[0])[0]
+                    candidates.append(self._best_neigh_match(frag_dict, offsets_dict, inter[0].idx))
+                best = sorted(candidates, key=lambda x: x[0], reverse=True)[0]
                 if best[1] == -1:
                     break # no match found
                 else:
@@ -725,8 +725,6 @@ class LeidenMine(SingleMiner):
     f_thr : float in [0,1]
         The threshold above which two residues are interacting. It is also used as the weight assigned to
         the edges.
-    weighted : bool
-        Whether the Leiden algorithm should take into consideration the weight of the edges.
     bb_weight : float
         The weight assigned to backbone connections.
     n_iters : int
@@ -737,7 +735,7 @@ class LeidenMine(SingleMiner):
         A dictionary mapping the segment ID of the residue to the residue itself.
     """
     
-    def __init__(self, structure, cmap, f_thr=0.1, weighted=False, bb_weight=1.0, n_iters=2, max_size=40):
+    def __init__(self, structure, cmap, f_thr=0.1, bb_weight=1.0, n_iters=2, max_size=40):
         """
         Initialize the class.
 
@@ -750,9 +748,6 @@ class LeidenMine(SingleMiner):
         f_thr : float in [0,1], optional
             The threshold above which two residues are interacting. It is also used as the weight
             assigned to the edges. The default is 0.1.
-        weighted : bool, optional
-            Whether the Leiden algorithm should take into consideration the weight of the edges.
-            The default is False.
         bb_weight : float, optional
             The weight assigned to backbone connections. The higher the more compact the fragments will be.
             The default is 1.0.
@@ -767,10 +762,9 @@ class LeidenMine(SingleMiner):
         """
         super(LeidenMine, self).__init__(structure)
         self.adjacency = []
-        self.weights = None
+        self.weights = []
         self.cmap = cmap
         self.f_thr = f_thr
-        self.weighted = weighted
         self.bb_weight = bb_weight
         self.n_iters = n_iters
         self.max_size = max_size
@@ -795,7 +789,7 @@ class LeidenMine(SingleMiner):
         """
         Compute the adjacency matrix.
         
-        Backbone and interactions are taken into consideration.
+        Backbone and interactions are taken into consideration. The weights are also built here.
 
         Parameters
         ----------
@@ -806,23 +800,18 @@ class LeidenMine(SingleMiner):
         -------
         None.
         """
-        # Check if the graph should be weighted
-        if self.weighted:
-            self.weights = []
         # Backbone connections
         keys = self._res_dict.keys()
         keys = sorted(keys, key=lambda x: x) # should already be sorted but just to be sure
         for i in range(len(keys)-1):
             self.adjacency.append((keys[i],keys[i+1]))
-            if self.weighted:
-                self.weights.append(self.bb_weight)
+            self.weights.append(self.bb_weight)
         # Interaction connections
         for entry in entries:
             _, _, res_1, res_2, f = entry
             if res_1 in self._res_dict and res_2 in self._res_dict and f > self.f_thr:
                 self.adjacency.append((res_1, res_2))
-                if self.weighted:
-                    self.weights.append(f)
+                self.weights.append(f)
                 
     def mine(self):
         """
