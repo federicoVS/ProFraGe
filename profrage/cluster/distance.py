@@ -5,12 +5,15 @@ Created on Fri Apr  2 16:42:01 2021
 @author: Federico van Swaaij
 """
 
-from scipy.sparse import csr_matrix
 import numpy as np
+from scipy.sparse import csr_matrix
 from sklearn.cluster import SpectralClustering
 from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
 from cluster.Cluster import Cluster
+
+from structure.representation import USR
+from utils.ProgressBar import ProgressBar
 
 class Spectral(Cluster):
     """
@@ -175,7 +178,7 @@ class GMM(Cluster):
         The number of initializations.
     """
     
-    def __init__(self, structures, features, k, reg_covar=1e-6, n_init=1, verbose=False):
+    def __init__(self, structures, features, k, reg_covar=1e-6, n_init=10, verbose=False):
         """
         Initialize the class.
 
@@ -190,7 +193,7 @@ class GMM(Cluster):
         reg_covar : float, optional
             Regularization added to the covariance matrix to ensure its its positiveness.
         n_init : int, optional
-            The number of initializations. The default is 1.
+            The number of initializations. The default is 10.
         verbose : bool, optional
             Whether to print progress information. The default is False.
 
@@ -225,4 +228,153 @@ class GMM(Cluster):
                 self.clusters[cluster_id].append(i)
             else:
                 self.clusters[cluster_id].append(i)
+                
+class KUSR(Cluster):
+    """
+    A static version of K-Means clustering using USR score.
+    
+    A specified k structures are selected to be centers of the clusters they represent, which is based
+    on the median USR score similarity, based on all-against-all comparison. Once the centers are computed,
+    the other strucutures are assigned to the cluster with the smallest USR cosine distance to them.
+    
+    Attributes
+    ----------
+    k : int
+        The number of clusters.
+    _centers : list of int
+        The list of the cluster centers. Entry i maps to the center of cluster i.
+    _features : numpy.ndarray
+        The USR-feature matrix.
+    """
+    
+    def __init__(self, structures, k, verbose=False):
+        """
+        Initialize the class.
 
+        Parameters
+        ----------
+        structures : Bio.PDB.Structure
+            The structures to cluster.
+        k : int
+            The number of clusters.
+        verbose : bool, optional
+            Whether to print progress information. The default is False.
+
+        Returns
+        -------
+        None.
+        """
+        super(KUSR, self).__init__(structures, verbose)
+        self.k = k
+        self._centers = [-1 for i in range(k)]
+        self._features = None
+        
+    def _get_best_center(self, idx):
+        """
+        Get the best center for the specified index to belong to.
+
+        Parameters
+        ----------
+        idx : int
+            The index of the structure to place.
+
+        Returns
+        -------
+        best_center_idx : int
+            The index of the best center.
+        """
+        best_center_idx, best_score = -1, -1
+        for i in range(self.k):
+            center_idx = self._centers[i]
+            score = USR.get_similarity_score(self._features[idx], self._features[center_idx])
+            if score > best_score:
+                best_center_idx = i
+                best_score = score
+        return best_center_idx
+        
+    def _compute_features(self):
+        """
+        Compute the USR-feature matrix.
+
+        Returns
+        -------
+        None.
+        """
+        n = len(self.structures)
+        self._features = np.zeros(shape=(n, USR.get_n_features()))
+        for i in range(n):
+            usr = USR(self.structures[i])
+            self._features[i,:] = usr.get_features()
+        
+    def _compute_centers(self):
+        """
+        Compute and define the centers of the clusters.
+
+        Returns
+        -------
+        None.
+        """
+        # Define data structures
+        n = len(self.structures)
+        scores = [[i, 0] for i in range(n)]
+        # Compute the scores for each structure
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    score = USR.get_similarity_score(self._features[i], self._features[j])
+                    scores[i][0] = i
+                    scores[i][1] += score
+        # Sort the scores and get the best n_centers scores
+        scores = sorted(scores, key=lambda x: x[1], reverse=True)
+        for i in range(self.k):
+            self._centers[i] = scores[i][0]
+            
+    def best_representative(self, cluster_id):
+        """
+        Return the best representative for the specified cluster.
+        
+        In this case, the best representative corresponds to the cluster center.
+
+        Parameters
+        ----------
+        cluster_id : int
+            The cluster ID.
+
+        Returns
+        -------
+        Bio.PDB.Structure
+            The representative structure of the specified cluster.
+        """
+        s_id = self._centers[cluster_id]
+        return self.structures[s_id]
+    
+    def cluster(self):
+        """
+        Perform the clustering.
+
+        Returns
+        -------
+        None.
+        """
+        # Compute the features
+        self._compute_features()
+        # Compute the centers
+        self._compute_centers()
+        # Initialize the clusters
+        for i in range(self.k):
+            self.clusters[i] = []
+            self.clusters[i].append(self._centers[i])
+        n = len(self.structures)
+        progress_bar = ProgressBar()
+        if self.verbose:
+            print('Clustering...')
+            progress_bar.start()
+        for i in range(n):
+            if self.verbose:
+                progress_bar.step(i, n)
+            if i not in self._centers:
+                cluster_id = self._get_best_center(i)
+                self.clusters[cluster_id].append(i)
+        if self.verbose:
+            progress_bar.end()
+            
