@@ -5,7 +5,10 @@ Created on Fri Apr  2 17:55:07 2021
 @author: Federico van Swaaij
 """
 
+import numpy as np
 import matplotlib.pyplot as plt
+
+from structure.representation import USR
 
 class Cluster:
     """
@@ -104,7 +107,7 @@ class Cluster:
         
     def best_representative(self, cluster_id):
         """
-        Select the best representative from the specified cluster. This method is meant to be overridden by subclasses.
+        Select the best representative from the specified cluster based on USR similarity score.
 
         Parameters
         ----------
@@ -115,9 +118,25 @@ class Cluster:
         -------
         structure : Bio.PDB.Structure
             The best representative structure for the cluster.
-            If not overridden, it returns the first one by default.
         """
-        s_id = self.clusters[cluster_id][0]
+        # Compute the scores
+        features = np.zeros(shape=(len(self.clusters[cluster_id]),USR.get_n_features()))
+        for i in range(len(self.clusters[cluster_id])):
+            i_idx = self.clusters[cluster_id][i]
+            usr = USR(self.structures[i_idx])
+            features[i,:] = usr.get_features()
+        # Get the best representative
+        best_idx, best_score = -1, -1
+        for i in range(len(self.clusters[cluster_id])):
+            median_score = []
+            for j in range(len(self.clusters[cluster_id])):
+                if j != i:
+                    median_score.append(USR.get_similarity_score(features[i], features[j]))
+            median_score = np.median(median_score)
+            if median_score > best_score:
+                best_idx = i
+                best_score = median_score
+        s_id = self.clusters[cluster_id][best_idx]
         return self.structures[s_id]
         
     def cluster(self):
