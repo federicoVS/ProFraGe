@@ -7,8 +7,7 @@ Created on Fri Apr  2 16:42:01 2021
 
 import numpy as np
 from scipy.sparse import csr_matrix
-from sklearn.cluster import SpectralClustering
-from sklearn.cluster import KMeans
+from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering
 from sklearn.mixture import GaussianMixture
 from cluster.Cluster import Cluster
 
@@ -158,9 +157,7 @@ class KMean(Cluster):
             cluster_id = km.labels_[i]
             if cluster_id not in self.clusters:
                 self.clusters[cluster_id] = []
-                self.clusters[cluster_id].append(i)
-            else:
-                self.clusters[cluster_id].append(i)
+            self.clusters[cluster_id].append(i)
                 
 class GMM(Cluster):
     """
@@ -228,6 +225,73 @@ class GMM(Cluster):
                 self.clusters[cluster_id].append(i)
             else:
                 self.clusters[cluster_id].append(i)
+                
+class Agglomerative(Cluster):
+    """
+    Performs hierarchical clustering of the given structures.
+    
+    With its default parameters, no fixed number of clusters is assumed.
+    
+    Attributes
+    ----------
+    features : numpy.ndarray
+        The matrix of features.
+    k : int
+        The number of clusters.
+    linkage: str
+        The linkage criterion to use
+    distance_threshold : float
+        The linkage distance threshold above which clusters will not be merged
+    """
+    
+    def __init__(self, structures, features, k=None, linkage='ward', distance_threshold=10, verbose=False):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        structures : list of Bio.PDB.Structures
+            The structures to cluster.
+        features : numpy.ndarray
+            The matrix of features.
+        k : int, optional
+            The number of clusters. The default is None.
+        linkage : str, optional
+            The linkage criterion to use. The default is 'ward'.
+        distance_threshold : float, optional
+            The linkage distance threshold above which clusters will not be merged
+        verbose : bool, optional
+            Whether to print progress information. The default is False.
+
+        Returns
+        -------
+        None.
+        """
+        super(Agglomerative, self).__init__(structures, verbose)
+        self.features = features
+        self.k = k
+        self.linkage = linkage
+        self.distance_threshold = distance_threshold
+        
+    def cluster(self):
+        """
+        Perform the clustering.
+
+        Returns
+        -------
+        None.
+        """
+        if self.verbose:
+            print('Clustering...')
+        # Cluster using thre hierarchical algorithm
+        aggcl = AgglomerativeClustering(n_clusters=self.k, linkage=self.linkage, distance_threshold=self.distance_threshold)
+        aggcl.fit(self.features)
+        # Retrieve the clusters
+        for i in range(len(aggcl.labels_)):
+            cluster_id = aggcl.labels_[i]
+            if cluster_id not in self.clusters:
+                self.clusters[cluster_id] = []
+            self.clusters[cluster_id].append(i)
                 
 class KUSR(Cluster):
     """
