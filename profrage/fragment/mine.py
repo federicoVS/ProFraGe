@@ -176,7 +176,7 @@ class SingleMiner(Miner):
                         current = r_id[1]
             self.fragments[self.structure.get_id()].append(new_fragment)
             
-class KSeqMine(SingleMiner):
+class KSeqMiner(SingleMiner):
     """
     Mine fragments by clustering similar neighborhoods, each of which composed by 2k+1 residues.
     
@@ -217,7 +217,7 @@ class KSeqMine(SingleMiner):
         -------
         None.
         """
-        super(KSeqMine, self).__init__(structure)
+        super(KSeqMiner, self).__init__(structure)
         self.neighborhoods = Neighborhoods(structure, Rep, None, k, f_thr=f_thr, max_inters=max_inters)
         self.k = k
         self.score_thr = score_thr
@@ -287,7 +287,7 @@ class KSeqMine(SingleMiner):
                     fragment.add_residue(residue)
             self.fragments[self.structure.get_id()].append(fragment)
             
-class KSeqTerMine(SingleMiner):
+class KSeqTerMiner(SingleMiner):
     """
     Mine fragments by clustering similar neighborhoods, each of which composed by 2k+1 residues.
     
@@ -333,7 +333,7 @@ class KSeqTerMine(SingleMiner):
         -------
         None.
         """
-        super(KSeqTerMine, self).__init__(structure)
+        super(KSeqTerMiner, self).__init__(structure)
         self.neighborhoods = Neighborhoods(structure, Rep, cmap, k, f_thr=f_thr, max_inters=max_inters)
         self.score_thr = score_thr
         self.max_size = max_size
@@ -434,7 +434,7 @@ class KSeqTerMine(SingleMiner):
                         fragment.add_residue(residue)
             self.fragments[self.structure.get_id()].append(fragment)
             
-class KTerCloseMine(SingleMiner):
+class KTerCloseMiner(SingleMiner):
     """
     Mine fragments by considering close neighborhoods.
     
@@ -482,7 +482,7 @@ class KTerCloseMine(SingleMiner):
         -------
         None.
         """
-        super(KTerCloseMine, self).__init__(structure)
+        super(KTerCloseMiner, self).__init__(structure)
         self.neighborhoods = Neighborhoods(structure, Rep, cmap, k, f_thr=f_thr, max_inters=max_inters)
         self.k = k
         self.score_thr = score_thr
@@ -629,7 +629,7 @@ class KTerCloseMine(SingleMiner):
                     fragment.add_residue(residue)
             self.fragments[self.structure.get_id()].append(fragment)
             
-class HierarchyMine(SingleMiner):
+class HierarchyMiner(SingleMiner):
     """
     Implement hierarchical clustering for fragment mining.
     
@@ -668,7 +668,7 @@ class HierarchyMine(SingleMiner):
         -------
         None.
         """
-        super(HierarchyMine, self).__init__(structure)
+        super(HierarchyMiner, self).__init__(structure)
         self.builder = builder
         self.n_clusters = n_clusters
         self.connectivity = connectivity
@@ -710,7 +710,7 @@ class HierarchyMine(SingleMiner):
             for residue in residues:
                 self.fragments[self.structure.get_id()][c_id].add_residue(residue)
                 
-class LeidenMine(SingleMiner):
+class LeidenMiner(SingleMiner):
     """
     Implement the Leiden community-finding algorithm for detecting fragments.
     
@@ -735,7 +735,7 @@ class LeidenMine(SingleMiner):
         A dictionary mapping the segment ID of the residue to the residue itself.
     """
     
-    def __init__(self, structure, cmap, f_thr=0.1, bb_weight=1.0, n_iters=2, max_size=40):
+    def __init__(self, structure, cmap, f_thr=0.1, bb_weight=1.5, n_iters=5, max_size=40):
         """
         Initialize the class.
 
@@ -750,9 +750,9 @@ class LeidenMine(SingleMiner):
             assigned to the edges. The default is 0.1.
         bb_weight : float, optional
             The weight assigned to backbone connections. The higher the more compact the fragments will be.
-            The default is 1.0.
+            The default is 1.5.
         n_iters : int, optional
-            The number of iterations of the Leiden algorithm. The default is 2.
+            The number of iterations of the Leiden algorithm. The default is 5.
         max_size : int, optional
             The maximum size of a community. The default is 40.
 
@@ -760,7 +760,7 @@ class LeidenMine(SingleMiner):
         -------
         None.
         """
-        super(LeidenMine, self).__init__(structure)
+        super(LeidenMiner, self).__init__(structure)
         self.adjacency = []
         self.weights = []
         self.cmap = cmap
@@ -846,7 +846,7 @@ class LeidenMine(SingleMiner):
             self.fragments[self.structure.get_id()].append(fragment)
             frag_id += 1
             
-class FuzzleMine(Miner):
+class FuzzleMiner(Miner):
     """
     Mine fragments based on the Fuzzle fragment database.
     
@@ -873,7 +873,7 @@ class FuzzleMine(Miner):
         -------
         None.
         """
-        super(FuzzleMine, self).__init__()
+        super(FuzzleMiner, self).__init__()
         with open(fuzzle_json) as fj:
             self.data = json.load(fj)
         self.verbose = verbose
