@@ -339,7 +339,7 @@ class USRCluster(Cluster):
     score_thr : float in [0,1]
         The similarity score threshold above which two structures are considered to be similar. The higher
         the tighter.
-    features : numpy.ndarray
+    _features : numpy.ndarray
         A matrix holding the USR features for each structure.
     """
     
@@ -362,34 +362,7 @@ class USRCluster(Cluster):
         """
         super(USRCluster, self).__init__(structures, verbose)
         self.score_thr = score_thr
-        self.features = None
-        
-    def best_representative(self, cluster_id):
-        """
-        Select the best representative from the specified cluster.
-
-        Parameters
-        ----------
-        cluster_id : int
-            The cluster ID.
-
-        Returns
-        -------
-        structure : Bio.PDB.Structure
-            The best representative structure for the cluster.
-        """
-        best_idx, best_score = -1, -1
-        for i in range(len(self.clusters[cluster_id])):
-            median_score = []
-            for j in range(len(self.clusters[cluster_id])):
-                if j != i:
-                    median_score.append(USR.get_similarity_score(self.features[i], self.features[j]))
-            median_score = np.median(median_score)
-            if median_score > best_score:
-                best_idx = i
-                best_score = median_score
-        s_id = self.clusters[cluster_id][best_idx]
-        return self.structures[s_id]
+        self._features = None
         
     def cluster(self):
         """
@@ -402,11 +375,11 @@ class USRCluster(Cluster):
         # Define n for convenience
         n = len(self.structures)
         # Define feature matrices
-        self.features = np.zeros(shape=(n, USR.get_n_features()))
+        self._features = np.zeros(shape=(n, USR.get_n_features()))
         # Compute USR for each structure
         for i in range(n):
             usr = USR(self.structures[i])
-            self.features[i,:] = usr.get_features()
+            self._features[i,:] = usr.get_features()
         # Data structures for clustering
         cluster_id = 0
         placed = [False for i in range(n)]
@@ -423,7 +396,7 @@ class USRCluster(Cluster):
                 self.clusters[cluster_id].append(i)
                 for j in range(n):
                     if j != i and not placed[j]:
-                        score = USR.get_similarity_score(self.features[i], self.features[j])
+                        score = USR.get_similarity_score(self._features[i], self._features[j])
                         if score > self.score_thr:
                             placed[j] = True
                             self.clusters[cluster_id].append(j)
