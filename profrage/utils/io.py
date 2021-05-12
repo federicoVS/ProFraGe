@@ -10,6 +10,8 @@ from Bio.PDB import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB.mmtf import MMTFParser, MMTFIO
 
+from utils.structure import AA_DICT
+
 def get_files(data_dir, ext='.pdb'):
     """
     Return a list of files with the desired extension from the specified directory.
@@ -62,6 +64,84 @@ def parse_cmap(cmap_file):
             f = float(fields[3])
             entries.append((chain_id_1, chain_id_2, res_idx_1, res_idx_2, f))
     return entries
+
+def parse_protein_net(file_name):
+    """
+    Parse a ProteinNet file and returns its contents as a dictionary.
+
+    Parameters
+    ----------
+    file_name : str
+        The ProteinNet file.
+
+    Returns
+    -------
+    pn_dict : dict of str -> dict of str -> list of Any
+        The dictionary describing the ProteinNet file.
+    """
+    # Read the file contents
+    file = open(file_name, 'r')
+    lines = file.readlines()
+    file.close()
+    # Define data structures
+    pn_dict = {}
+    pdb_id = ''
+    state = ''
+    # Iterate over the lines
+    for line in lines:
+        # Detect state
+        if line[0:4] == '[ID]':
+            state = 'ID'
+        elif line[0:9] == '[PRIMARY]':
+            state = 'PRIMARY'
+        elif line[0:14] == '[EVOLUTIONARY]':
+            state = 'EVOLUTIONARY'
+        elif line[0:11] == '[SECONDARY]':
+            state = 'SECONDARY'
+        elif line[0:10] == '[TERTIARY]':
+            state = 'TERTIARY'
+        elif line[0:6] == '[MASK]':
+            state = 'MASK'
+        else:
+            # Based on the state, update the dictionary
+            nt = None
+            if state == 'ID':
+                pdb_id = line.split()[0]
+                pn_dict[pdb_id] = {}
+                full_id = pdb_id.split('_')
+                seqp = full_id[0].split('#')
+                if len(seqp) == 2:
+                    seq_id, p_id = seqp[0], seqp[1] # sequencing ID, protein ID
+                else:
+                    seq_id, p_id = '0', seqp[0] # sequencing ID (does not matter here), protein ID
+                if len(full_id) == 3:
+                    m_id, ch_id = full_id[1], full_id[2] # model ID, chain ID
+                elif len(full_id) == 2 and len(full_id[1]) == 1:
+                    m_id, ch_id = full_id[1], '-1' # model ID, chain ID
+                else:
+                    m_id, ch_id = '-1', '-1' # model ID, chain ID
+                pn_dict[pdb_id]['ID'] = [seq_id, p_id, m_id, ch_id]
+                continue
+            elif state == 'PRIMARY':
+                def f(x):
+                    chars = [c for c in x]
+                    return [AA_DICT[c] for c in chars]
+                nt = f
+            elif state == 'TERTIARY':
+                nt = float
+            elif state == 'MASK':
+                def f(x):
+                    chars = [c for c in x]
+                    return [1 if c=='+' else 0 for c in chars]
+                nt = f
+            else:
+                continue # not interested in anything else
+            splits = line.split()
+            if splits == []:
+                continue # empty line
+            array = [nt(splits[i]) for i in range(len(splits))]
+            pn_dict[pdb_id][state] = array
+    return pn_dict
 
 def to_pdb(structure, name, out_dir='./'):
     """
