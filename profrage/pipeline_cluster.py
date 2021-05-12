@@ -11,8 +11,8 @@ import argparse
 import numpy as np
 
 from structure.representation import USR
-from cluster.distance import Spectral, KMean, GMM
-from cluster.greedy import SeqAlign, CASuperImpose
+from cluster.distance import Spectral, KMean, GMM, Agglomerative # TODO actually add it
+from cluster.greedy import SeqAlign, CASuperImpose, USRCluster
 from utils.io import get_files, to_pdb, from_mmtf
 from utils.tm_align import tm_align
 from utils.ProgressBar import ProgressBar
