@@ -11,6 +11,27 @@ from Bio.PDB.Model import Model
 from Bio.PDB.Chain import Chain
 from Bio.PDB.Residue import Residue
 
+AA_DICT = {'A': 'ALA',
+           'R': 'ARG',
+           'N': 'ASN',
+           'D': 'ASP',
+           'C': 'CYS',
+           'Q': 'GLN',
+           'G': 'GLY',
+           'E': 'GLU',
+           'H': 'HIS',
+           'I': 'ILE',
+           'L': 'LEU',
+           'K': 'LYS',
+           'M': 'MET',
+           'F': 'PHE',
+           'P': 'PRO',
+           'S': 'SER',
+           'T': 'THR',
+           'W': 'TRP',
+           'Y': 'TYR',
+           'V': 'VAL'}
+
 def structure_length(structure):
     """
     Return the length of the specified structure in terms of its number of residues.
@@ -98,7 +119,53 @@ def lengths_within(structure_1, structure_2, ptc_thr):
         small = temp
     return (small/large) >= ptc_thr
 
-def generate_structure(s_id, residues, header):
+def build_protein_net_structures(pn_entry_dict, structure):
+    """
+    Build refined structures based on the provided ProteinNet entry.
+    
+    Depending on whether the model and chain IDs are provided, one or more structures are returned.
+
+    Parameters
+    ----------
+    pn_entry_dict : dict of str -> list of Any
+        A singke entry in the ProteinNet dataset.
+    structure : Bio.PDB.Structure:
+        The structure associated with the dictionary entry.
+
+    Returns
+    -------
+    list of Bio.PDB.Structure
+        The list of refined structures described by the ProteinNet entry.
+    """
+    _, p_id, m_id, ch_id = pn_entry_dict['ID']
+    if m_id != '-1' and ch_id != '-1':
+        residues = []
+        s_id = p_id + '_' + ch_id
+        for model in structure:
+            if model.get_id() == m_id:
+                for chain in model:
+                    if chain.get_id() == ch_id:
+                        for residue in chain:
+                            residues.append(residue)
+        refined_structure = build_structure(s_id, residues, structure.header)
+        return [refined_structure]
+    else:
+        refined_structures = []
+        residues = {}
+        for model in structure:
+            if model.get_id() == 0:
+                for chain in model:
+                    key = chain.get_id()
+                    if key not in residues:
+                        residues[key] = []
+                    for residue in chain:
+                        residues[key].append(residue)
+        for key in residues:
+            s_id = p_id + '_' + key
+            refined_structures.append(build_structure(s_id, residues[key], structure.header))
+        return refined_structures
+
+def build_structure(s_id, residues, header):
     """
     Generate a structure based on a collection of residues.
 
