@@ -8,7 +8,7 @@ Created on Mon Apr 26 22:04:21 2021
 from scipy.spatial import distance
 
 from structure.representation import USR
-from utils.structure import generate_structure
+from utils.structure import build_structure
 
 class Fragment:
     """
@@ -98,7 +98,7 @@ class Fragment:
         # Sort structure residues
         s_residues = sorted(s_residues, key=lambda x: x.get_id()[1])
         # Get fragment instance
-        fragment = generate_structure(self.f_id, self.residues, self.structure.header)
+        fragment = build_structure(self.f_id, self.residues, self.structure.header)
         # Compute USR of the fragment
         usr = USR(fragment)
         usr.compute_all()
@@ -108,7 +108,7 @@ class Fragment:
         # Check if starting position is legal
         if start + f_size > s_size:
             return
-        s_structure = generate_structure('S', s_residues[start:start+f_size], structure.header)
+        s_structure = build_structure('S', s_residues[start:start+f_size], structure.header)
         usr = USR(s_structure)
         usr.compute_all()
         s_momenta = usr.momenta
@@ -141,7 +141,7 @@ class Fragment:
         # Sort structure residues
         s_residues = sorted(s_residues, key=lambda x: x.get_id()[1])
         # Get fragment instance
-        fragment = generate_structure(self.f_id, self.residues, self.structure.header)
+        fragment = build_structure(self.f_id, self.residues, self.structure.header)
         # Compute USR of the fragment
         usr = USR(fragment)
         usr.compute_all()
@@ -155,7 +155,7 @@ class Fragment:
         for i in range(s_size):
             if i + f_size > s_size:
                 break
-            sub_structure = generate_structure('S', s_residues[i:i+f_size], structure.header)
+            sub_structure = build_structure('S', s_residues[i:i+f_size], structure.header)
             usr = USR(sub_structure)
             usr.compute_all()
             sub_s_momenta = usr.momenta

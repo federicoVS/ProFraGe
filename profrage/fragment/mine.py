@@ -7,6 +7,7 @@ Created on Tue Apr  6 17:59:26 2021
 
 import os
 import json
+import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from Bio.PDB.mmtf import MMTFParser
 import leidenalg
@@ -15,7 +16,7 @@ import igraph as ig
 from fragment.Fragment import Fragment
 from fragment.builders import Neighborhoods
 from structure.representation import USR
-from utils.structure import generate_structure
+from utils.structure import build_structure
 from utils.io import to_mmtf, to_pdb, parse_cmap
 from utils.ProgressBar import ProgressBar
 
@@ -69,7 +70,7 @@ class Miner:
                 os.makedirs(out_dir+dir_name)
             for fragment in self.fragments[pdb_id]:
                 # Generate fragment
-                s_frag = generate_structure(fragment.f_id, fragment.residues, fragment.structure.header)
+                s_frag = build_structure(fragment.f_id, fragment.residues, fragment.structure.header)
                 # Save structure to specified format
                 if ext == '.mmtf':
                     to_mmtf(s_frag, fragment.f_id, out_dir=out_dir+dir_name)
@@ -194,7 +195,7 @@ class KSeqMiner(SingleMiner):
         The similarity threshold above which two neighborhoods are considered to be similar.
     """
     
-    def __init__(self, structure, Rep, k=3, score_thr=0.4, f_thr=0.1, max_inters=3):
+    def __init__(self, structure, Rep, k=3, score_thr=0.4, max_inters=3):
         """
         Initialize the class.
 
@@ -208,8 +209,6 @@ class KSeqMiner(SingleMiner):
             The number of residues to the left and to the right of the centroid. The default is 3.
         score_thr : float in [0,1]
             The similarity threshold between two neighborhoods, the higher the tighter. The default is 0.4.
-        f_thr : float in [0,1], optional
-            The interaction threshold between two residues. The default is 0.1.
         max_inters : int, optional
             The maximum number of interactions a neighborhood can have. The default is 3.
 
@@ -218,7 +217,7 @@ class KSeqMiner(SingleMiner):
         None.
         """
         super(KSeqMiner, self).__init__(structure)
-        self.neighborhoods = Neighborhoods(structure, Rep, None, k, f_thr=f_thr, max_inters=max_inters)
+        self.neighborhoods = Neighborhoods(structure, Rep, None, k, max_inters=max_inters)
         self.k = k
         self.score_thr = score_thr
     
@@ -725,8 +724,6 @@ class LeidenMiner(SingleMiner):
     f_thr : float in [0,1]
         The threshold above which two residues are interacting. It is also used as the weight assigned to
         the edges.
-    bb_weight : float
-        The weight assigned to backbone connections.
     n_iters : int
         The number of iterations of the Leiden algorithm.
     max_size : int
@@ -735,7 +732,7 @@ class LeidenMiner(SingleMiner):
         A dictionary mapping the segment ID of the residue to the residue itself.
     """
     
-    def __init__(self, structure, cmap, f_thr=0.1, bb_weight=1.5, n_iters=5, max_size=40):
+    def __init__(self, structure, cmap, f_thr=0.1, n_iters=5, max_size=40):
         """
         Initialize the class.
 
@@ -748,9 +745,6 @@ class LeidenMiner(SingleMiner):
         f_thr : float in [0,1], optional
             The threshold above which two residues are interacting. It is also used as the weight
             assigned to the edges. The default is 0.1.
-        bb_weight : float, optional
-            The weight assigned to backbone connections. The higher the more compact the fragments will be.
-            The default is 1.5.
         n_iters : int, optional
             The number of iterations of the Leiden algorithm. The default is 5.
         max_size : int, optional
@@ -765,7 +759,6 @@ class LeidenMiner(SingleMiner):
         self.weights = []
         self.cmap = cmap
         self.f_thr = f_thr
-        self.bb_weight = bb_weight
         self.n_iters = n_iters
         self.max_size = max_size
         self._res_dict = {}
@@ -805,7 +798,15 @@ class LeidenMiner(SingleMiner):
         keys = sorted(keys, key=lambda x: x) # should already be sorted but just to be sure
         for i in range(len(keys)-1):
             self.adjacency.append((keys[i],keys[i+1]))
-            self.weights.append(self.bb_weight)
+            res_1 = self._res_dict[keys[i]]
+            res_2 = self._res_dict[keys[i+1]]
+            ca_dist_inv = 1
+            if 'CA' in res_1 and 'CA' in res_2:
+                ca_1 = res_1['CA']
+                ca_2 = res_2['CA']
+                ca_dist = np.linalg.norm(ca_1.get_vector()-ca_2.get_vector())
+                ca_dist_inv = 1 + 1/ca_dist
+            self.weights.append(ca_dist_inv)
         # Interaction connections
         for entry in entries:
             _, _, res_1, res_2, f = entry
@@ -832,7 +833,7 @@ class LeidenMiner(SingleMiner):
         # Define IGraph
         G = ig.Graph(self.adjacency)
         # Compute the partitions using the Leiden algorithm
-        partitions = leidenalg.find_partition(G, leidenalg.ModularityVertexPartition, weights=self.weights, n_iterations=self.n_iters, max_comm_size=self.max_size)
+        partitions = leidenalg.find_partition(G, leidenalg.CPMVertexPartition, weights=self.weights, n_iterations=self.n_iters, max_comm_size=self.max_size)
         # Retrieve fragments
         self.fragments[self.structure.get_id()] = []
         frag_id = 1
