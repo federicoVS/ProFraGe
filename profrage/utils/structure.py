@@ -6,10 +6,12 @@ Created on Mon Apr  5 20:17:57 2021
 """
 
 import numpy as np
+from Bio import pairwise2
 from Bio.PDB.Structure import Structure
 from Bio.PDB.Model import Model
 from Bio.PDB.Chain import Chain
 from Bio.PDB.Residue import Residue
+from Bio.PDB.Polypeptide import PPBuilder
 
 AA_DICT = {'A': 'ALA',
            'R': 'ARG',
@@ -119,51 +121,173 @@ def lengths_within(structure_1, structure_2, ptc_thr):
         small = temp
     return (small/large) >= ptc_thr
 
-def build_protein_net_structures(pn_entry_dict, structure):
+def get_sequences(structure):
     """
-    Build refined structures based on the provided ProteinNet entry.
+    Compute the sequences of all the chains of the specified structure.
     
-    Depending on whether the model and chain IDs are provided, one or more structures are returned.
+    The sequences are already filtered as not to include duplicates.
 
     Parameters
     ----------
-    pn_entry_dict : dict of str -> list of Any
-        A singke entry in the ProteinNet dataset.
-    structure : Bio.PDB.Structure:
-        The structure associated with the dictionary entry.
+    structure : Bio.PDB.Structure
+        The structure from which to compute the sequences.
 
     Returns
     -------
-    list of Bio.PDB.Structure
-        The list of refined structures described by the ProteinNet entry.
+    sequences : list of Bio.Seq.Seq
+        The list of sequences, each sequence matching with a chain of the class.
     """
-    _, p_id, m_id, ch_id = pn_entry_dict['ID']
-    if m_id != '-1' and ch_id != '-1':
-        residues = []
-        s_id = p_id + '_' + ch_id
-        for model in structure:
-            if model.get_id() == m_id:
-                for chain in model:
-                    if chain.get_id() == ch_id:
-                        for residue in chain:
-                            residues.append(residue)
-        refined_structure = build_structure(s_id, residues, structure.header)
-        return [refined_structure]
-    else:
-        refined_structures = []
-        residues = {}
-        for model in structure:
-            if model.get_id() == 0:
-                for chain in model:
-                    key = chain.get_id()
-                    if key not in residues:
-                        residues[key] = []
-                    for residue in chain:
-                        residues[key].append(residue)
-        for key in residues:
-            s_id = p_id + '_' + key
-            refined_structures.append(build_structure(s_id, residues[key], structure.header))
-        return refined_structures
+    ppb = PPBuilder()
+    sequences = []
+    for pp in ppb.build_peptides(structure):
+        seq = pp.get_sequence()
+        if seq not in sequences:
+            sequences.append(pp.get_sequence())
+    return sequences
+
+def align_sequences(seq_1, seq_2):
+    """
+    Align the given sequences.
+    
+    In this setting, there are no gap penalties.
+
+    Parameters
+    ----------
+    seq_1 : Bio.Seq.Seq
+        The first sequence.
+    seq_2 : Bio.Seq.Seq
+        The second sequence.
+
+    Returns
+    -------
+    alignments : list of (str, str, float, int, int)
+        The alignements.
+    """
+    alignments = pairwise2.align.globalxx(seq_1, seq_2)
+    return alignments
+
+def get_model_residues(structure, m_id=0):
+    """
+    Return the residues of the specified sturcture belonging to the specified model.
+    
+    Using this method may be beneficial when dealing with proteins coming from NMR.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The original structure.
+    m_id : int, optional
+        The model ID. The default is 0.
+
+    Returns
+    -------
+    m_residues : list of Bio.PDB.Residues
+        The residues belonging to the specified model.
+    """
+    m_residues = []
+    for model in structure:
+        if model.get_id() == m_id:
+            for chain in model:
+                for residue in chain:
+                    m_residues.append(residue)
+    return m_residues
+
+def contains_dna_rna(structure):
+    """
+    Check whether the speficied structure contains DNA and/or RNA.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure to check.
+
+    Returns
+    -------
+    bool
+        Whether the stucture contains DNA and/or RNA.
+    """
+    for model in structure:
+        for chain in model:
+            for residue in chain:
+                rn = residue.get_resname().strip() # necessary since name are all 3 characters long
+                if rn == 'DA' or rn == 'DC' or rn == 'DG' or rn == 'DT' or rn == 'DI' or rn == 'A' or rn == 'C' or rn == 'G' or rn == 'U' or rn == 'I':
+                    return True
+    return False
+
+def break_chains(structure, m_id=0):
+    """
+    Break the specified structure into its chains.
+    
+    In case the specified structure has multiple models, only the first one is returned.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure to be broken into its chaines.
+    m_id : int, optional
+        The model ID. The default is 0.
+
+    Returns
+    -------
+    structures_dict : dict of str -> list of Bio.PDB.Residue
+        The dictionary mapping the chain ID to the residues belonging to that chain.
+    """
+    structures_dict = {}
+    for model in structure:
+        if model.get_id() == m_id:
+            for chain in model:
+                ch_id = chain.get_id().upper()
+                if ch_id not in structures_dict:
+                    structures_dict[ch_id] = []
+                for residue in chain:
+                    structures_dict[ch_id].append(residue)
+    return structures_dict
+
+def filter_chains(chains, pct_thr=0.9):
+    """
+    Filter the chains belonging to the same structure to remove similar and/or identical chains.
+
+    Parameters
+    ----------
+    chains : list of Bio.PDB.Structure
+        The list of structures, each representing a chain of the original structure.
+    pct_thr : float in [0,1], optional
+        The score percentage threshold above which two chains are considered to be similar. The score is
+        computed as the best alignement score divided by the length of the smallest chain.
+        The default is 0.9.
+
+    Returns
+    -------
+    uniques : list of Bio.PDB.Structures
+        The list of unique chains.
+    """
+    chains_dict = {}
+    seq_dict = {}
+    uniques = []
+    assigned = {}
+    # Get the sequence for each chain
+    for chain in chains:
+        p_id = chain.get_id()
+        chains_dict[p_id] = chain
+        sequences = get_sequences(chain)
+        if len(sequences) == 0:
+            continue
+        seq_dict[p_id] = sequences[0] # since there is only one chain, there is only one sequence
+    # Iterate over the dictionaries to cluster the chains based on sequence alignement
+    for i in seq_dict:
+        if i not in assigned:
+            assigned[i] = True
+            uniques.append(chains_dict[i])
+            for j in seq_dict:
+                if j != i and j not in assigned:
+                    # Get alignments
+                    seq_1, seq_2 = seq_dict[i], seq_dict[j]
+                    alignements = align_sequences(seq_1, seq_2)
+                    best_alignment = sorted(alignements, key=lambda x: x[2], reverse=True)[0]
+                    score = best_alignment[2]/(min(len(seq_1),len(seq_2)))
+                    if score >= pct_thr:
+                        assigned[j] = True
+    return uniques
 
 def build_structure(s_id, residues, header):
     """
