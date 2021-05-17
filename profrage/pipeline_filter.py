@@ -11,8 +11,8 @@ import argparse
 import pickle
 
 from fragment.filtering import in_range, is_connected
-from utils.ProgressBar import ProgressBar
 from utils.io import get_files, from_mmtf
+from utils.ProgressBar import ProgressBar
 
 def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, verbose=False):
     """
@@ -39,8 +39,7 @@ def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, verbose=F
     """
     # Define proper output directory
     out_name = method + '-filtered/'
-    count = 1
-    progress_bar = ProgressBar()
+    progress_bar = ProgressBar(len(pdb_ch_ids))
     if verbose:
         print('Filtering the fragments...')
         progress_bar.start()
@@ -52,8 +51,7 @@ def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, verbose=F
         # Iterate over the protein, chain IDs
         for pdb_ch_id in pdb_ch_ids:
             if verbose:
-                progress_bar.step(count, len(pdb_ch_ids))
-                count += 1
+                progress_bar.step()
             p_id, c_id = pdb_ch_id
             dir_name = base_dir + method + '/' + p_id + '_' + c_id + '/fragments/'
             # Check if directory for the TERM indeed exists
@@ -77,8 +75,7 @@ def pipeline(method, base_dir, pdb_ch_ids, filtering_method, radius=5, verbose=F
     elif method == 'fuzzle':
         for root, _, files in os.walk(base_dir + method + '/'):
             if verbose:
-                progress_bar.step(count, len(pdb_ch_ids))
-                count += 1
+                progress_bar.step()
             for name in files:
                 if name[:-4] == 'mmtf':
                     mmtf = os.path.join(root, name)

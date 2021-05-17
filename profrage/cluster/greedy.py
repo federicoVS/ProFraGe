@@ -115,13 +115,13 @@ class SeqAlign(Cluster):
         cluster_id = 0
         placed = [False for i in range(len(self.structures))]
         score_cache = {}
-        progress_bar = ProgressBar()
+        progress_bar = ProgressBar(len(self.structures))
         if self.verbose:
             print('Clustering...')
             progress_bar.start()
         for i in range(len(self.structures)):
             if self.verbose:
-                progress_bar.step(i+1, len(self.structures))
+                progress_bar.step()
             # Check if structure i already belongs to a cluster
             if not placed[i]:
                 placed[i] = True
@@ -301,13 +301,13 @@ class CASuperImpose(Cluster):
         cluster_id = 0
         placed = [False for i in range(len(self.structures))]
         rmsd_cache = {}
-        progress_bar = ProgressBar()
+        progress_bar = ProgressBar(len(self.structures))
         if self.verbose:
             print('Clustering...')
             progress_bar.start()
         for i in range(len(self.structures)):
             if self.verbose:
-                progress_bar.step(i, len(self.structures))
+                progress_bar.step()
             if not placed[i]:
                 placed[i] = True
                 self.clusters[cluster_id] = []
@@ -383,13 +383,13 @@ class USRCluster(Cluster):
         # Data structures for clustering
         cluster_id = 0
         placed = [False for i in range(n)]
-        progress_bar = ProgressBar()
+        progress_bar = ProgressBar(n)
         if self.verbose:
             print('Clustering...')
             progress_bar.start()
         for i in range(n):
             if self.verbose:
-                progress_bar.step(i, n)
+                progress_bar.step()
             if not placed[i]:
                 placed[i] = True
                 self.clusters[cluster_id] = []

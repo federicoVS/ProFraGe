@@ -429,13 +429,13 @@ class KUSR(Cluster):
             self.clusters[i] = []
             self.clusters[i].append(self._centers[i])
         n = len(self.structures)
-        progress_bar = ProgressBar()
+        progress_bar = ProgressBar(n)
         if self.verbose:
             print('Clustering...')
             progress_bar.start()
         for i in range(n):
             if self.verbose:
-                progress_bar.step(i, n)
+                progress_bar.step()
             if i not in self._centers:
                 cluster_id = self._get_best_center(i)
                 self.clusters[cluster_id].append(i)

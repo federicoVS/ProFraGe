@@ -47,15 +47,13 @@ def pipeline(pdb_ids, pdb_gz_dir, out_dir='./', m_pdb_ch_file=None, sqid=30, loa
     # Match the PDB IDs with the clusters
     m_pdb_ch_ids = match_clusters(pdb_ids, clusters=clusters, sqid=sqid, out_file=m_pdb_ch_file, verbose=verbose)
     # Fetch the PDB files
-    count = 1
-    progress_bar = ProgressBar()
+    progress_bar = ProgressBar(len(m_pdb_ch_ids))
     if verbose:
         print('Fetching PDBs...')
         progress_bar.start()
     for m_pdb_ch_id in m_pdb_ch_ids:
         if verbose:
-            progress_bar.step(count, len(m_pdb_ch_ids))
-            count += 1
+            progress_bar.step()
         fetch_pdb(m_pdb_ch_id, pdb_gz_dir=pdb_gz_dir, out_dir=out_dir, remove_pdb_gz=remove_pdb_gz)
     if verbose:
         progress_bar.end()

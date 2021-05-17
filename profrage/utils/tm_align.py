@@ -38,13 +38,13 @@ def tm_align(structures, tm_align_dir, outfile, out_dir='./', save=True, verbose
     """
     n = len(structures)
     tm_score_matrix = np.ones((n,n)) # 1 means the structures are equal
-    progress_bar = ProgressBar()
+    progress_bar = ProgressBar(n-1)
     if verbose:
         print('Computing TM-score matrix...')
         progress_bar.start()
     for i in range(n-1):
         if verbose:
-            progress_bar.step(i, n-1)
+            progress_bar.step()
         for j in range(i+1, n):
             pdb_i = structures[i].get_full_id()[0] + '.pdb'
             pdb_j = structures[j].get_full_id()[0] + '.pdb'

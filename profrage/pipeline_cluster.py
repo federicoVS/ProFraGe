@@ -12,7 +12,7 @@ import numpy as np
 
 from structure.representation import USR
 from cluster.distance import Spectral, KMean, GMM, Agglomerative # TODO actually add it
-from cluster.greedy import SeqAlign, CASuperImpose, USRCluster
+from cluster.greedy import SeqAlign, CASuperImpose, USRCluster # TODO actually add it
 from utils.io import get_files, to_pdb, from_mmtf
 from utils.tm_align import tm_align
 from utils.ProgressBar import ProgressBar
@@ -68,13 +68,13 @@ def pipeline(method, clustering, cluster_data, base_dir, tm_align_dir, dist_matr
             dist_matrix = tm_align(structures, tm_align_dir, 'tm_align', out_dir='../pdb/ids/', verbose=verbose)
     elif cluster_data == 'usr':
         coords_matrix = np.zeros(shape=(len(structures),12))
-        progress_bar = ProgressBar()
+        progress_bar = ProgressBar(len(structures))
         if verbose:
             print('Computing USR matrix...')
             progress_bar.start()
         for i in range(len(structures)):
             if verbose:
-                progress_bar.step(i+1, len(structures))
+                progress_bar.step()
             usr = USR(structures[i])
             usr.compute_all()
             coords_matrix[i,:] = usr.momenta

@@ -7,32 +7,37 @@ Created on Wed May 12 16:17:17 2021
 
 import os
 import argparse
-from Bio.PDB.PDBList import PDBList
 
-from utils.structure import build_protein_net_structures
-from utils.io import get_files, parse_protein_net, from_pdb, to_pdb
-from utils.ProgressBar import ProgressBar
+from utils.protein_net import process_testing_set, process_training_set, process_validation_set
+from utils.io import parse_protein_net
 
-def pipeline(casp_dir, pdb_dir, sqid=30, out_dir='protein-net/', verbose=False):
+def pipeline(casp_dir, testing_dir, sqid=30, pct_thr=0.9, out_dir='protein-net/', do_test=True, do_validation=True, do_train=True, verbose=False):
     """
-    Perform a full ProteinNet pipeline based on the given existing PDB dataset.
+    Perform a full ProteinNet pipeline.
     
-    All ProteinNet entries are parsed, and if they are not already contained by the existing PDB
-    dataset, are added as well.
-    
-    The pipeline also takes care in handling multiple chains. If a structure has multiple models, only the
+    The pipeline takes care in handling multiple chains. If a structure has multiple models, only the
     first one is selected. If multiple chains are detected, all are selected.
+    
+    The results are then filtered by removing duplicate/similar chains.
 
     Parameters
     ----------
     casp_dir : str
         The directory holding the ProteinNet splits.
-    pdb_dir : str
-        The directory holding the existing PDB dataset.
+    testing_dir : str
+        The directory holding the PDB files for the testing set.
     sqid : int, optional
         the sequence identity percentage, which should be the same as the PDB dataset. The default is 30.
+    pct_thr : float in [0,1], optional
+        The percentage threshold above which two sequences are similar. The default is 0.9.
     out_dir : str, optional
         The output directory. The default is 'protein-net/'.
+    do_test : bool, optional
+        Whether to process the testing split. The default is True.
+    do_validation : bool, optional
+        Whether to process the validation split. The default is True.
+    do_train : bool, optional
+        Whether to process the training split. The default is True.
     verbose : bool, optional
         Whether to print progress information. The default is False.
 
@@ -40,58 +45,36 @@ def pipeline(casp_dir, pdb_dir, sqid=30, out_dir='protein-net/', verbose=False):
     -------
     None.
     """
-    pdb_files = get_files(pdb_dir)
-    pdb_ids = [os.path.basename(pdbf)[:-4] for pdbf in pdb_files]
-    pdbs_dict = {}
-    pdbl = PDBList()
-    for pdb_id in pdb_ids:
-        pdbs_dict[pdb_id] = True
-    splits = ['testing', 'validation', 'training_' + str(sqid)]
-    progress_bar = ProgressBar()
-    count = 1
-    if verbose:
-        print('Parsing ProteinNet...')
-        progress_bar.start()
-    for split in splits:
-        if verbose:
-            progress_bar.step(count, len(splits))
-            count += 1
-        casp_file = casp_dir + split
-        casp_dict = parse_protein_net(casp_file)
-        for key in casp_dict:
-            # Get the IDs from the entry
-            _, p_id, _, ch_id = casp_dict[key]['ID']
-            pdb_id = p_id + '_' + ch_id
-            if pdb_id not in pdbs_dict:
-                # Download the file
-                file_name = pdbl.retrieve_pdb_file(p_id, file_format='pdb', pdir=out_dir)
-                if os.path.isfile(file_name):
-                    # Change the extension of the file
-                    pre, ext = os.path.splitext(file_name[3+len(out_dir):]) # first 3 is for the 'pdb' added by the PDBList
-                    new_file_name = out_dir + pre.upper() + '.pdb'
-                    os.rename(file_name, new_file_name)
-                    # Read the structure
-                    structure = from_pdb(pre, new_file_name, quiet=True)
-                    # Compute the refined structures
-                    refined_structures = build_protein_net_structures(casp_dict[key], structure)
-                    # Remove the old structure
-                    os.remove(new_file_name)
-                    # Write the refined structures
-                    for refined_structure in refined_structures:
-                        to_pdb(refined_structure, pre, out_dir=out_dir)
-    if verbose:
-        progress_bar.end()
+    # Create out directory if it does not exist
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
+    # First process all directories
+    # Process testing set
+    if do_test:
+        process_testing_set(testing_dir, out_dir, verbose=verbose)
+    # Process validation set
+    if do_validation:
+        pn_dict = parse_protein_net(casp_dir + 'validation')
+        process_validation_set(pn_dict, out_dir, sqid, verbose=verbose)
+    # Process training set
+    if do_train:
+        pn_dict = parse_protein_net(casp_dir + 'training_' + str(sqid))
+        process_training_set(pn_dict, out_dir, verbose=verbose)
         
 if __name__ == '__main__':
     # Argument parser initialization
-    arg_parser = argparse.ArgumentParser(description='Full ProteinNet dataset pipeline with respect to the existing PDB dataset.')
+    arg_parser = argparse.ArgumentParser(description='Full ProteinNet dataset pipeline.')
     arg_parser.add_argument('casp_dir', type=str, help='The directory containing the ProteinNet splits.')
-    arg_parser.add_argument('pdb_dir', type=str, help='The directory containing the existing PDB dataset.')
+    arg_parser.add_argument('testing_dir', type=str, help='The directory containing the testing PDB files.')
     arg_parser.add_argument('--sqid', type=int, default=30, help='The sequence identity percentage. The default is 30.')
-    arg_parser.add_argument('--out_dir', type=str, default='protein-net', help='The output directory. The default is protein-net/.')
+    arg_parser.add_argument('--pct_thr', type=float, default=0.9, help='The percentage threshold above which two sequences are equal. The default is 0.9.')
+    arg_parser.add_argument('--out_dir', type=str, default='protein-net/', help='The output directory. The default is protein-net/.')
+    arg_parser.add_argument('--do_test', type=bool, default=True, help='Whether to process the testing split. The default is True.')
+    arg_parser.add_argument('--do_validation', type=bool, default=True, help='Whether to process the validation split. The default is True.')
+    arg_parser.add_argument('--do_train', type=bool, default=True, help='Whether to process the training split. The default is True.')
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
     # Parse arguments
     args = arg_parser.parse_args()
     # Begin pipeline
-    pipeline(args.casp_dir, args.pdb_dir, sqid=args.sqid, out_dir=args.out_dir, verbose=args.verbose)
+    pipeline(args.casp_dir, args.testing_dir, sqid=args.sqid, pct_thr=args.pct_thr, out_dir=args.out_dir, do_test=args.do_test, do_validation=args.do_validation, do_train=args.do_train, verbose=args.verbose)
     

@@ -889,17 +889,13 @@ class FuzzleMiner(Miner):
         """
         parser = MMTFParser()
         frag_id = 1
-        count = 1
-        progress_bar = ProgressBar()
+        progress_bar = ProgressBar(len(self.data['nodes']))
         if self.verbose:
             print('Generating fragments...')
             progress_bar.start()
         for node in self.data['nodes']:
             if self.verbose:
-                progress_bar.step(count, len(self.data['nodes']))
-                count += 1
-            if count > 50:
-                return
+                progress_bar.step()
             pdb_id = node['domain'][1:5].upper()
             chain_id = node['domain'][5].upper()
             structure = parser.get_structure_from_url(pdb_id)

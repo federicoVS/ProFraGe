@@ -62,15 +62,13 @@ def pipeline(method, build, represent, data_dir, out_dir, cmaps, fuzzle_json, k,
             cmap_dict[cmap_id] = cmapf
         # Get proteins files
         s_files = get_files(data_dir, ext=ext)
-        progress_bar = ProgressBar()
-        count = 1
+        progress_bar = ProgressBar(len(s_files))
         if verbose:
             print('Mining fragments...')
             progress_bar.start()
         for s_file in s_files:
             if verbose:
-                progress_bar.step(count, len(s_files))
-                count += 1
+                progress_bar.step()
             # Get pdb ID
             pdb_id = ''
             structure = None

@@ -27,7 +27,7 @@ def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False
     clusters : list of object, optional
         The clusters, if loaded. The default is None (not loaded).
     sqid : int, optional
-        The sequence identity for the sequence clustering. The default is 30.
+        The sequence identity cutoff for the sequence clustering. The default is 30.
     out_file : str, optional
         The file where to write the resulting list. The default is None (not write).
     verbose : bool, optional
@@ -47,15 +47,13 @@ def match_clusters(pdb_ids, clusters=None, sqid=30, out_file=None, verbose=False
     # Sort list of PDB IDs for binary search
     pdb_ids.sort()
     m_pdb_ch_ids = []
-    count = 1
-    progress_bar = ProgressBar()
+    progress_bar = ProgressBar(len(clusters))
     if verbose:
         print('Matching clusters with protein chains...')
         progress_bar.start()
     for cluster in clusters:
         if verbose:
-            progress_bar.progress(count, len(clusters))
-            count += 1
+            progress_bar.progress()
         last_p = None
         for i in range(len(cluster)):
             p_id, c_id = cluster[i] # protein id, chain id
