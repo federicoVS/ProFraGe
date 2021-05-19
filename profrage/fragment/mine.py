@@ -41,6 +41,21 @@ class Miner:
         """
         self.fragments = {}
         
+    def get_fragments(self):
+        """
+        Return the fragments.
+
+        Returns
+        -------
+        f_structures : list of Bio.PDB.Structure
+            The list of generated fragments.
+        """
+        f_structures = []
+        for pdb_id in self.fragments:
+            for fragment in self.fragments[pdb_id]:
+                f_structures.append(build_structure(fragment.f_id, fragment.residues, fragment.structure.header))
+        return f_structures
+        
     def save(self, out_dir, ext='.mmtf'):
         """
         Save the fragments in the specified format in the specified directory.
@@ -195,7 +210,7 @@ class KSeqMiner(SingleMiner):
         The similarity threshold above which two neighborhoods are considered to be similar.
     """
     
-    def __init__(self, structure, Rep, k=3, score_thr=0.4, max_inters=3):
+    def __init__(self, structure, Rep, k=3, score_thr=0.4, max_inters=3, **params):
         """
         Initialize the class.
 
@@ -305,7 +320,7 @@ class KSeqTerMiner(SingleMiner):
         The maximum number of neighborhoods per fragment.
     """
     
-    def __init__(self, structure, Rep, cmap, k=3, score_thr=0.4, f_thr=0.1, max_inters=1, max_size=4):
+    def __init__(self, structure, Rep, cmap, k=3, score_thr=0.4, f_thr=0.1, max_inters=1, max_size=4, **params):
         """
         Initialize the class.
 
@@ -454,7 +469,7 @@ class KTerCloseMiner(SingleMiner):
         The maximum number of residues accepted in a fragment.
     """
     
-    def __init__(self, structure, Rep, cmap, k=3, score_thr=0.4, f_thr=0.1, max_inters=1, max_residues=40):
+    def __init__(self, structure, Rep, cmap, k=3, score_thr=0.4, f_thr=0.1, max_inters=1, max_residues=40, **params):
         """
         Initialize the class.
 
@@ -646,7 +661,7 @@ class HierarchyMiner(SingleMiner):
         The linkage criterion to use.
     """
     
-    def __init__(self, structure, builder, n_clusters=2, connectivity=False, linkage='ward'):
+    def __init__(self, structure, builder, n_clusters=2, connectivity=False, linkage='ward', **params):
         """
         Initialize the class.
 
@@ -732,7 +747,7 @@ class LeidenMiner(SingleMiner):
         A dictionary mapping the segment ID of the residue to the residue itself.
     """
     
-    def __init__(self, structure, cmap, f_thr=0.1, n_iters=5, max_size=40):
+    def __init__(self, structure, cmap, f_thr=0.1, n_iters=5, max_size=40, **params):
         """
         Initialize the class.
 
@@ -800,7 +815,7 @@ class LeidenMiner(SingleMiner):
             self.adjacency.append((keys[i],keys[i+1]))
             res_1 = self._res_dict[keys[i]]
             res_2 = self._res_dict[keys[i+1]]
-            ca_dist_inv = 1
+            ca_dist_inv = 1/4
             if 'CA' in res_1 and 'CA' in res_2:
                 ca_1 = res_1['CA']
                 ca_2 = res_2['CA']
@@ -812,7 +827,13 @@ class LeidenMiner(SingleMiner):
             _, _, res_1, res_2, f = entry
             if res_1 in self._res_dict and res_2 in self._res_dict and f > self.f_thr:
                 self.adjacency.append((res_1, res_2))
-                self.weights.append(f)
+                ca_dist_inv = 1/20
+                if 'CA' in self._res_dict[res_1] and 'CA' in self._res_dict[res_2]:
+                    ca_1 = self._res_dict[res_1]['CA']
+                    ca_2 = self._res_dict[res_2]['CA']
+                    ca_dist = np.linalg.norm(ca_1.get_vector()-ca_2.get_vector())
+                    ca_dist_inv = 1/ca_dist
+                self.weights.append(ca_dist_inv)
                 
     def mine(self):
         """
@@ -833,7 +854,7 @@ class LeidenMiner(SingleMiner):
         # Define IGraph
         G = ig.Graph(self.adjacency)
         # Compute the partitions using the Leiden algorithm
-        partitions = leidenalg.find_partition(G, leidenalg.CPMVertexPartition, weights=self.weights, n_iterations=self.n_iters, max_comm_size=self.max_size)
+        partitions = leidenalg.find_partition(G, leidenalg.ModularityVertexPartition, weights=self.weights, n_iterations=self.n_iters, max_comm_size=self.max_size)
         # Retrieve fragments
         self.fragments[self.structure.get_id()] = []
         frag_id = 1

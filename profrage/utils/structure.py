@@ -7,6 +7,7 @@ Created on Mon Apr  5 20:17:57 2021
 
 import numpy as np
 from Bio import pairwise2
+from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from Bio.PDB.Structure import Structure
 from Bio.PDB.Model import Model
 from Bio.PDB.Chain import Chain
@@ -52,6 +53,31 @@ def structure_length(structure):
     for residue in structure.get_residues():
         count += 1
     return count
+
+def get_ca_atoms_coords(structure):
+    """
+    Return the coordinates of the C-alpha atoms of the given structure.
+    
+    The output has shape Nx3, where N is the total number of atoms.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure of which to get the atoms coordinates.
+
+    Returns
+    -------
+    numpy.ndarray
+        The atoms coordinates.
+    """
+    atoms_coords = []
+    count = 0
+    for atom in structure.get_atoms():
+        if atom.get_name() == 'CA':
+            coords = atom.get_coord()
+            atoms_coords.append([coords[0], coords[1], coords[2]])
+            count += 1
+    return np.array(atoms_coords).reshape((count,3))
 
 def get_atoms_coords(structure):
     """
@@ -165,6 +191,11 @@ def align_sequences(seq_1, seq_2):
     """
     alignments = pairwise2.align.globalxx(seq_1, seq_2)
     return alignments
+
+def get_secondary_composition(structure):
+    sequence = get_sequences(structure)[0]
+    pa = ProteinAnalysis(str(sequence))
+    return pa.secondary_structure_fraction()
 
 def get_model_residues(structure, m_id=0):
     """

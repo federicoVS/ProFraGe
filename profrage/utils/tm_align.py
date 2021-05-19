@@ -10,9 +10,9 @@ import subprocess
 import numpy as np
 
 from utils.ProgressBar import ProgressBar
-from utils.io import to_pdb
+from utils.io import get_files
 
-def tm_align(structures, tm_align_dir, outfile, out_dir='./', save=True, verbose=False):
+def tm_align(pdb_dir, tm_align_dir, outfile, out_dir='./', save=True, verbose=False):
     """
     Call the TM-align structural comparison for all fragments.
 
@@ -36,7 +36,8 @@ def tm_align(structures, tm_align_dir, outfile, out_dir='./', save=True, verbose
     tm_score_matrix : numpy.ndarray
         The (symmetric) distance matrix.
     """
-    n = len(structures)
+    pdbs = get_files(pdb_dir)
+    n = len(pdbs)
     tm_score_matrix = np.ones((n,n)) # 1 means the structures are equal
     progress_bar = ProgressBar(n-1)
     if verbose:
@@ -46,10 +47,8 @@ def tm_align(structures, tm_align_dir, outfile, out_dir='./', save=True, verbose
         if verbose:
             progress_bar.step()
         for j in range(i+1, n):
-            pdb_i = structures[i].get_full_id()[0] + '.pdb'
-            pdb_j = structures[j].get_full_id()[0] + '.pdb'
-            to_pdb(structures[i], pdb_i[:-4])
-            to_pdb(structures[j], pdb_j[:-4])
+            pdb_i = pdbs[i]
+            pdb_j = pdbs[j]
             command = tm_align_dir + 'TMalign ' + pdb_i + ' ' + pdb_j + ' -a T'
             ps = subprocess.Popen(command,shell=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
             output = ps.communicate()[0]
@@ -57,10 +56,7 @@ def tm_align(structures, tm_align_dir, outfile, out_dir='./', save=True, verbose
             score_line = lines[15] # it is line 16 in the output
             score_str = np.array([score_line.split(b' ')[1]])
             tm_score = score_str.astype(np.float64())[0]
-            tm_score_matrix[i,j] = tm_score
-            tm_score_matrix[j,i] = tm_score
-            os.remove(pdb_i)
-            os.remove(pdb_j)
+            tm_score_matrix[i,j], tm_score_matrix[j,i] = tm_score, tm_score
     if verbose:
         progress_bar.end()
     if save:

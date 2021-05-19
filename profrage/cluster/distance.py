@@ -7,7 +7,7 @@ Created on Fri Apr  2 16:42:01 2021
 
 import numpy as np
 from scipy.sparse import csr_matrix
-from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering
+from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering, DBSCAN
 from sklearn.mixture import GaussianMixture
 from cluster.Cluster import Cluster
 
@@ -33,7 +33,7 @@ class Spectral(Cluster):
         Whether to print progress information.
     """
     
-    def __init__(self, structures, dist_matrix, k, g_delta=16, to_invert=False, verbose=False):
+    def __init__(self, structures, dist_matrix, k=100, g_delta=16, to_invert=False, verbose=False, **params):
         """
         Initialize the class.
 
@@ -43,8 +43,8 @@ class Spectral(Cluster):
             The list of structures to cluster.
         dist_matrix : numpy.ndarray
             The distance matrix.
-        k : int
-            The number of clusters.
+        k : int, optional
+            The number of clusters. The default is 100.
         g_delta : int, optional
             The width of thr Gaussian kernel. It is only used if m_type is 'similarity'. The default is 16.
         to_invert : bool, optional
@@ -175,7 +175,7 @@ class GMM(Cluster):
         The number of initializations.
     """
     
-    def __init__(self, structures, features, k, reg_covar=1e-6, n_init=10, verbose=False):
+    def __init__(self, structures, features, k=100, reg_covar=1e-6, n_init=10, verbose=False, **params):
         """
         Initialize the class.
 
@@ -185,8 +185,8 @@ class GMM(Cluster):
             The structures to cluster.
         features : numpy.ndarray
             The matrix of features. It should have shape n_samples, n_features.
-        k : int
-            The number of clusters.
+        k : int, optional
+            The number of clusters. The default is 100.
         reg_covar : float, optional
             Regularization added to the covariance matrix to ensure its its positiveness.
         n_init : int, optional
@@ -244,7 +244,7 @@ class Agglomerative(Cluster):
         The linkage distance threshold above which clusters will not be merged
     """
     
-    def __init__(self, structures, features, k=None, linkage='ward', distance_threshold=10, verbose=False):
+    def __init__(self, structures, features, k=None, linkage='ward', distance_threshold=10, verbose=False, **params):
         """
         Initialize the class.
 
@@ -283,12 +283,34 @@ class Agglomerative(Cluster):
         """
         if self.verbose:
             print('Clustering...')
-        # Cluster using thre hierarchical algorithm
-        aggcl = AgglomerativeClustering(n_clusters=self.k, linkage=self.linkage, distance_threshold=self.distance_threshold)
+        # Cluster using the hierarchical algorithm
+        aggcl = AgglomerativeClustering(n_clusters=self.k, linkage=self.linkage, compute_full_tree=True, distance_threshold=self.distance_threshold)
         aggcl.fit(self.features)
         # Retrieve the clusters
         for i in range(len(aggcl.labels_)):
             cluster_id = aggcl.labels_[i]
+            if cluster_id not in self.clusters:
+                self.clusters[cluster_id] = []
+            self.clusters[cluster_id].append(i)
+            
+class DBSCANCluster(Cluster):
+    
+    def __init__(self, structures, features, eps=0.5, min_samples=5, verbose=False, **params):
+        super(DBSCANCluster, self).__init__(structures, verbose)
+        self.features = features
+        self.eps = eps
+        self.min_samples = min_samples
+        
+    def cluster(self):
+        if self.verbose:
+            print('Clustering...')
+        # Cluster using the DBSCAN algorithm
+        dbscan = DBSCAN(eps=self.eps, min_samples=self.min_samples)
+        dbscan.fit(self.features)
+        # Retrieve the clusters
+        print(dbscan.labels_)
+        for i in range(len(dbscan.labels_)):
+            cluster_id = dbscan.labels_[i]
             if cluster_id not in self.clusters:
                 self.clusters[cluster_id] = []
             self.clusters[cluster_id].append(i)
@@ -311,7 +333,7 @@ class KUSR(Cluster):
         The USR-feature matrix.
     """
     
-    def __init__(self, structures, k, verbose=False):
+    def __init__(self, structures, k=100, verbose=False, **params):
         """
         Initialize the class.
 
@@ -319,8 +341,8 @@ class KUSR(Cluster):
         ----------
         structures : Bio.PDB.Structure
             The structures to cluster.
-        k : int
-            The number of clusters.
+        k : int, optional
+            The number of clusters. The default is 100.
         verbose : bool, optional
             Whether to print progress information. The default is False.
 

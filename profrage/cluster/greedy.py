@@ -32,7 +32,7 @@ class SeqAlign(Cluster):
         The percentage of length two structures have to share to be considered similar.
     """
     
-    def __init__(self, structures, seq_score_thr=10, length_pct_thr=0.5, verbose=False):
+    def __init__(self, structures, seq_score_thr=10, length_pct_thr=0.5, verbose=False, **params):
         """
         Initialize the class.
 
@@ -157,7 +157,7 @@ class CASuperImpose(Cluster):
         The percentage of length two structures should share to be considered similar.
     """
     
-    def __init__(self, structures, rmsd_thr=10, length_pct_thr=0.5, verbose=False):
+    def __init__(self, structures, rmsd_thr=10, length_pct_thr=0.5, verbose=False, **params):
         """
         Initialize the class.
 
@@ -343,7 +343,7 @@ class USRCluster(Cluster):
         A matrix holding the USR features for each structure.
     """
     
-    def __init__(self, structures, score_thr=0.4, verbose=False):
+    def __init__(self, structures, score_thr=0.5, verbose=False, **params):
         """
         Initialize the class.
 
@@ -352,7 +352,7 @@ class USRCluster(Cluster):
         structures : list of Bio.PDB.Structure
             The structures to be clustered.
         score_thr : float in [0,1], optional
-            The similarity score threshold. The default is 0.4.
+            The similarity score threshold. The default is 0.5.
         verbose : bool, optional
             Whether to print progress information. The default is False.
 
