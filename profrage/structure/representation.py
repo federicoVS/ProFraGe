@@ -9,7 +9,7 @@ import numpy as np
 from scipy.stats import skew
 from Bio.PDB.vectors import calc_dihedral
 
-from utils.structure import get_atoms_coords
+from utils.structure import get_atoms_coords, get_ca_atoms_coords
 
 class Representation:
     """An abstract class to implement structure representation."""
@@ -73,7 +73,7 @@ class USR(Representation):
         The matrix of coordinates
     """
     
-    def __init__(self, structure):
+    def __init__(self, structure, atom_type='ca'):
         """
         Initialize the class.
 
@@ -81,13 +81,18 @@ class USR(Representation):
         ----------
         structure : Bio.PDB.Structure
             The structure to represent.
+        atom_type : str, optional
+            The type of atoms to consider to compute the USR. The default is 'ca'.
 
         Returns
         -------
         None.
         """
         super(USR, self).__init__()
-        self._coords = get_atoms_coords(structure)
+        if atom_type == 'ca':
+            self._coords = get_ca_atoms_coords(structure)
+        else:
+            self._coords = get_atoms_coords(structure)
         self.ctd = None
         self.cst = None
         self.fct = None
