@@ -5,6 +5,7 @@ Created on Wed Mar 31 15:11:01 2021
 @author: Federico van Swaaij
 """
 
+import os
 import numpy as np
 from Bio import pairwise2
 from Bio.PDB.Polypeptide import CaPPBuilder
@@ -12,8 +13,11 @@ from Bio.PDB.Superimposer import Superimposer
 
 from cluster.Cluster import Cluster
 from structure.representation import USR
-from utils.ProgressBar import ProgressBar
 from utils.structure import lengths_within
+from utils.io import to_pdb
+from utils.mican import run_mican
+from utils.tm_align import run_tm_align
+from utils.ProgressBar import ProgressBar
 
 class SeqAlign(Cluster):
     """
@@ -323,6 +327,80 @@ class CASuperImpose(Cluster):
                         if rmsd <= self.rmsd_thr:
                             placed[j] = True
                             self.clusters[cluster_id].append(j)
+                cluster_id += 1
+        if self.verbose:
+            progress_bar.end()
+            
+class Mican(Cluster):
+    """
+    Perform clustering based on sTM-Align score similarity computed using the MICAN tool.
+    
+    Attributes
+    ----------
+    mican_dir : str
+        The directory holding the MICAN tool.
+    score_thr : float in [0,1]
+        The sTM-Align score threshold above which two structures are considered to be similar.
+    """
+    
+    def __init__(self, structures, mican_dir, score_thr=0.7, verbose=False, **params):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        structures : list of Bio.PDB.Structure
+            The list of structures to cluster.
+        mican_dir : str
+            The directory holding the MICAN tool.
+        score_thr : float in [0,1], optional
+            The sTM-Align score threshold. The default is 0.7.
+        verbose : bool, optional
+            Whether to print progress information. The default is False.
+
+        Returns
+        -------
+        None.
+        """
+        super(Mican, self).__init__(structures, verbose)
+        self.mican_dir = mican_dir
+        self.score_thr = score_thr
+        
+    def cluster(self):
+        """
+        Perform the clustering.
+
+        Returns
+        -------
+        None.
+        """
+        n = len(self.structures)
+        cluster_id = 0
+        placed = [False for i in range(n)]
+        progress_bar = ProgressBar(n)
+        if self.verbose:
+            print('Clustering...')
+            progress_bar.start()
+        for i in range(n):
+            if self.verbose:
+                progress_bar.step()
+            if not placed[i]:
+                placed[i] = True
+                self.clusters[cluster_id] = []
+                self.clusters[cluster_id].append(i)
+                for j in range(n):
+                    if i != j and not placed[j]:
+                        s_i, s_j = self.structures[i], self.structures[j]
+                        to_pdb(s_i, s_i.get_id()), to_pdb(s_j, s_j.get_id())
+                        pdb_i, pdb_j = s_i.get_id() + '.pdb', s_j.get_id() + '.pdb'
+                        score = run_mican(self.mican_dir, pdb_i, pdb_j)
+                        if score >= self.score_thr:
+                            placed[j] = True
+                            self.clusters[cluster_id].append(j)
+                        if os.path.exists(pdb_i):
+                            os.remove(pdb_i)
+                        if os.path.exists(pdb_j):
+                            os.remove(pdb_j)
                 cluster_id += 1
         if self.verbose:
             progress_bar.end()
