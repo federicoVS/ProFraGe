@@ -7,6 +7,7 @@ Created on Mon Apr  5 17:55:58 2021
 
 import numpy as np
 from scipy.stats import skew
+from scipy.spatial import distance
 from Bio.PDB.vectors import calc_dihedral
 
 from utils.structure import get_atoms_coords, get_ca_atoms_coords
@@ -82,7 +83,7 @@ class USR(Representation):
         structure : Bio.PDB.Structure
             The structure to represent.
         ca_atoms : str, optional
-            Whether to use C-alpha atoms to compute the USR. The default is False.
+            Whether to use only C-alpha atoms to compute the USR. The default is False.
 
         Returns
         -------
@@ -100,7 +101,7 @@ class USR(Representation):
         self.momenta = None
         
     @staticmethod
-    def get_similarity_score(momenta_1, momenta_2):
+    def get_similarity_score(momenta_1, momenta_2, size=12):
         """
         Compute the similarity score between two momenta, as described in the source paper.
 
@@ -110,6 +111,8 @@ class USR(Representation):
             The USR momenta of the first structure.
         momenta_2 : TYPE
             The USR momenta of the second structure.
+        size : int, optional
+            The size of the momenta vector. The default is 12
 
         Returns
         -------
@@ -117,9 +120,9 @@ class USR(Representation):
             The similarity score.
         """
         score = 0
-        for i in range(12):
+        for i in range(size):
             score += abs(momenta_1[i]-momenta_2[i])
-        score /= 12
+        score /= size
         score += 1
         return 1/score
         
@@ -235,6 +238,132 @@ class USR(Representation):
         if self.momenta is None:
             self._compute_all()
         return self.momenta
+    
+class USRpp(Representation):
+    """
+    Representation of a structure using a combination of shape information and secondary structure information.
+    
+    The former is obtained with USR, while the latter is obtained with Stride.
+    
+    Attributes
+    ----------
+    features : numpy.ndarray
+        The full feature-vector. The first 12 places hold the USR-momenta, while the last 7 hold secondary
+        information.
+    stride_dict : dict of str -> int
+        The dictonary build from Stride holding secondary structure information.
+    """
+    
+    def __init__(self, structure, stride_dict, ca_atoms=False):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        structure : Bio.PDB.Structure
+            The structure to represent.
+        stride_dict : dict of str -> int
+            The Stride dictionary.
+        ca_atoms : bool, optional
+            Whether to use only C-alpha atoms to compute the USR. The default is False.
+
+        Returns
+        -------
+        None.
+        """
+        super(MITResidue, self).__init__()
+        self.features = np.zeros(shape=(USR.get_n_features()+7,))
+        self.features[0:12] = USR(structure, ca_atoms=ca_atoms).get_features()
+        self.stride_dict = stride_dict
+        
+    @staticmethod
+    def get_n_features():
+        """
+        Return the number of a single feature-vector.
+
+        Returns
+        -------
+        int
+            The length of the feature-vector.
+        """
+        return USR.get_n_features() + 7
+    
+    @staticmethod
+    def get_similarity_score(features_1, features_2):
+        """
+        Compute the similarity score between two feature vectors.
+        
+        The similarity is computed using the USR-defined similarity function on the entire feature-vectors,
+        in order to enforce a unique comparison strategy.
+
+        Parameters
+        ----------
+        features_1 : numpy.ndarray
+            The first feature-vector.
+        features_2 : numpy.ndarray
+            The second feature-vector.
+
+        Returns
+        -------
+        float in (0,1)
+            The similarity score.
+        """
+        return USR.get_similarity_score(features_1, features_2, size=USR.get_n_features()+7)
+    
+    def _compute_secondary(self):
+        total = 0
+        for key in self.stride_dict:
+            total += self.stride_dict[key]
+        if 'H' in self.stride_dict:
+            self.features[12] = self.stride_dict['H']/total
+        else:
+            self.features[12] = 0
+        if 'G' in self.stride_dict:
+            self.features[13] = self.stride_dict['G']/total
+        else:
+            self.features[13] = 0
+        if 'I' in self.stride_dict:
+            self.features[14] = self.stride_dict['I']/total
+        else:
+            self.features[14] = 0
+        if 'E' in self.stride_dict:
+            self.features[15] = self.stride_dict['E']/total
+        else:
+            self.features[15] = 0
+        if 'B' in self.stride_dict:
+            self.features[16] = self.stride_dict['B']/total
+        else:
+            self.features[16] = 0
+        if 'b' in self.stride_dict:
+            self.features[16] = self.stride_dict['b']/total
+        else:
+            self.features[16] = 0
+        if 'T' in self.stride_dict:
+            self.features[17] = self.stride_dict['T']/total
+        else:
+            self.features[17] = 0
+        if 'C' in self.stride_dict:
+            self.features[18] = self.stride_dict['C']/total
+        else:
+            self.features[18] = 0
+    
+    def get_features(self):
+        """
+        Return the features.
+
+        Returns
+        -------
+        numpy.ndarray
+            The features.
+        """
+        if self.features is None:
+            self._compute_secondary()
+            for i in range(USR.get_n_features()):
+                self.features[i] = self.momenta[i]
+            for i in range(7):
+                self.features[i+USR.get_n_features()] = self.secondary[i]
+        return self.features
+        
         
 class MITResidue(Representation):
     """
