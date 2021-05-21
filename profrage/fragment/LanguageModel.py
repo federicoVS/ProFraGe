@@ -23,25 +23,29 @@ class LanguageModel:
     Attributes
     ----------
     sentence_probs : dict of str -> float in [0,1]
-        The probability that a protein is made of its fragments.
-    word_probs : dict of int -> float in [0,1]
-        The probabilities of single words. These are based on the training set.
-    cluster : cluster.Cluster.Cluster
-        The cluster object holding the fragments.
+        The probability that a protein is made of its fragments. The mapping is based on the PDB ID of
+        single proteins.
+    word_probs : dict of str -> float in [0,1]
+        The probabilities of single words. These are based on the training set. The mapping is based on the
+        PDB ID of fragments.
+    words : list of (Bio.PDB.Structure, int)
+            A list of words, where each word is a tuple holding a structure and the number of times it
+            appears.
     score_thr : float in [0,1]
         The USR score threshold above which two words (fragments) are considered to be similar.
     """
     
-    def __init__(self, cluster, score_thr):
+    def __init__(self, words, score_thr):
         """
         Initialize the class.
 
         Parameters
         ----------
-        cluster : cluster.Cluster.Cluster
-            The cluster object holding the fragments.
+        words : list of (Bio.PDB.Structure, int)
+            A list of words, where each word is a tuple holding a structure and the number of times it
+            appears.
         score_thr : float in [0,1]
-            The USR score threshold.
+            The USR score threshold. The higher, the tighter.
 
         Returns
         -------
@@ -49,7 +53,7 @@ class LanguageModel:
         """
         self.sentence_probs = {}
         self.word_probs = {}
-        self.cluster = cluster
+        self.words = words
         self.score_thr = score_thr
         
     def compute_sentence_probs(self, pdb_id, fragments, ep=1e-3):
@@ -72,18 +76,17 @@ class LanguageModel:
         probs = []
         for fragment in fragments:
             f_momenta = USR(fragment).get_features()
-            best_score, best_cluster_id = -1, -1
-            for cluster_id in len(self.cluster):
-                rep = self.cluster.best_representative(cluster_id)
-                r_momenta = USR(rep).get_features()
-                score = USR.get_similarity_score(f_momenta, r_momenta)
+            best_score, best_pdb_id = -1, -1
+            for word in self.words:
+                w_momenta = USR(word[0]).get_features()
+                score = USR.get_similarity_score(f_momenta, w_momenta)
                 if score > self.score_thr and score > best_score:
-                    best_cluster_id = cluster_id
+                    best_pdb_id = word[0].get_id()
                     best_score = score
-            if best_cluster_id == -1:
+            if best_pdb_id == -1:
                 probs.append(ep)
             else:
-                probs.append(self.word_probs[best_cluster_id])
+                probs.append(self.word_probs[best_pdb_id])
         self.sentence_probs[pdb_id] = 1
         for p in probs:
             self.sentence_probs[pdb_id] *= p
@@ -98,11 +101,14 @@ class LanguageModel:
         -------
         None.
         """
-        total = len(self.cluster.structures)
-        for cluster_id in len(self.cluster):
-            self.word_probs[cluster_id] = len(self.cluster.clusters[cluster_id])/total
+        total = 0
+        for word in self.words:
+            total += word[1]
+        for word in self.words:
+            pdb_id = word[0].get_id()
+            self.word_probs[pdb_id] = word[1]/total
             
-    def get_avg_plausubility(self):
+    def get_avg_plausibility(self):
         """
         Return the average plausibility for the language model.
 
