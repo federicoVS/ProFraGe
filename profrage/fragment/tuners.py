@@ -13,9 +13,32 @@ from fragment.mine import LeidenMiner
 from fragment.filtering import in_range, is_spherical, is_compact, is_connected
 from fragment.LanguageModel import LanguageModel
 from structure.representation import USR
-from utils.io import get_files, from_pdb
+from utils.stride import single_stride, get_composition
+from utils.io import get_files, from_pdb, to_pdb
 
-def leiden_hierarchy_grid(train_set_dir, test_set_dir, cmap_dir, params, lm_score_thr):
+def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_dir, stride_dir, params, lm_score_thr):
+    """
+    Perform GridSearch based on the Leiden mining algorithm coupled with Agglomerative clustering.
+
+    Parameters
+    ----------
+    train_set_dir : str
+        The directory holding the PDB files for the training phase.
+    test_set_dir : str
+        The directory holding the PDB files for the testing phase.
+    cmap_dir : str
+        The directory holding the CMAP files.
+    stride_dir : str
+        The directory holding the Stride tool.
+    params : dict of str -> Any
+        The parameters to try for the Leiden algorithm.
+    lm_score_thr : float in [0,1]
+        The USR threshold score to be used in the language model.
+
+    Returns
+    -------
+    None.
+    """
     search_space = (dict(zip(params, x)) for x in itertools.product(*params.values()))
     best_params = []
     for param_config in search_space:
@@ -32,15 +55,46 @@ def leiden_hierarchy_grid(train_set_dir, test_set_dir, cmap_dir, params, lm_scor
             for f in frags:
                 fragments.append(f)
         filtered = []
+        if os.path.exists('lhg-tmp/'):
+            os.rmdir('lhg-tmp/')
+        if not os.path.exists('lhg-tmp/'):
+            os.makedirs('lhg-tmp/')
         for frag in fragments:
             if in_range(frag) and is_spherical(frag) and is_compact(frag) and is_connected(frag):
                 filtered.append(frag)
-        momenta = np.zeros(shape=(len(filtered),USR.get_n_features()))
-        for i in range(len(filtered)):
-            usr = USR(filtered[i])
-            momenta[i,:] = usr.get_features()
-        cluster = Agglomerative(filtered, momenta)
-        cluster.cluster()
+                to_pdb(frag, frag.get_id(), out_dir='lhg-tmp/')
+        pdbs = get_files('lhg-tmp/', ext='.pkl')
+        assignements = {}
+        pre_clusters = {}
+        representatives = []
+        for pdb in pdbs:
+            pdb_id = os.path.basename(pdb)[:-4]
+            code_dict = single_stride(stride_dir, pdb)
+            keys = get_composition(code_dict)
+            assignements[pdb_id] = keys
+        for pdb in pdbs:
+            pdb_id = os.path.basename(pdb)[:-4]
+            keys = assignements[pdb_id]
+            if keys is None:
+                continue
+            if keys not in pre_clusters:
+                pre_clusters[keys] = []
+            pre_clusters[keys].append(from_pdb(pdb_id, pdb))
+        for keys in pre_clusters:
+            structures = pre_clusters[keys]
+            features = np.zeros(shape=(len(structures),USR.get_n_features()))
+            if features.shape[0] < 2:
+                continue
+            for i in range(len(structures)):
+                usr = USR(structures[i], ca_atoms=True)
+                momenta = usr.get_features()
+                features[i,:] = momenta
+            aggl = Agglomerative(structures, features)
+            aggl.cluster()
+            for cluster_id in range(len(aggl)):
+                rep = aggl.best_representative(cluster_id)
+                freq = len(aggl.clusters[cluster_id])
+                representatives.append((rep, freq))
         # Mine fragments on the test set
         pdbs = get_files(test_set_dir, ext='.pdb')
         fragments = {}
@@ -52,11 +106,13 @@ def leiden_hierarchy_grid(train_set_dir, test_set_dir, cmap_dir, params, lm_scor
             model.mine()
             fragments[pdb_id] = model.get_fragments()
         # Define language model
-        lm = LanguageModel(cluster, lm_score_thr)
+        lm = LanguageModel(representatives, lm_score_thr)
         lm.get_word_probs()
         for pdb_id in fragments:
             lm.compute_sentence_probs(pdb_id, fragments[pdb_id])
-        best_params.append((lm.get_avg_plausubility(), param_config))
+        best_params.append((lm.get_avg_plausibility(), param_config))
+        if os.path.exists('lhg-tmp/'):
+            os.rmdir('lhg-tmp/')
     best_configs = sorted(best_params, key=lambda x: x[0], reverse=True)[0:5]
     for best_config in best_configs:
         print(f'Probability: {best_config[0]}, Parameters: {best_config[1]}')

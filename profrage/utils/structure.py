@@ -7,7 +7,6 @@ Created on Mon Apr  5 20:17:57 2021
 
 import numpy as np
 from Bio import pairwise2
-from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from Bio.PDB.Structure import Structure
 from Bio.PDB.Model import Model
 from Bio.PDB.Chain import Chain
@@ -191,11 +190,6 @@ def align_sequences(seq_1, seq_2):
     """
     alignments = pairwise2.align.globalxx(seq_1, seq_2)
     return alignments
-
-def get_secondary_composition(structure):
-    sequence = get_sequences(structure)[0]
-    pa = ProteinAnalysis(str(sequence))
-    return pa.secondary_structure_fraction()
 
 def get_model_residues(structure, m_id=0):
     """

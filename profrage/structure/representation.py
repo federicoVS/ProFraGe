@@ -73,7 +73,7 @@ class USR(Representation):
         The matrix of coordinates
     """
     
-    def __init__(self, structure, atom_type='ca'):
+    def __init__(self, structure, ca_atoms=False):
         """
         Initialize the class.
 
@@ -81,15 +81,15 @@ class USR(Representation):
         ----------
         structure : Bio.PDB.Structure
             The structure to represent.
-        atom_type : str, optional
-            The type of atoms to consider to compute the USR. The default is 'ca'.
+        ca_atoms : str, optional
+            Whether to use C-alpha atoms to compute the USR. The default is False.
 
         Returns
         -------
         None.
         """
         super(USR, self).__init__()
-        if atom_type == 'ca':
+        if ca_atoms:
             self._coords = get_ca_atoms_coords(structure)
         else:
             self._coords = get_atoms_coords(structure)
@@ -153,7 +153,7 @@ class USR(Representation):
         -------
         None.
         """
-        squared_dist = np.sum(np.sqrt((self._coords-self.ctd)**2), axis=1)
+        squared_dist = np.sqrt(np.sum((self._coords-self.ctd)**2, axis=1))
         self.cst = self._coords[np.argmin(squared_dist),:]
     
     def _get_fct(self):
@@ -164,7 +164,7 @@ class USR(Representation):
         -------
         None.
         """
-        squared_dist = np.sum(np.sqrt((self._coords-self.ctd)**2), axis=1)
+        squared_dist = np.sqrt(np.sum((self._coords-self.ctd)**2, axis=1))
         self.fct = self._coords[np.argmax(squared_dist),:]
     
     def _get_ftf(self):
@@ -175,7 +175,7 @@ class USR(Representation):
         -------
         None.
         """
-        squared_dist = np.sum(np.sqrt((self._coords-self.fct)**2), axis=1)
+        squared_dist = np.sqrt(np.sum((self._coords-self.fct)**2, axis=1))
         self.ftf = self._coords[np.argmax(squared_dist),:]
         
     def _compute_momenta(self):
@@ -189,10 +189,10 @@ class USR(Representation):
         # Initialize momenta
         self.momenta = np.zeros(shape=(12,))
         # Compute distances
-        dist_ctd = np.sum(np.sqrt((self._coords-self.ctd)**2), axis=1)
-        dist_cst = np.sum(np.sqrt((self._coords-self.cst)**2), axis=1)
-        dist_fct = np.sum(np.sqrt((self._coords-self.fct)**2), axis=1)
-        dist_ftf = np.sum(np.sqrt((self._coords-self.ftf)**2), axis=1)
+        dist_ctd = np.sqrt(np.sum((self._coords-self.ctd)**2, axis=1))
+        dist_cst = np.sqrt(np.sum((self._coords-self.cst)**2, axis=1))
+        dist_fct = np.sqrt(np.sum((self._coords-self.fct)**2, axis=1))
+        dist_ftf = np.sqrt(np.sum((self._coords-self.ftf)**2, axis=1))
         # Mean
         self.momenta[0] = np.mean(dist_ctd) # ctd
         self.momenta[3] = np.mean(dist_cst) # cst

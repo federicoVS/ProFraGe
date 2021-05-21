@@ -7,7 +7,7 @@ Created on Fri Apr  2 16:42:01 2021
 
 import numpy as np
 from scipy.sparse import csr_matrix
-from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering, DBSCAN
+from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering
 from sklearn.mixture import GaussianMixture
 from cluster.Cluster import Cluster
 
@@ -171,11 +171,17 @@ class GMM(Cluster):
         The matrix of features. It should have shape n_samples, n_features.
     k : int
         The number of clusters.
+    tol : float
+        The tolerance.
+    reg_covar : float
+        Non-negative regularization.
+    max_iter : int
+        The maximum number of iterations.
     n_init : int
         The number of initializations.
     """
     
-    def __init__(self, structures, features, k=100, reg_covar=1e-6, n_init=10, verbose=False, **params):
+    def __init__(self, structures, features, k=100, tol=1e-3, reg_covar=1e-6, max_iter=100, n_init=10, verbose=False, **params):
         """
         Initialize the class.
 
@@ -187,8 +193,12 @@ class GMM(Cluster):
             The matrix of features. It should have shape n_samples, n_features.
         k : int, optional
             The number of clusters. The default is 100.
+        tol : float, optional
+            The tolerance. The default is 1e-3.
         reg_covar : float, optional
             Regularization added to the covariance matrix to ensure its its positiveness.
+        max_iter : int, optional
+            The maximum number of iterations. The default is 100.
         n_init : int, optional
             The number of initializations. The default is 10.
         verbose : bool, optional
@@ -201,7 +211,9 @@ class GMM(Cluster):
         super(GMM, self).__init__(structures, verbose)
         self.features = features
         self.k = k
+        self.tol = tol
         self.reg_covar = reg_covar
+        self.max_iter = max_iter
         self.n_init = n_init
         
     def cluster(self):
@@ -214,7 +226,7 @@ class GMM(Cluster):
         """
         if self.verbose:
             print('Clustering...')
-        gm = GaussianMixture(n_components=self.k, reg_covar=self.reg_covar, n_init=self.n_init, verbose=self.verbose)
+        gm = GaussianMixture(n_components=self.k, tol=self.tol, reg_covar=self.reg_covar, max_iter=self.max_iter, n_init=self.n_init, verbose=self.verbose)
         gm.fit(self.features)
         labels = gm.predict(self.features)
         # Retrieve clusters
@@ -289,28 +301,6 @@ class Agglomerative(Cluster):
         # Retrieve the clusters
         for i in range(len(aggcl.labels_)):
             cluster_id = aggcl.labels_[i]
-            if cluster_id not in self.clusters:
-                self.clusters[cluster_id] = []
-            self.clusters[cluster_id].append(i)
-            
-class DBSCANCluster(Cluster):
-    
-    def __init__(self, structures, features, eps=0.5, min_samples=5, verbose=False, **params):
-        super(DBSCANCluster, self).__init__(structures, verbose)
-        self.features = features
-        self.eps = eps
-        self.min_samples = min_samples
-        
-    def cluster(self):
-        if self.verbose:
-            print('Clustering...')
-        # Cluster using the DBSCAN algorithm
-        dbscan = DBSCAN(eps=self.eps, min_samples=self.min_samples)
-        dbscan.fit(self.features)
-        # Retrieve the clusters
-        print(dbscan.labels_)
-        for i in range(len(dbscan.labels_)):
-            cluster_id = dbscan.labels_[i]
             if cluster_id not in self.clusters:
                 self.clusters[cluster_id] = []
             self.clusters[cluster_id].append(i)
