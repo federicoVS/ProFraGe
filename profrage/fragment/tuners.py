@@ -16,7 +16,7 @@ from structure.representation import USR
 from utils.stride import single_stride, get_composition
 from utils.io import get_files, from_pdb, to_pdb
 
-def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_dir, stride_dir, params, lm_score_thr):
+def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, params, lm_score_thr):
     """
     Perform GridSearch based on the Leiden mining algorithm coupled with Agglomerative clustering.
 
@@ -26,8 +26,10 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_dir, strid
         The directory holding the PDB files for the training phase.
     test_set_dir : str
         The directory holding the PDB files for the testing phase.
-    cmap_dir : str
-        The directory holding the CMAP files.
+    cmap_train_dir : str
+        The directory holding the CMAP files for the training set.
+    cmap_test_dir : str
+        The directory holding the CMAP files for the test set.
     stride_dir : str
         The directory holding the Stride tool.
     params : dict of str -> Any
@@ -47,7 +49,7 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_dir, strid
         fragments = []
         for pdbf in pdbs:
             pdb_id = os.path.basename(pdbf)[:-4]
-            cmapf = cmap_dir + pdb_id + '.cmap'
+            cmapf = cmap_train_dir + pdb_id + '.cmap'
             structure = from_pdb(pdb_id, pdbf, quiet=True)
             model = LeidenMiner(structure, cmapf, **param_config)
             model.mine()
@@ -100,7 +102,7 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_dir, strid
         fragments = {}
         for pdbf in pdbs:
             pdb_id = os.path.basename(pdbf)[:-4]
-            cmapf = cmap_dir + pdb_id + '.cmap'
+            cmapf = cmap_test_dir + pdb_id + '.cmap'
             structure = from_pdb(pdb_id, pdbf, quiet=True)
             model = LeidenMiner(structure, cmapf, **param_config)
             model.mine()

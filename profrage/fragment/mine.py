@@ -736,6 +736,8 @@ class LeidenMiner(SingleMiner):
         The list of weights. It is built in such a way that its order matches the edges of the adjacency list.
     cmap : str
         The file holding the CMAP.
+    partition : ??
+        The partition of apply. See the Leiden documentation for more information.
     f_thr : float in [0,1]
         The threshold above which two residues are interacting. It is also used as the weight assigned to
         the edges.
@@ -747,7 +749,7 @@ class LeidenMiner(SingleMiner):
         A dictionary mapping the segment ID of the residue to the residue itself.
     """
     
-    def __init__(self, structure, cmap, f_thr=0.1, n_iters=5, max_size=40, **params):
+    def __init__(self, structure, cmap, partition=leidenalg.ModularityVertexPartition, f_thr=0.1, n_iters=5, max_size=40, **params):
         """
         Initialize the class.
 
@@ -756,7 +758,9 @@ class LeidenMiner(SingleMiner):
         structure : Bio.PDB.Stucture
             The structure from which to generate the fragments.
         cmap : str
-        The file holding the CMAP.
+            The file holding the CMAP.
+        partition : ??, optional
+            The partition of apply. The default is leidenalg.ModularityVertexPartition.
         f_thr : float in [0,1], optional
             The threshold above which two residues are interacting. It is also used as the weight
             assigned to the edges. The default is 0.1.
@@ -773,6 +777,7 @@ class LeidenMiner(SingleMiner):
         self.adjacency = []
         self.weights = []
         self.cmap = cmap
+        self.partition = partition
         self.f_thr = f_thr
         self.n_iters = n_iters
         self.max_size = max_size
@@ -854,7 +859,7 @@ class LeidenMiner(SingleMiner):
         # Define IGraph
         G = ig.Graph(self.adjacency)
         # Compute the partitions using the Leiden algorithm
-        partitions = leidenalg.find_partition(G, leidenalg.ModularityVertexPartition, weights=self.weights, n_iterations=self.n_iters, max_comm_size=self.max_size)
+        partitions = leidenalg.find_partition(G, self.partition, weights=self.weights, n_iterations=self.n_iters, max_comm_size=self.max_size)
         # Retrieve fragments
         self.fragments[self.structure.get_id()] = []
         frag_id = 1
