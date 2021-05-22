@@ -7,7 +7,6 @@ Created on Mon Apr  5 17:55:58 2021
 
 import numpy as np
 from scipy.stats import skew
-from scipy.spatial import distance
 from Bio.PDB.vectors import calc_dihedral
 
 from utils.structure import get_atoms_coords, get_ca_atoms_coords
@@ -271,7 +270,7 @@ class USRpp(Representation):
         -------
         None.
         """
-        super(MITResidue, self).__init__()
+        super(USRpp, self).__init__()
         self.features = np.zeros(shape=(USR.get_n_features()+7,))
         self.features[0:12] = USR(structure, ca_atoms=ca_atoms).get_features()
         self.stride_dict = stride_dict
@@ -356,12 +355,7 @@ class USRpp(Representation):
         numpy.ndarray
             The features.
         """
-        if self.features is None:
-            self._compute_secondary()
-            for i in range(USR.get_n_features()):
-                self.features[i] = self.momenta[i]
-            for i in range(7):
-                self.features[i+USR.get_n_features()] = self.secondary[i]
+        self._compute_secondary()
         return self.features
         
         
