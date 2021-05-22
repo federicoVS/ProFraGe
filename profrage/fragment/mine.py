@@ -820,7 +820,7 @@ class LeidenMiner(SingleMiner):
             self.adjacency.append((keys[i],keys[i+1]))
             res_1 = self._res_dict[keys[i]]
             res_2 = self._res_dict[keys[i+1]]
-            ca_dist_inv = 1/4
+            ca_dist_inv = 0.2613
             if 'CA' in res_1 and 'CA' in res_2:
                 ca_1 = res_1['CA']
                 ca_2 = res_2['CA']
@@ -832,7 +832,7 @@ class LeidenMiner(SingleMiner):
             _, _, res_1, res_2, f = entry
             if res_1 in self._res_dict and res_2 in self._res_dict and f > self.f_thr:
                 self.adjacency.append((res_1, res_2))
-                ca_dist_inv = 1/20
+                ca_dist_inv = 0.0416
                 if 'CA' in self._res_dict[res_1] and 'CA' in self._res_dict[res_2]:
                     ca_1 = self._res_dict[res_1]['CA']
                     ca_2 = self._res_dict[res_2]['CA']
