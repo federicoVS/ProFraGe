@@ -41,9 +41,9 @@ class LanguageModel:
 
         Parameters
         ----------
-        words : list of (Bio.PDB.Structure, int)
-            A list of words, where each word is a tuple holding a structure and the number of times it
-            appears.
+        words : list of (str, Bio.PDB.Structure, int)
+            A list of words, where each word is a tuple holding the secondary structure ID (obtained with
+            the Stride tool), the structure itself, and the number of times it appears in the dataset.
         score_thr : float in [0,1]
             The USR score threshold. The higher, the tighter.
 
@@ -64,8 +64,9 @@ class LanguageModel:
         ----------
         pdb_id : str
             The ID of the protein.
-        fragments : list of Bio.PDB.Structure
-            The fragments composing the structure. Note that these fragments should be unclustered.
+        fragments : list of (str, Bio.PDB.Structure)
+            A list of structures along with their secondary structure ID. Note that the fragments should be
+            filtered but not further clustered.
         ep : float in [0,1], optional
             The probability to assign to fragments that are not found in the training data. The default is 1e-3.
 
@@ -75,14 +76,15 @@ class LanguageModel:
         """
         probs = []
         for fragment in fragments:
-            f_momenta = USR(fragment).get_features()
+            f_momenta = USR(fragment[1]).get_features()
             best_score, best_pdb_id = -1, -1
             for word in self.words:
-                w_momenta = USR(word[0]).get_features()
-                score = USR.get_similarity_score(f_momenta, w_momenta)
-                if score > self.score_thr and score > best_score:
-                    best_pdb_id = word[0].get_id()
-                    best_score = score
+                if word[0] == fragment[0]:
+                    w_momenta = USR(word[1]).get_features()
+                    score = USR.get_similarity_score(f_momenta, w_momenta)
+                    if score > self.score_thr and score > best_score:
+                        best_pdb_id = word[1].get_id()
+                        best_score = score
             if best_pdb_id == -1:
                 probs.append(ep)
             else:
@@ -103,10 +105,10 @@ class LanguageModel:
         """
         total = 0
         for word in self.words:
-            total += word[1]
+            total += word[2]
         for word in self.words:
-            pdb_id = word[0].get_id()
-            self.word_probs[pdb_id] = word[1]/total
+            pdb_id = word[1].get_id()
+            self.word_probs[pdb_id] = word[2]/total
             
     def get_avg_plausibility(self):
         """
