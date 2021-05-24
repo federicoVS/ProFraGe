@@ -16,7 +16,6 @@ from structure.representation import USR
 from utils.structure import lengths_within
 from utils.io import to_pdb
 from utils.mican import run_mican
-from utils.tm_align import run_tm_align
 from utils.ProgressBar import ProgressBar
 
 class SeqAlign(Cluster):
@@ -339,11 +338,13 @@ class Mican(Cluster):
     ----------
     mican_dir : str
         The directory holding the MICAN tool.
+    length_pct : float in [0,1]
+        The percentage length two structures must share measure in their number of amino acids.
     score_thr : float in [0,1]
         The sTM-Align score threshold above which two structures are considered to be similar.
     """
     
-    def __init__(self, structures, mican_dir, score_thr=0.7, verbose=False, **params):
+    def __init__(self, structures, mican_dir, length_pct=0.8, score_thr=0.7, verbose=False, **params):
         """
         Initialize the class.
 
@@ -353,6 +354,8 @@ class Mican(Cluster):
             The list of structures to cluster.
         mican_dir : str
             The directory holding the MICAN tool.
+        length_pct : float in [0,1], optional
+            The percentage length two structures must share. The default is 0.8
         score_thr : float in [0,1], optional
             The sTM-Align score threshold. The default is 0.7.
         verbose : bool, optional
@@ -364,6 +367,7 @@ class Mican(Cluster):
         """
         super(Mican, self).__init__(structures, verbose)
         self.mican_dir = mican_dir
+        self.length_pct = length_pct
         self.score_thr = score_thr
         
     def cluster(self):
@@ -391,6 +395,8 @@ class Mican(Cluster):
                 for j in range(n):
                     if i != j and not placed[j]:
                         s_i, s_j = self.structures[i], self.structures[j]
+                        if not lengths_within(s_i, s_j, self.length_pct):
+                            continue
                         to_pdb(s_i, s_i.get_id()), to_pdb(s_j, s_j.get_id())
                         pdb_i, pdb_j = s_i.get_id() + '.pdb', s_j.get_id() + '.pdb'
                         score = run_mican(self.mican_dir, pdb_i, pdb_j)
@@ -417,11 +423,13 @@ class USRCluster(Cluster):
     score_thr : float in [0,1]
         The similarity score threshold above which two structures are considered to be similar. The higher
         the tighter.
+    ca_atoms : bool
+        Whether to only use C-alpha atoms to compute the USR.
     _features : numpy.ndarray
         A matrix holding the USR features for each structure.
     """
     
-    def __init__(self, structures, score_thr=0.5, verbose=False, **params):
+    def __init__(self, structures, score_thr=0.5, ca_atoms=False, verbose=False, **params):
         """
         Initialize the class.
 
@@ -431,6 +439,8 @@ class USRCluster(Cluster):
             The structures to be clustered.
         score_thr : float in [0,1], optional
             The similarity score threshold. The default is 0.5.
+        ca_atoms : bool, optional
+            Whether to only use C-alpha atoms to compute the USR. The default is False.
         verbose : bool, optional
             Whether to print progress information. The default is False.
 
@@ -440,6 +450,7 @@ class USRCluster(Cluster):
         """
         super(USRCluster, self).__init__(structures, verbose)
         self.score_thr = score_thr
+        self.ca_atoms = ca_atoms
         self._features = None
         
     def cluster(self):
@@ -456,7 +467,7 @@ class USRCluster(Cluster):
         self._features = np.zeros(shape=(n, USR.get_n_features()))
         # Compute USR for each structure
         for i in range(n):
-            usr = USR(self.structures[i])
+            usr = USR(self.structures[i], ca_atoms=self.ca_atoms)
             self._features[i,:] = usr.get_features()
         # Data structures for clustering
         cluster_id = 0
