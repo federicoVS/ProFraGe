@@ -8,6 +8,7 @@ Created on Fri May 21 00:01:13 2021
 import os
 import subprocess
 import pickle
+import numpy as np
 
 from utils.io import get_files
 from utils.ProgressBar import ProgressBar
@@ -85,7 +86,59 @@ def single_stride(stride_dir, pdb, out_dir='./', save=False):
         file.close()
     return code_dict
 
-def get_composition(code_dict, pct_thr=0.6, min_strands=4):
+def get_secondary_ratios(stride_dict):
+    """
+    Compute the ratios of each secondary structure within the structure.
+
+    Parameters
+    ----------
+    stride_dict : dict of str -> int
+        The dictionary built by the Stride tool.
+
+    Returns
+    -------
+    ratios : numpy.ndarray
+        The array containing the ratios. The order is H, G, I, E, B, T, C.
+    """
+    ratios = np.zeros(shape=(7,))
+    total = 0
+    for key in stride_dict:
+        total +=stride_dict[key]
+    if 'H' in stride_dict:
+        ratios[0] = stride_dict['H']/total
+    else:
+        ratios[0] = 0
+    if 'G' in stride_dict:
+        ratios[1] = stride_dict['G']/total
+    else:
+        ratios[1] = 0
+    if 'I' in stride_dict:
+        ratios[2] = stride_dict['I']/total
+    else:
+        ratios[2] = 0
+    if 'E' in stride_dict:
+        ratios[3] = stride_dict['E']/total
+    else:
+        ratios[3] = 0
+    if 'B' in stride_dict:
+        ratios[4] = stride_dict['B']/total
+    else:
+        ratios[4] = 0
+    if 'b' in stride_dict:
+        ratios[4] = stride_dict['b']/total
+    else:
+        ratios[4] = 0
+    if 'T' in stride_dict:
+        ratios[5] = stride_dict['T']/total
+    else:
+        ratios[5] = 0
+    if 'C' in stride_dict:
+        ratios[6] = stride_dict['C']/total
+    else:
+        ratios[6] = 0
+    return ratios
+
+def get_composition(code_dict, pct_thr=0.6):
     """
     Compute the main composition of the protein.
     
@@ -98,8 +151,6 @@ def get_composition(code_dict, pct_thr=0.6, min_strands=4):
     pct_thr : float in [0,1], optional
         The percentage threshold that is needed to reach for secondary structures to be the main
         components of the protein. The default is 0.6.
-    min_strands : int, optional
-        The minimum number of strands a protein must have. The default is 4.
 
     Returns
     -------
@@ -110,13 +161,6 @@ def get_composition(code_dict, pct_thr=0.6, min_strands=4):
     for key in code_dict:
         total += code_dict[key]
     code_dict = dict(sorted(code_dict.items(), key=lambda x: x[1], reverse=True))
-    # Strands are a little bit weird, so they should be their own cluster
-    e_count = 0
-    for key in code_dict:
-        if key == 'E':
-            e_count += 1
-    if e_count >= min_strands:
-        return 'E'
     keys, total_probs = '', 0
     for key in code_dict:
         prob = code_dict[key]/total

@@ -795,7 +795,7 @@ class LeidenMiner(SingleMiner):
         """
         for residue in self.structure.get_residues():
             r_id = residue.get_id()
-            if r_id[0] == ' ':
+            if r_id[0] == ' ' and r_id[1] >= 0:
                 self._res_dict[r_id[1]] = residue
         
     def _compute_adjacency(self, entries):
