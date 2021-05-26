@@ -45,7 +45,7 @@ def multi_stride(stride_dir, pdb_dir, out_dir='./', save=False, verbose=False):
     if verbose:
         progress_bar.end()
 
-def single_stride(stride_dir, pdb, out_dir='./', save=False):
+def single_stride(stride_dir, pdb):
     """
     Compute the secondary structure of the given protein using the Stride tool.
 
@@ -55,13 +55,11 @@ def single_stride(stride_dir, pdb, out_dir='./', save=False):
         The directory holding the Stride tool.
     pdb : str
         The PDB file to analyze.
-    out_dir : str, optional
-        The output directory. The default is './'.
-    save : bool, optional
-        Whether to save the output. The default is False.
 
     Returns
     -------
+    sequence : list of str
+        The sequence of the secondary structure.
     code_dict : dict of str -> int
         A dictionary mapping the secondary structure ID to its count within the protein.
     """
@@ -70,21 +68,17 @@ def single_stride(stride_dir, pdb, out_dir='./', save=False):
     output = ps.communicate()[0]
     lines = output.split(b'~~~~')
     code_dict = {}
+    sequence = []
     for line in lines:
         line = line.decode('utf-8')
         if line[0:4].strip() == 'ASG':
             code = line[25].strip()
+            sequence.append(code)
             if code not in code_dict:
                 code_dict[code] = 1
             else:
                 code_dict[code] += 1
-    if save:
-        pdb_id = os.path.basename(pdb)[:-4]
-        file_name = out_dir + pdb_id + '.pkl'
-        file = open(file_name, 'wb')
-        pickle.dump(code_dict, file)
-        file.close()
-    return code_dict
+    return sequence, code_dict
 
 def get_secondary_ratios(stride_dict):
     """
@@ -137,6 +131,87 @@ def get_secondary_ratios(stride_dict):
     else:
         ratios[6] = 0
     return ratios
+
+def get_eht_sequence(sequence):
+    """
+    Compute whether there exists a HTH, ETE, HTE, ETH composition.
+
+    Parameters
+    ----------
+    sequence : list of str
+        The sequence of the secondary structure.
+
+    Returns
+    -------
+    eht_seq : str
+        The EHT sequence configuration.
+    """
+    main_seq = ''
+    current = ''
+    for s in sequence:
+        if current == '' or current[-1] == s:
+            current += s
+        else:
+            last = current[-1]
+            if last == 'E' and len(current) >= 3:
+                main_seq += 'E'
+            elif last == 'H' and len(current) >= 2:
+                main_seq += 'H'
+            elif last == 'T' and len(current) >= 2:
+                main_seq += 'T'
+            current = ''
+        if len(main_seq) >= 3:
+            return main_seq
+    if len(current) == 0 and len(main_seq) == 3:
+        return main_seq
+    elif len(current) == 0 and len(main_seq) < 3:
+        return None
+    last = current[-1]
+    if last == 'E' and len(current) >= 3:
+        main_seq += 'E'
+    elif last == 'H' and len(current) >= 2:
+        main_seq += 'H'
+    elif last == 'T' and len(current) >= 2:
+        main_seq += 'T'
+    if len(main_seq) >= 3:
+        return main_seq
+    else:
+        return None
+
+def get_simple_composition(code_dict):
+    """
+    Compute the main composition of the protein in a very simplistic way.
+    
+    It limits itself to cluster: helices, strands, strands+helices, coils, turns.
+
+    Parameters
+    ----------
+    code_dict : dict of str -> int
+        The dictionary of secondary structures.
+
+    Returns
+    -------
+    keys : str
+        The secondary structures better representing the protein.
+    """
+    if 'E' in code_dict and 'H' in code_dict:
+        return 'EH'
+    elif 'E' in code_dict and 'G' in code_dict:
+        return 'EG'
+    elif 'E' in code_dict and 'I' in code_dict:
+        return 'EI'
+    elif 'E' in code_dict:
+        return 'E'
+    elif 'H' in code_dict:
+        return 'H'
+    elif 'T' in code_dict:
+        return 'T'
+    elif 'G' in code_dict:
+        return 'G'
+    elif 'I' in code_dict:
+        return 'I'
+    elif 'C' in code_dict:
+        return 'C'
 
 def get_composition(code_dict, pct_thr=0.6):
     """
