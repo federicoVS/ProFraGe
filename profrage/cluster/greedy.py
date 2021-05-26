@@ -332,7 +332,7 @@ class CASuperImpose(Cluster):
             
 class Mican(Cluster):
     """
-    Perform clustering based on sTM-Align score similarity computed using the MICAN tool.
+    Perform clustering based on TM-Align score similarity computed using the MICAN tool.
     
     Attributes
     ----------
@@ -341,7 +341,7 @@ class Mican(Cluster):
     length_pct : float in [0,1]
         The percentage length two structures must share measure in their number of amino acids.
     score_thr : float in [0,1]
-        The sTM-Align score threshold above which two structures are considered to be similar.
+        The TM-Align score threshold above which two structures are considered to be similar.
     """
     
     def __init__(self, structures, mican_dir, length_pct=0.8, score_thr=0.7, verbose=False, **params):
@@ -357,7 +357,7 @@ class Mican(Cluster):
         length_pct : float in [0,1], optional
             The percentage length two structures must share. The default is 0.8
         score_thr : float in [0,1], optional
-            The sTM-Align score threshold. The default is 0.7.
+            The TM-Align score threshold. The default is 0.7.
         verbose : bool, optional
             Whether to print progress information. The default is False.
 

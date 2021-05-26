@@ -738,6 +738,8 @@ class LeidenMiner(SingleMiner):
         The file holding the CMAP.
     partition : ??
         The partition of apply. See the Leiden documentation for more information.
+    bb_strength : float
+        The offset strength to add to the weights of the backbone.
     f_thr : float in [0,1]
         The threshold above which two residues are interacting. It is also used as the weight assigned to
         the edges.
@@ -749,7 +751,7 @@ class LeidenMiner(SingleMiner):
         A dictionary mapping the segment ID of the residue to the residue itself.
     """
     
-    def __init__(self, structure, cmap, partition=leidenalg.ModularityVertexPartition, f_thr=0.1, n_iters=5, max_size=40, **params):
+    def __init__(self, structure, cmap, partition=leidenalg.ModularityVertexPartition, bb_strength=1, f_thr=0.1, n_iters=5, max_size=40, **params):
         """
         Initialize the class.
 
@@ -761,6 +763,8 @@ class LeidenMiner(SingleMiner):
             The file holding the CMAP.
         partition : ??, optional
             The partition of apply. The default is leidenalg.ModularityVertexPartition.
+        bb_strength : float, optional
+            The offset strength to add to the weights of the backbone. The default is 1.
         f_thr : float in [0,1], optional
             The threshold above which two residues are interacting. It is also used as the weight
             assigned to the edges. The default is 0.1.
@@ -778,6 +782,7 @@ class LeidenMiner(SingleMiner):
         self.weights = []
         self.cmap = cmap
         self.partition = partition
+        self.bb_strength = bb_strength
         self.f_thr = f_thr
         self.n_iters = n_iters
         self.max_size = max_size
@@ -820,19 +825,19 @@ class LeidenMiner(SingleMiner):
             self.adjacency.append((keys[i],keys[i+1]))
             res_1 = self._res_dict[keys[i]]
             res_2 = self._res_dict[keys[i+1]]
-            ca_dist_inv = 0.2613
+            ca_dist_inv = 0.2612
             if 'CA' in res_1 and 'CA' in res_2:
                 ca_1 = res_1['CA']
                 ca_2 = res_2['CA']
                 ca_dist = np.linalg.norm(ca_1.get_vector()-ca_2.get_vector())
-                ca_dist_inv = 1 + 1/ca_dist
+                ca_dist_inv = self.bb_strength + 1/ca_dist
             self.weights.append(ca_dist_inv)
         # Interaction connections
         for entry in entries:
             _, _, res_1, res_2, f = entry
             if res_1 in self._res_dict and res_2 in self._res_dict and f > self.f_thr:
                 self.adjacency.append((res_1, res_2))
-                ca_dist_inv = 0.0416
+                ca_dist_inv = 0.0421
                 if 'CA' in self._res_dict[res_1] and 'CA' in self._res_dict[res_2]:
                     ca_1 = self._res_dict[res_1]['CA']
                     ca_2 = self._res_dict[res_2]['CA']
