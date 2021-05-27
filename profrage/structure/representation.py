@@ -5,12 +5,17 @@ Created on Mon Apr  5 17:55:58 2021
 @author: Federico van Swaaij
 """
 
+import os
+
 import numpy as np
+
 from scipy.spatial import distance
 from scipy.stats import skew
+
 from Bio.PDB.vectors import calc_dihedral
 
 from utils.structure import get_atoms_coords, get_ca_atoms_coords
+from utils.stride import SS_CODE_TO_INT, single_stride
 
 class Representation:
     """An abstract class to implement structure representation."""
@@ -256,6 +261,109 @@ class USR(Representation):
         if self.momenta is None:
             self._compute_all()
         return self.momenta
+    
+class FullStride(Representation):
+    """
+    Representation of the protein by its secondary structures elements.
+    
+    The secondary structure includes the secondary structures frequencies and their average Phi, Psi,
+    and solvent area values.
+    
+    The representation is obtained using the Stride tool.
+    
+    Attributes
+    ----------
+    pdb_id : str
+        The PDB ID.
+    pdb : str
+        The PDB file.
+    features : numpy.ndarray
+        The feature-vector, where each element holds the ratio at which a specific secondary structure
+        appears.
+    """
+    
+    def __init__(self, stride_dir, pdb):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        stride_dir : str
+            The directory holding the Stride tool.
+        pdb : str
+            The PDB file holding the structure to represent.
+
+        Returns
+        -------
+        None.
+        """
+        super(FullStride, self).__init__()
+        self.pdb_id = os.path.basename(pdb)[:-4]
+        self.pdb = pdb
+        self.features = np.zeros(shape=(28,))
+        full_desc = single_stride(stride_dir, pdb)
+        self._compute_features(full_desc)
+        
+    @staticmethod
+    def get_similarity_score(features_1, features_2):
+        """
+        Compute the similarity score between two feature-vectors.
+        
+        The similarity is computed as the cosine similarity.
+
+        Parameters
+        ----------
+        features_1 : numpy.ndarray
+            The first feature-vector.
+        features_2 : numpy.ndarray
+            The second feature-vector.
+
+        Returns
+        -------
+        float in [0,1]
+            The similarity score.
+        """
+        return 1 - distance.cosine(features_1, features_2)
+    
+    @staticmethod
+    def get_n_features():
+        """
+        Return the number of features.
+
+        Returns
+        -------
+        int
+            The length of the feature-vector.
+        """
+        return 28
+    
+    def _compute_features(self, full_desc):
+        tmp_dict = {}
+        for fd in full_desc:
+            code, phi, psi, area = fd
+            if code not in tmp_dict:
+                tmp_dict[code] = [0, [], [], []]
+            tmp_dict[code][0] += 1
+            tmp_dict[code][1].append(phi)
+            tmp_dict[code][2].append(psi)
+            tmp_dict[code][3].append(area)
+        for key in tmp_dict:
+            offset = 4*SS_CODE_TO_INT[key]
+            self.features[offset] = float(tmp_dict[key][0]/len(tmp_dict))
+            self.features[offset+1] = np.mean(tmp_dict[key][1])
+            self.features[offset+2] = np.mean(tmp_dict[key][2])
+            self.features[offset+3] = np.mean(tmp_dict[key][3])
+    
+    def get_features(self):
+        """
+        Return the features.
+
+        Returns
+        -------
+        numpy.ndarray
+            The feature-vector.
+        """
+        return self.features
         
 class MITResidue(Representation):
     """
