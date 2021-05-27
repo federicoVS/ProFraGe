@@ -7,6 +7,8 @@ Created on Wed Mar 31 15:11:01 2021
 
 import os
 import numpy as np
+from scipy.spatial import distance
+
 from Bio import pairwise2
 from Bio.PDB.Polypeptide import CaPPBuilder
 from Bio.PDB.Superimposer import Superimposer

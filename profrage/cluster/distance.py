@@ -7,10 +7,11 @@ Created on Fri Apr  2 16:42:01 2021
 
 import numpy as np
 from scipy.sparse import csr_matrix
+
 from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering
 from sklearn.mixture import GaussianMixture
-from cluster.Cluster import Cluster
 
+from cluster.Cluster import Cluster
 from structure.representation import USR
 from utils.ProgressBar import ProgressBar
 
@@ -250,13 +251,15 @@ class Agglomerative(Cluster):
         The matrix of features.
     k : int
         The number of clusters.
+    affinity : str
+        The metric used to compute the linkage.
     linkage: str
         The linkage criterion to use
     distance_threshold : float
         The linkage distance threshold above which clusters will not be merged
     """
     
-    def __init__(self, structures, features, k=None, linkage='ward', distance_threshold=10, verbose=False, **params):
+    def __init__(self, structures, features, k=None, affinity='euclidean', linkage='ward', distance_threshold=10, verbose=False, **params):
         """
         Initialize the class.
 
@@ -268,10 +271,12 @@ class Agglomerative(Cluster):
             The matrix of features.
         k : int, optional
             The number of clusters. The default is None.
+        affinity : str, optional
+            The metric used to compute the linkage. The default is 'euclidian'.
         linkage : str, optional
             The linkage criterion to use. The default is 'ward'.
         distance_threshold : float, optional
-            The linkage distance threshold above which clusters will not be merged
+            The linkage distance threshold above which clusters will not be merged.
         verbose : bool, optional
             Whether to print progress information. The default is False.
 
@@ -282,6 +287,7 @@ class Agglomerative(Cluster):
         super(Agglomerative, self).__init__(structures, verbose)
         self.features = features
         self.k = k
+        self.affinity = affinity
         self.linkage = linkage
         self.distance_threshold = distance_threshold
         
@@ -296,7 +302,7 @@ class Agglomerative(Cluster):
         if self.verbose:
             print('Clustering...')
         # Cluster using the hierarchical algorithm
-        aggcl = AgglomerativeClustering(n_clusters=self.k, linkage=self.linkage, compute_full_tree=True, distance_threshold=self.distance_threshold)
+        aggcl = AgglomerativeClustering(n_clusters=self.k, affinity=self.affinity, linkage=self.linkage, compute_full_tree=True, distance_threshold=self.distance_threshold)
         aggcl.fit(self.features)
         # Retrieve the clusters
         for i in range(len(aggcl.labels_)):

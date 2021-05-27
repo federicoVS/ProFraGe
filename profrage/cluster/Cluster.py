@@ -119,6 +119,10 @@ class Cluster:
         structure : Bio.PDB.Structure
             The best representative structure for the cluster.
         """
+        # Check if there is only one structure in the cluster
+        if len(self.clusters[cluster_id]) == 1:
+            s_id = self.clusters[cluster_id][0]
+            return self.structures[s_id]
         # Compute the scores
         features = np.zeros(shape=(len(self.clusters[cluster_id]),USR.get_n_features()))
         for i in range(len(self.clusters[cluster_id])):
