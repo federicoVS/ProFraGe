@@ -17,7 +17,7 @@ from utils.stride import single_stride, get_composition, get_stride_frequencies
 from utils.io import get_files, from_pdb, to_pdb
 from utils.ProgressBar import ProgressBar
 
-def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, miner_params, pre_cluster_params, cluster_params, lm_score_thr=0.6, to_show=3, verbose=False):
+def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, miner_params, pre_cluster_params, cluster_params, range_params, spherical_params, compact_params, connected_params, lm_score_thr=0.6, to_show=3, verbose=False):
     """
     Perform GridSearch based on the Leiden mining algorithm coupled with Agglomerative clustering.
 
@@ -39,6 +39,14 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
         The parameters for the pre-clustering (using Stride).
     cluster_params : dict of str -> Any
         The parameters for the Agglomerative clustering.
+    range_params : dict of str -> Any
+        The parameters for the range filtering. Note that just the `lower` key is needed.
+    spherical_params : dict of str -> Any
+        The parameters for the spherical filtering.
+    compact_params : dict of str -> Any
+        The parameters for the compact filtering.
+    connected_params : dict of str -> Any
+        The parameters for the connected components filtering.
     lm_score_thr : float in [0,1], optional
         The USR threshold score to be used in the language model. The default is 0.6.
     to_show : int, optional
@@ -50,11 +58,13 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
     -------
     None.
     """
+    # Compute total number of permutations
     total_len, counter = 1, 1
     for p in miner_params:
         total_len *= len(miner_params[p])
     search_space = (dict(zip(miner_params, x)) for x in itertools.product(*miner_params.values()))
     best_params = []
+    # Start the grid search
     for param_config in search_space:
         if verbose:
             print(f'Configuration {counter}/{total_len}')
@@ -85,10 +95,13 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
             os.makedirs('lhg-tmp/')
         if verbose:
             print('Filtering training fragments...')
+        # Modify the range parameters
+        range_params['upper'] = param_config['max_size']
+        # Filter the fragments
         for frag in fragments:
-            if in_range(frag) and is_spherical(frag) and is_compact(frag) and is_connected(frag):
+            if in_range(frag, **range_params) and is_spherical(frag, **spherical_params) and is_compact(frag, **compact_params) and is_connected(frag, **connected_params):
                 to_pdb(frag, frag.get_id(), out_dir='lhg-tmp/')
-        pdbs = get_files('lhg-tmp/', ext='.pkl')
+        pdbs = get_files('lhg-tmp/')
         assignements = {}
         pre_clusters = {}
         representatives = []
