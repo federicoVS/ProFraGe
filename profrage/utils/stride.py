@@ -5,13 +5,20 @@ Created on Fri May 21 00:01:13 2021
 @author: Federico van Swaaij
 """
 
-import os
 import subprocess
-import pickle
 import numpy as np
 
 from utils.io import get_files
 from utils.ProgressBar import ProgressBar
+
+SS_CODE_TO_INT = {'H': 0,
+                  'G': 1,
+                  'I': 2,
+                  'E': 3,
+                  'B': 4,
+                  'b': 4,
+                  'T': 5,
+                  'C': 6}
 
 def multi_stride(stride_dir, pdb_dir, out_dir='./', save=False, verbose=False):
     """
@@ -58,27 +65,46 @@ def single_stride(stride_dir, pdb):
 
     Returns
     -------
-    sequence : list of str
-        The sequence of the secondary structure.
-    code_dict : dict of str -> int
-        A dictionary mapping the secondary structure ID to its count within the protein.
+    stride_desc : list of (str, float, float, float)
+        The full description of the secondary structure: secondary structure code, Phi angle, Psi angle,
+        and residue solvent accessible area.
     """
     command = stride_dir + 'stride ' + pdb
     ps = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     output = ps.communicate()[0]
     lines = output.split(b'~~~~')
-    code_dict = {}
-    sequence = []
+    stride_desc = []
     for line in lines:
         line = line.decode('utf-8')
         if line[0:4].strip() == 'ASG':
             code = line[25].strip()
-            sequence.append(code)
-            if code not in code_dict:
-                code_dict[code] = 1
-            else:
-                code_dict[code] += 1
-    return sequence, code_dict
+            phi = float(line[43:49].strip())
+            psi = float(line[53:59].strip())
+            area = float(line[65:69].strip())
+            stride_desc.append((code, phi, psi, area))
+    return stride_desc
+
+def get_stride_frequencies(stride_desc):
+    """
+    Compute the frequencies for each secondary structure element.
+
+    Parameters
+    ----------
+    stride_desc : list of (str, float, float, float)
+        The Stride description.
+
+    Returns
+    -------
+    freqs : dict of str -> int
+        The dictionary mapping each code to its frequency.
+    """
+    freqs = {}
+    for sd in stride_desc:
+        code = sd[0]
+        if code not in freqs:
+            freqs[code] = 0
+        freqs[code] += 1
+    return freqs
 
 def get_secondary_ratios(stride_dict):
     """
@@ -132,7 +158,7 @@ def get_secondary_ratios(stride_dict):
         ratios[6] = 0
     return ratios
 
-def get_eht_sequence(sequence):
+def get_eht_sequence(stride_desc):
     """
     Compute whether there exists a HTH, ETE, HTE, ETH composition.
 
@@ -146,6 +172,11 @@ def get_eht_sequence(sequence):
     eht_seq : str
         The EHT sequence configuration.
     """
+    # Build the sequence
+    sequence = []
+    for sd in stride_desc:
+        sequence.append(sd[0])
+    # Analyze the sequence
     main_seq = ''
     current = ''
     for s in sequence:
@@ -178,7 +209,7 @@ def get_eht_sequence(sequence):
     else:
         return None
 
-def get_simple_composition(code_dict):
+def get_simple_composition(stride_dict):
     """
     Compute the main composition of the protein in a very simplistic way.
     
@@ -186,7 +217,7 @@ def get_simple_composition(code_dict):
 
     Parameters
     ----------
-    code_dict : dict of str -> int
+    stride_dict : dict of str -> int
         The dictionary of secondary structures.
 
     Returns
@@ -194,26 +225,26 @@ def get_simple_composition(code_dict):
     keys : str
         The secondary structures better representing the protein.
     """
-    if 'E' in code_dict and 'H' in code_dict:
+    if 'E' in stride_dict and 'H' in stride_dict:
         return 'EH'
-    elif 'E' in code_dict and 'G' in code_dict:
+    elif 'E' in stride_dict and 'G' in stride_dict:
         return 'EG'
-    elif 'E' in code_dict and 'I' in code_dict:
+    elif 'E' in stride_dict and 'I' in stride_dict:
         return 'EI'
-    elif 'E' in code_dict:
+    elif 'E' in stride_dict:
         return 'E'
-    elif 'H' in code_dict:
+    elif 'H' in stride_dict:
         return 'H'
-    elif 'T' in code_dict:
+    elif 'T' in stride_dict:
         return 'T'
-    elif 'G' in code_dict:
+    elif 'G' in stride_dict:
         return 'G'
-    elif 'I' in code_dict:
+    elif 'I' in stride_dict:
         return 'I'
-    elif 'C' in code_dict:
+    elif 'C' in stride_dict:
         return 'C'
 
-def get_composition(code_dict, pct_thr=0.6):
+def get_composition(stride_dict, pct_thr=0.6):
     """
     Compute the main composition of the protein.
     
@@ -221,7 +252,7 @@ def get_composition(code_dict, pct_thr=0.6):
 
     Parameters
     ----------
-    code_dict : dict of str -> int
+    stride_dict : dict of str -> int
         The dictionary of secondary structures.
     pct_thr : float in [0,1], optional
         The percentage threshold that is needed to reach for secondary structures to be the main
@@ -233,12 +264,12 @@ def get_composition(code_dict, pct_thr=0.6):
         The secondary structures better representing the protein.
     """
     total = 0
-    for key in code_dict:
-        total += code_dict[key]
-    code_dict = dict(sorted(code_dict.items(), key=lambda x: x[1], reverse=True))
+    for key in stride_dict:
+        total += stride_dict[key]
+    stride_dict = dict(sorted(stride_dict.items(), key=lambda x: x[1], reverse=True))
     keys, total_probs = '', 0
-    for key in code_dict:
-        prob = code_dict[key]/total
+    for key in stride_dict:
+        prob = stride_dict[key]/total
         total_probs += prob
         keys += key
         if total_probs >= pct_thr:
