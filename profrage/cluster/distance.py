@@ -6,10 +6,12 @@ Created on Fri Apr  2 16:42:01 2021
 """
 
 import numpy as np
+
 from scipy.sparse import csr_matrix
 
 from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering
 from sklearn.mixture import GaussianMixture
+
 
 from cluster.Cluster import Cluster
 from structure.representation import USR
@@ -31,7 +33,7 @@ class Spectral(Cluster):
     g_delta : int
         The width of the Gaussian kernel.
     to_invert : bool
-        Whether to print progress information.
+        Whether to invert the distance matrix.
     """
     
     def __init__(self, structures, dist_matrix, k=100, g_delta=16, to_invert=False, verbose=False, **params):
@@ -100,9 +102,7 @@ class Spectral(Cluster):
             cluster_id = sc.labels_[i]
             if cluster_id not in self.clusters:
                 self.clusters[cluster_id] = []
-                self.clusters[cluster_id].append(i)
-            else:
-                self.clusters[cluster_id].append(i)
+            self.clusters[cluster_id].append(i)
 
 class KMean(Cluster):
     """
@@ -225,6 +225,9 @@ class GMM(Cluster):
         -------
         None.
         """
+        # Check if the number of samples is higher than the number of features
+        if len(self.structures) < self.k:
+            return
         if self.verbose:
             print('Clustering...')
         gm = GaussianMixture(n_components=self.k, tol=self.tol, reg_covar=self.reg_covar, max_iter=self.max_iter, n_init=self.n_init, verbose=self.verbose)
@@ -459,4 +462,3 @@ class KUSR(Cluster):
                 self.clusters[cluster_id].append(i)
         if self.verbose:
             progress_bar.end()
-            
