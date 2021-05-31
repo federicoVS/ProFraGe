@@ -84,6 +84,25 @@ def single_stride(stride_dir, pdb):
             stride_desc.append((code, phi, psi, area))
     return stride_desc
 
+def get_stride_sequence(stride_desc):
+    """
+    Return the sequence of the secondary structure.
+
+    Parameters
+    ----------
+    stride_desc : list of (str, float, float, float)
+        The Stride description.
+
+    Returns
+    -------
+    sequence : list of str
+        The secondary structure sequence.
+    """
+    sequence = []
+    for sd in stride_desc:
+        sequence.append(sd[0])
+    return sequence
+
 def get_stride_frequencies(stride_desc):
     """
     Compute the frequencies for each secondary structure element.
@@ -158,56 +177,47 @@ def get_secondary_ratios(stride_dict):
         ratios[6] = 0
     return ratios
 
-def get_eht_sequence(stride_desc):
+def get_eh_numbers(sequence, ne=3, nh=3):
     """
-    Compute whether there exists a HTH, ETE, HTE, ETH composition.
+    Return the number of times strands (E) and alpha-helices (H) appear.
+    
+    A strand or an alpha-helix are considered such if a sequence of at least the specified length can
+    be found.
 
     Parameters
     ----------
-    sequence : list of str
-        The sequence of the secondary structure.
+    stride_dict : dict of str -> int
+        The dictionary of secondary structures frequencies.
+    ne : int, optional
+        The minimum amount of consecutive strands to be considered a strand. The default is 3.
+    nh : int, optional
+        The minimum amount of consecutive helices to be considered a helix. The default is 3.
 
     Returns
     -------
-    eht_seq : str
-        The EHT sequence configuration.
+    str
+        A string of the format 'E{count E}H{count H}.
     """
-    # Build the sequence
-    sequence = []
-    for sd in stride_desc:
-        sequence.append(sd[0])
-    # Analyze the sequence
-    main_seq = ''
+    e_count, h_count = 0, 0
     current = ''
-    for s in sequence:
-        if current == '' or current[-1] == s:
-            current += s
-        else:
-            last = current[-1]
-            if last == 'E' and len(current) >= 3:
-                main_seq += 'E'
-            elif last == 'H' and len(current) >= 2:
-                main_seq += 'H'
-            elif last == 'T' and len(current) >= 2:
-                main_seq += 'T'
+    for elem in sequence:
+        if elem == 'E' and (current == '' or current[0] == 'E'):
+            current += 'E'
+        elif elem == 'H' and (current == '' or current[0] == 'H'):
+            current += 'H'
+        elif current != '':
+            if current[0] == 'E' and len(current) >= ne:
+                e_count += 1
+            elif current[0] == 'H' and len(current) >= nh:
+                h_count += 1
             current = ''
-        if len(main_seq) >= 3:
-            return main_seq
-    if len(current) == 0 and len(main_seq) == 3:
-        return main_seq
-    elif len(current) == 0 and len(main_seq) < 3:
-        return None
-    last = current[-1]
-    if last == 'E' and len(current) >= 3:
-        main_seq += 'E'
-    elif last == 'H' and len(current) >= 2:
-        main_seq += 'H'
-    elif last == 'T' and len(current) >= 2:
-        main_seq += 'T'
-    if len(main_seq) >= 3:
-        return main_seq
-    else:
-        return None
+            if elem == 'E' or elem == 'H':
+                current += elem
+    if current != '' and current[0] == 'E' and len(current) >= ne:
+        e_count += 1
+    elif current != '' and current[0] == 'H' and len(current) >= nh:
+        h_count += 1
+    return 'E' + str(e_count) + 'H' + str(h_count)
 
 def get_simple_composition(stride_dict):
     """
@@ -218,7 +228,7 @@ def get_simple_composition(stride_dict):
     Parameters
     ----------
     stride_dict : dict of str -> int
-        The dictionary of secondary structures.
+        The dictionary of secondary structures frequencies.
 
     Returns
     -------

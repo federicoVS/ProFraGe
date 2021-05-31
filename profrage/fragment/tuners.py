@@ -9,6 +9,7 @@ import itertools
 import numpy as np
 
 from cluster.distance import Agglomerative
+from cluster.greedy import USRCluster, StrideCluster, USRStrideCluster
 from fragment.mine import LeidenMiner
 from fragment.filtering import in_range, is_spherical, is_compact, is_connected
 from fragment.LanguageModel import LanguageModel
@@ -17,7 +18,7 @@ from utils.stride import single_stride, get_composition, get_stride_frequencies
 from utils.io import get_files, from_pdb, to_pdb
 from utils.ProgressBar import ProgressBar
 
-def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, miner_params, pre_cluster_params, cluster_params, range_params, spherical_params, compact_params, connected_params, lm_score_thr=0.6, to_show=3, verbose=False):
+def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, cluster_name, miner_params, pre_cluster_params, cluster_params, range_params, spherical_params, compact_params, connected_params, lm_score_thr=0.6, to_show=3, verbose=False):
     """
     Perform GridSearch based on the Leiden mining algorithm coupled with Agglomerative clustering.
 
@@ -33,6 +34,9 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
         The directory holding the CMAP files for the test set.
     stride_dir : str
         The directory holding the Stride tool.
+    cluster_name : str
+        The name of the clustering algorithm to use.
+        Valid names are: 'aggl', 'usrc', 'stridec', 'usrstridec'
     miner_params : dict of str -> Any
         The parameters to try for the Leiden algorithm.
     pre_cluster_params : dict of str -> Any
@@ -129,11 +133,19 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
             for i in range(len(structures)):
                 feat = FullStride(stride_dir, 'lhg-tmp/'+structures[i].get_id()+'.pdb').get_features()
                 features[i,:] = feat
-            aggl = Agglomerative(structures, features, **cluster_params)
-            aggl.cluster()
-            for cluster_id in range(len(aggl)):
-                rep = aggl.best_representative(cluster_id)
-                freq = len(aggl.clusters[cluster_id])
+            clualg = None
+            if cluster_name == 'aggl':
+                clualg = Agglomerative(structures, features, **cluster_params)
+            elif cluster_name == 'usrc':
+                clualg = USRCluster(structures, **cluster_params)
+            elif cluster_name == 'stridec':
+                clualg = StrideCluster(structures, stride_dir, 'lhg-tmp/', **cluster_params)
+            elif cluster_name == 'usrstridec':
+                clualg = USRStrideCluster(structures, stride_dir, 'lhg-tmp/', **cluster_params)
+            clualg.cluster()
+            for cluster_id in range(len(clualg)):
+                rep = clualg.best_representative(cluster_id)
+                freq = len(clualg.clusters[cluster_id])
                 representatives.append((keys, rep, freq))
         # Mine fragments on the test set
         pdbs = get_files(test_set_dir, ext='.pdb')

@@ -818,9 +818,10 @@ class LeidenMiner(SingleMiner):
         -------
         None.
         """
-        # Backbone connections
+        # Get the keys and sorted (though they should already be)
         keys = self._res_dict.keys()
-        keys = sorted(keys, key=lambda x: x) # should already be sorted but just to be sure
+        keys = sorted(keys, key=lambda x: x)
+        # Backbone connections
         for i in range(len(keys)-1):
             self.adjacency.append((keys[i],keys[i+1]))
             res_1 = self._res_dict[keys[i]]
