@@ -7,14 +7,14 @@ Created on Wed Mar 31 15:11:01 2021
 
 import os
 import numpy as np
-from scipy.spatial import distance
 
 from Bio import pairwise2
 from Bio.PDB.Polypeptide import CaPPBuilder
 from Bio.PDB.Superimposer import Superimposer
 
 from cluster.Cluster import Cluster
-from structure.representation import USR
+from structure.representation import USR, FullStride
+from fragment.graphs import GraphKernel
 from utils.structure import lengths_within
 from utils.io import to_pdb
 from utils.mican import run_mican
@@ -340,13 +340,15 @@ class Mican(Cluster):
     ----------
     mican_dir : str
         The directory holding the MICAN tool.
+    pdb_dir : str
+        The directory holding the PDB files.
     length_pct : float in [0,1]
         The percentage length two structures must share measure in their number of amino acids.
     score_thr : float in [0,1]
         The TM-Align score threshold above which two structures are considered to be similar.
     """
     
-    def __init__(self, structures, mican_dir, length_pct=0.8, score_thr=0.7, verbose=False, **params):
+    def __init__(self, structures, mican_dir, pdb_dir, score_thr=0.5, length_pct=0.8, verbose=False, **params):
         """
         Initialize the class.
 
@@ -356,10 +358,12 @@ class Mican(Cluster):
             The list of structures to cluster.
         mican_dir : str
             The directory holding the MICAN tool.
+        pdb_dir : str
+            The directory holding the PDB files.
+        score_thr : float in [0,1], optional
+            The TM-Align score threshold. The default is 0.5.
         length_pct : float in [0,1], optional
             The percentage length two structures must share. The default is 0.8
-        score_thr : float in [0,1], optional
-            The TM-Align score threshold. The default is 0.7.
         verbose : bool, optional
             Whether to print progress information. The default is False.
 
@@ -369,8 +373,9 @@ class Mican(Cluster):
         """
         super(Mican, self).__init__(structures, verbose)
         self.mican_dir = mican_dir
-        self.length_pct = length_pct
+        self.pdb_dir = pdb_dir
         self.score_thr = score_thr
+        self.length_pct = length_pct
         
     def cluster(self):
         """
@@ -399,16 +404,12 @@ class Mican(Cluster):
                         s_i, s_j = self.structures[i], self.structures[j]
                         if not lengths_within(s_i, s_j, self.length_pct):
                             continue
-                        to_pdb(s_i, s_i.get_id()), to_pdb(s_j, s_j.get_id())
-                        pdb_i, pdb_j = s_i.get_id() + '.pdb', s_j.get_id() + '.pdb'
+                        pdb_i = self.pdb_dir + s_i.get_id() + '.pdb'
+                        pdb_j = self.pdb_dir + s_j.get_id() + '.pdb'
                         score = run_mican(self.mican_dir, pdb_i, pdb_j)
-                        if score >= self.score_thr:
+                        if score > self.score_thr:
                             placed[j] = True
                             self.clusters[cluster_id].append(j)
-                        if os.path.exists(pdb_i):
-                            os.remove(pdb_i)
-                        if os.path.exists(pdb_j):
-                            os.remove(pdb_j)
                 cluster_id += 1
         if self.verbose:
             progress_bar.end()
@@ -417,8 +418,8 @@ class USRCluster(Cluster):
     """
     Perform clustering of the structures based on their USR score.
     
-    Two structures are considered to be similar if the cosine distance between their USR features is
-    below a specified threshold.
+    Two structures are considered to be similar if the USR-similarity between their USR features is
+    above the specified threshold.
     
     Attributes
     ----------
@@ -489,6 +490,260 @@ class USRCluster(Cluster):
                     if j != i and not placed[j]:
                         score = USR.get_similarity_score(self._features[i], self._features[j])
                         if score > self.score_thr:
+                            placed[j] = True
+                            self.clusters[cluster_id].append(j)
+                cluster_id += 1
+        if self.verbose:
+            progress_bar.end()
+            
+class StrideCluster(Cluster):
+    """
+    Perform clustering of the structures based on their Stride score.
+    
+    Two structures are considered to be similar if the cosine distance between their Stride features is
+    above the specified threshold.
+    
+    Attributes
+    ----------
+    stride_dir : str
+        The directory holding the Stride tool.
+    pdb_dir : str
+        The directory holding the PDB files to cluster.
+    cosine_thr : float in [0,1]
+        The cosine score threshold above which two structures are considered to be similar. The higher
+        the tighter.
+    _features : numpy.ndarray
+        A matrix holding the USR features for each structure.
+    """
+    
+    def __init__(self, structures, stride_dir, pdb_dir, cosine_thr=0.5, verbose=False, **params):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        structures : list of Bio.PDB.Structure
+            The structures to be clustered.
+        stride_dir : str
+            The directory holding the Stride tool.
+        pdb_dir : str
+            The directory holding the PDB files to cluster.
+        cosine_thr : float in [0,1], optional
+            The cosine score threshold. The default is 0.5.
+        verbose : bool, optional
+            Whether to print progress information. The default is False.
+
+        Returns
+        -------
+        None.
+        """
+        super(StrideCluster, self).__init__(structures, verbose)
+        self.stride_dir = stride_dir
+        self.pdb_dir = pdb_dir
+        self.cosine_thr = cosine_thr
+        self._features = None
+        
+    def cluster(self):
+        """
+        Perform the clustering.
+
+        Returns
+        -------
+        None.
+        """
+        # Define n for convenience
+        n = len(self.structures)
+        # Define feature matrices
+        self._features = np.zeros(shape=(n, FullStride.get_n_features()))
+        # Compute USR for each structure
+        for i in range(n):
+            pdb = self.pdb_dir + self.structures[i].get_id() + '.pdb'
+            self._features[i,:] = FullStride(self.stride_dir, pdb).get_features()
+        # Data structures for clustering
+        cluster_id = 0
+        placed = [False for i in range(n)]
+        progress_bar = ProgressBar(n)
+        if self.verbose:
+            print('Clustering...')
+            progress_bar.start()
+        for i in range(n):
+            if self.verbose:
+                progress_bar.step()
+            if not placed[i]:
+                placed[i] = True
+                self.clusters[cluster_id] = []
+                self.clusters[cluster_id].append(i)
+                for j in range(n):
+                    if j != i and not placed[j]:
+                        cosine = FullStride.get_similarity_score(self._features[i], self._features[j])
+                        if cosine > self.cosine_thr:
+                            placed[j] = True
+                            self.clusters[cluster_id].append(j)
+                cluster_id += 1
+        if self.verbose:
+            progress_bar.end()
+            
+class USRStrideCluster(Cluster):
+    """
+    Perform clustering of the structures combining their USR and Stride scores.
+    
+    Two structures are considered to be similar if the sum of the USR and Stride scores are above the
+    specified threshold.
+    
+    Attributes
+    ----------
+    stride_dir : str
+        The directory holding the Stride tool.
+    pdb_dir : str
+        The directory holding the PDB files to cluster.
+    full_thr : float in [0,2]
+        The threshold above which two structures are considered to be equal. The higher the tigher.
+    ca_atoms : bool
+        Whether to only use C-alpha atoms to compute the USR.
+    _usr_features : numpy.ndarray
+        A matrix holding the USR features for each structure.
+    _stride_features : numpy.ndarray
+        A matrix holding the Stride features for each structure.
+    """
+    
+    def __init__(self, structures, stride_dir, pdb_dir, full_thr=1.0, ca_atoms=False, verbose=False, **params):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        structures : list of Bio.PDB.Structure
+            The structures to be clustered.
+        stride_dir : str
+            The directory holding the Stride tool.
+        pdb_dir : str
+            The directory holding the PDB files to cluster.
+        full_thr : float in [0,2], optional
+            The threshold above which two structures are considered to be equal. The default is 1.0
+        ca_atoms : bool, optional
+            Whether to only use C-alpha atoms to compute the USR. The default is False.
+        verbose : bool, optional
+            Whether to print progress information. The default is False.
+
+        Returns
+        -------
+        None.
+        """
+        super(USRStrideCluster, self).__init__(structures, verbose)
+        self.stride_dir = stride_dir
+        self.pdb_dir = pdb_dir
+        self.full_thr = full_thr
+        self.ca_atoms = ca_atoms
+        self._usr_features = None
+        self._stride_features = None
+        
+    def cluster(self):
+        """
+        Perform the clustering.
+
+        Returns
+        -------
+        None.
+        """
+        # Define n for convenience
+        n = len(self.structures)
+        # Define feature matrices
+        self._usr_features = np.zeros(shape=(n, USR.get_n_features()))
+        self._stride_features = np.zeros(shape=(n, FullStride.get_n_features()))
+        # Compute USR for each structure
+        for i in range(n):
+            pdb = self.pdb_dir + self.structures[i].get_id() + '.pdb'
+            self._usr_features[i,:] = USR(self.structures[i], ca_atoms=self.ca_atoms).get_features()
+            self._stride_features[i,:] = FullStride(self.stride_dir, pdb).get_features()
+        # Data structures for clustering
+        cluster_id = 0
+        placed = [False for i in range(n)]
+        progress_bar = ProgressBar(n)
+        if self.verbose:
+            print('Clustering...')
+            progress_bar.start()
+        for i in range(n):
+            if self.verbose:
+                progress_bar.step()
+            if not placed[i]:
+                placed[i] = True
+                self.clusters[cluster_id] = []
+                self.clusters[cluster_id].append(i)
+                for j in range(n):
+                    if j != i and not placed[j]:
+                        usr = USR.get_similarity_score(self._usr_features[i], self._usr_features[j])
+                        cosine = FullStride.get_similarity_score(self._stride_features[i], self._stride_features[j])
+                        score = usr + cosine
+                        if score > self.full_thr:
+                            placed[j] = True
+                            self.clusters[cluster_id].append(j)
+                cluster_id += 1
+        if self.verbose:
+            progress_bar.end()
+            
+class GraphKernelCluster(Cluster):
+    """
+    Perform clustering of the structures based on their kernel.
+    
+    Attributes
+    ----------
+    k_thr : float
+        The similarity threshold. The higher the tigher.
+    kernel : numpy.ndarrya
+        The kernel of the structures.
+    """
+    
+    def __init__(self, structures, kernel, k_thr=200, verbose=False):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        structures : list of Bio.PDB.Structures
+            The structures to cluster.
+        kernel : numpy.ndarray
+            The kernel.
+        k_thr : float, optional
+            The similarity threshold. The default is 200.
+        verbose : bool, optional
+            Whether to print progress information. The default is False.
+
+        Returns
+        -------
+        None.
+        """
+        super(GraphKernelCluster, self).__init__(structures, verbose)
+        self.k_thr = k_thr
+        self.kernel = kernel
+    
+    def cluster(self):
+        """
+        Perform the clustering.
+
+        Returns
+        -------
+        None.
+        """
+        # Define n for convenience
+        n = len(self.structures)
+        # Define local data structures
+        cluster_id = 0
+        placed = [False for i in range(n)]
+        progress_bar = ProgressBar(n)
+        if self.verbose:
+            print('Clustering...')
+            progress_bar.start()
+        for i in range(n):
+            if self.verbose:
+                progress_bar.step()
+            if not placed[i]:
+                placed[i]
+                self.clusters[cluster_id] = []
+                self.clusters[cluster_id].append(i)
+                for j in range(n):
+                    if j != i and not placed[j]:
+                        k_ij = self.kernel[i,j]
+                        if k_ij > self.k_thr:
                             placed[j] = True
                             self.clusters[cluster_id].append(j)
                 cluster_id += 1
