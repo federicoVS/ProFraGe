@@ -73,6 +73,11 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
         if verbose:
             print(f'Configuration {counter}/{total_len}')
             counter += 1
+        # Check the output directory
+        if os.path.exists('lhg-tmp/'):
+            os.rmdir('lhg-tmp/')
+        if not os.path.exists('lhg-tmp/'):
+            os.makedirs('lhg-tmp/')
         # Train, filter, and cluster the model
         pdbs = get_files(train_set_dir, ext='.pdb')
         fragments = []
@@ -89,22 +94,11 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
             model = LeidenMiner(structure, cmapf, **param_config)
             model.mine()
             frags = model.get_fragments()
-            for f in frags:
-                fragments.append(f)
+            for frag in frags:
+                if in_range(frag, **range_params) and is_spherical(frag, **spherical_params) and is_compact(frag, **compact_params) and is_connected(frag, **connected_params):
+                    to_pdb(frag, frag.get_id(), out_dir='lhg-tmp/')
         if verbose:
             progress_bar.end()
-        if os.path.exists('lhg-tmp/'):
-            os.rmdir('lhg-tmp/')
-        if not os.path.exists('lhg-tmp/'):
-            os.makedirs('lhg-tmp/')
-        if verbose:
-            print('Filtering training fragments...')
-        # Modify the range parameters
-        range_params['upper'] = param_config['max_size']
-        # Filter the fragments
-        for frag in fragments:
-            if in_range(frag, **range_params) and is_spherical(frag, **spherical_params) and is_compact(frag, **compact_params) and is_connected(frag, **connected_params):
-                to_pdb(frag, frag.get_id(), out_dir='lhg-tmp/')
         pdbs = get_files('lhg-tmp/')
         assignements = {}
         pre_clusters = {}
