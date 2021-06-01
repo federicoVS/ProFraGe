@@ -5,12 +5,6 @@ Created on Tue Apr  6 00:37:42 2021
 @author: Federico van Swaaij
 """
 
-import numpy as np
-
-import igraph as ig
-
-import graphkernels.kernels as gk
-
 class UUGraph:
     """
     A generic undirected, unweighted graph class.
@@ -121,89 +115,3 @@ class UUGraph:
                 if not visited[t]:
                     stack.append(t)
         return v_component, visited
-    
-class GraphKernel:
-    """
-    A wrapper class for the GraphKernels library.
-    
-    Source
-    ------
-    https://github.com/eghisu/GraphKernels
-    
-    Attributes
-    ----------
-    structures : list of Bio.PDB.Structure
-        The list of structures of which to compute the kernel.
-    ca_dist_thr : float
-        The minimum distance in Angstrom for two residues to be interacting.
-    h : int
-        The number of iterations to perform.
-    """
-    
-    def __init__(self, structures, ca_dist_thr=5, h=10):
-        """
-        Initialize the class.
-
-        Parameters
-        ----------
-        structures : list of Bio.PDB.Structure
-        The list of structures of which to compute the kernel.
-        ca_dist_thr : float, optional
-            The minimum distance in Angstrom for two residues to be interactin. The default is 5.
-        h : int, optional
-            The number of iterations. The default is 10.
-
-        Returns
-        -------
-        None.
-        """
-        self.structures = structures
-        self.ca_dist_thr = ca_dist_thr
-        self.h = h
-    
-    def _get_adjacency(self, idx):
-        # Define residue and adjacency lists
-        adjacency, residues = [], []
-        # Get the residues
-        for residue in self.structures[idx].get_residues():
-            r_id = residue.get_id()
-            if r_id[0] == ' ' and r_id[1] >= 0:
-                residues.append(residue)
-        # Get connections
-        for i in range(len(residues)):
-            for j in range(len(residues)):
-                if i != j:
-                    res_i, res_j = residues[i], residues[j]
-                    if 'CA' in res_i and 'CA' in res_j:
-                        ca_i = res_i['CA']
-                        ca_j = res_j['CA']
-                        ca_dist = np.linalg.norm(ca_i.get_vector()-ca_j.get_vector())
-                        if ca_dist <= self.ca_dist_thr:
-                            adjacency.append((i,j))
-        return adjacency
-    
-    def get_kernel(self):
-        """
-        Return the kernel describing the structures.
-
-        Returns
-        -------
-        kernel : numpy.ndarray
-            The kernel for the graphs.
-        """
-        # Define n for convenience
-        n = len(self.structures)
-        # Define the graphs list
-        graphs = []
-        # Build the graphs
-        for i in range(n):
-            # Get the adjacency
-            adjacency = self._get_adjacency(i)
-            # Define the graph
-            G = ig.Graph(adjacency)
-            # Add the graph to the list of graphs
-            graphs.append(G)
-        # Compute kernel
-        kernel = gk.CalculateWLKernel(graphs, par=self.h)
-        # Return the kernel
-        return kernel
