@@ -304,6 +304,9 @@ class Agglomerative(Cluster):
         """
         if self.verbose:
             print('Clustering...')
+        # Check if the minimum number of samples is present
+        if self.features.shape[0] < 2:
+            return
         # Cluster using the hierarchical algorithm
         aggcl = AgglomerativeClustering(n_clusters=self.k, affinity=self.affinity, linkage=self.linkage, compute_full_tree=True, distance_threshold=self.distance_threshold)
         aggcl.fit(self.features)
