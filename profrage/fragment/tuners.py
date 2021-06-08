@@ -97,7 +97,7 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
         pdbs = get_files('lhg-tmp/')
         for pdb in pdbs:
             pdb_id = os.path.basename(pdb)[:-4]
-        all_structures.append(from_pdb(pdb_id, pdb))
+            all_structures.append(from_pdb(pdb_id, pdb))
         representatives = []
         if verbose:
             print('Clustering training fragments...')
@@ -159,7 +159,10 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
             lm.compute_sentence_probs(pdb_id, fragments[pdb_id])
         if verbose:
             progress_bar.end()
-        best_params.append((lm.get_avg_plausibility(), param_config))
+        avg_plausibility = lm.get_avg_plausibility()
+        best_params.append((avg_plausibility, param_config))
+        if verbose:
+            print(f'Configuration {param_config} has plausibility {avg_plausibility}')
         if os.path.exists('lhg-tmp/'):
             shutil.rmtree('lhg-tmp/')
     best_configs = sorted(best_params, key=lambda x: x[0], reverse=True)[0:to_show]
