@@ -67,9 +67,7 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
         if verbose:
             print(f'Configuration {counter}/{total_len}')
             counter += 1
-        # Check the output directory
-        if os.path.exists('lhg-tmp/'):
-            os.rmdir('lhg-tmp/')
+        # Create the output directory
         if not os.path.exists('lhg-tmp/'):
             os.makedirs('lhg-tmp/')
         # Train, filter, and cluster the model
