@@ -54,7 +54,7 @@ class LanguageModel:
         self.words = words
         self.rmsd_thr = rmsd_thr
         
-    def compute_sentence_probs(self, pdb_id, fragments, ep=1e-3):
+    def compute_sentence_probs(self, pdb_id, fragments, ep=1e-10):
         """
         Compute the probability that a protein is made of the specified fragments.
 
@@ -65,7 +65,7 @@ class LanguageModel:
         fragments : list of Bio.PDB.Structure
             The list of structures. Note that the fragments should be filtered but not further clustered.
         ep : float in [0,1], optional
-            The probability to assign to fragments that are not found in the training data. The default is 1e-3.
+            The probability to assign to fragments that are not found in the training data. The default is 1e-10.
 
         Returns
         -------
