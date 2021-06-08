@@ -79,9 +79,9 @@ def get_backbone_atoms(structure):
                     atoms.append(residue['N'])
     return atoms
 
-def get_ca_atoms_coords(structure):
+def get_bb_atoms_coords(structure):
     """
-    Return the coordinates of the C-alpha atoms of the given structure.
+    Return the coordinates of the backbone atoms of the given structure.
     
     The output has shape Nx3, where N is the total number of atoms.
 
@@ -98,7 +98,7 @@ def get_ca_atoms_coords(structure):
     atoms_coords = []
     count = 0
     for atom in structure.get_atoms():
-        if atom.get_name() == 'CA':
+        if atom.get_name() == 'CA' or atom.get_name() == 'C' or atom.get_name() == 'N':
             coords = atom.get_coord()
             atoms_coords.append([coords[0], coords[1], coords[2]])
             count += 1

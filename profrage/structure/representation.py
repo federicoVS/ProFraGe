@@ -14,7 +14,7 @@ from scipy.stats import skew
 
 from Bio.PDB.vectors import calc_dihedral
 
-from utils.structure import get_atoms_coords, get_ca_atoms_coords
+from utils.structure import get_atoms_coords, get_bb_atoms_coords
 from utils.stride import SS_CODE_TO_INT, single_stride
 
 class Representation:
@@ -97,7 +97,7 @@ class USR(Representation):
         The matrix of coordinates
     """
     
-    def __init__(self, structure, ca_atoms=False):
+    def __init__(self, structure, bb_atoms=False):
         """
         Initialize the class.
 
@@ -105,16 +105,16 @@ class USR(Representation):
         ----------
         structure : Bio.PDB.Structure
             The structure to represent.
-        ca_atoms : str, optional
-            Whether to use only C-alpha atoms to compute the USR. The default is False.
+        bb_atoms : str, optional
+            Whether to use only backbone atoms to compute the USR. The default is False.
 
         Returns
         -------
         None.
         """
         super(USR, self).__init__()
-        if ca_atoms:
-            self._coords = get_ca_atoms_coords(structure)
+        if bb_atoms:
+            self._coords = get_bb_atoms_coords(structure)
         else:
             self._coords = get_atoms_coords(structure)
         self.ctd = None

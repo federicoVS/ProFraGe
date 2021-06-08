@@ -738,6 +738,9 @@ class LeidenMiner(SingleMiner):
         The file holding the CMAP.
     partition : ??
         The partition of apply. See the Leiden documentation for more information.
+    contacts : str in ['cmap', 'dist']
+        On what contacts are based on. If 'cmap' is selected, then they are going to be based on CMAP. If 'dist', then they are going
+        to be based on the distance between their C-alpha atoms.
     bb_strength : float
         The offset strength to add to the weights of the backbone.
     f_thr : float in [0,1]
@@ -751,7 +754,7 @@ class LeidenMiner(SingleMiner):
         A dictionary mapping the segment ID of the residue to the residue itself.
     """
     
-    def __init__(self, structure, cmap, partition=leidenalg.ModularityVertexPartition, bb_strength=1, f_thr=0.1, n_iters=5, max_size=40, **params):
+    def __init__(self, structure, cmap, partition=leidenalg.ModularityVertexPartition, contacts='cmap', bb_strength=1.0, f_thr=0.1, n_iters=5, max_size=25, **params):
         """
         Initialize the class.
 
@@ -763,15 +766,18 @@ class LeidenMiner(SingleMiner):
             The file holding the CMAP.
         partition : ??, optional
             The partition of apply. The default is leidenalg.ModularityVertexPartition.
+        contacts : str in ['cmap', 'dist'], optional
+            On what contacts are based on. If 'cmap' is selected, then they are going to be based on CMAP. If 'dist', then they are going
+            to be based on the distance between their C-alpha atoms. The default is 'cmap'.
         bb_strength : float, optional
-            The offset strength to add to the weights of the backbone. The default is 1.
+            The offset strength to add to the weights of the backbone. The default is 1.0.
         f_thr : float in [0,1], optional
             The threshold above which two residues are interacting. It is also used as the weight
             assigned to the edges. The default is 0.1.
         n_iters : int, optional
             The number of iterations of the Leiden algorithm. The default is 5.
         max_size : int, optional
-            The maximum size of a community. The default is 40.
+            The maximum size of a community. The default is 25.
 
         Returns
         -------
@@ -782,6 +788,7 @@ class LeidenMiner(SingleMiner):
         self.weights = []
         self.cmap = cmap
         self.partition = partition
+        self.contacts = contacts
         self.bb_strength = bb_strength
         self.f_thr = f_thr
         self.n_iters = n_iters
@@ -818,7 +825,7 @@ class LeidenMiner(SingleMiner):
         -------
         None.
         """
-        # Get the keys and sorted (though they should already be)
+        # Get the keys and sorte them (though they should already be)
         keys = self._res_dict.keys()
         keys = sorted(keys, key=lambda x: x)
         # Backbone connections
@@ -834,17 +841,34 @@ class LeidenMiner(SingleMiner):
                 ca_dist_inv = self.bb_strength + 1/ca_dist
             self.weights.append(ca_dist_inv)
         # Interaction connections
-        for entry in entries:
-            _, _, res_1, res_2, f = entry
-            if res_1 in self._res_dict and res_2 in self._res_dict and f > self.f_thr:
-                self.adjacency.append((res_1, res_2))
-                ca_dist_inv = 0.0421
-                if 'CA' in self._res_dict[res_1] and 'CA' in self._res_dict[res_2]:
-                    ca_1 = self._res_dict[res_1]['CA']
-                    ca_2 = self._res_dict[res_2]['CA']
-                    ca_dist = np.linalg.norm(ca_1.get_vector()-ca_2.get_vector())
-                    ca_dist_inv = 1/ca_dist
-                self.weights.append(ca_dist_inv)
+        if self.contacts == 'cmap':
+            for entry in entries:
+                _, _, res_1, res_2, f = entry
+                if abs(res_1-res_2) <= 1:
+                    continue
+                if res_1 in self._res_dict and res_2 in self._res_dict and f > self.f_thr:
+                    self.adjacency.append((res_1, res_2))
+                    ca_dist_inv = 0.0421
+                    if 'CA' in self._res_dict[res_1] and 'CA' in self._res_dict[res_2]:
+                        ca_1 = self._res_dict[res_1]['CA']
+                        ca_2 = self._res_dict[res_2]['CA']
+                        ca_dist = np.linalg.norm(ca_1.get_vector()-ca_2.get_vector())
+                        ca_dist_inv = 1/ca_dist
+                    self.weights.append(ca_dist_inv)
+        elif self.contacts == 'dist':
+            for i in range(len(keys)-1):
+                for j in range(i+1, len(keys)):
+                    res_1, res_2 = keys[i], keys[j]
+                    if abs(res_1-res_2) > 1:
+                        ca_dist_inv = 0.0421
+                        if 'CA' in self._res_dict[res_1] and 'CA' in self._res_dict[res_2]:
+                            ca_1 = self._res_dict[res_1]['CA']
+                            ca_2 = self._res_dict[res_2]['CA']
+                            ca_dist = np.linalg.norm(ca_1.get_vector()-ca_2.get_vector())
+                            ca_dist_inv = 1/ca_dist
+                        if 1/ca_dist_inv < 12:
+                            self.adjacency.append((res_1, res_2))
+                            self.weights.append(ca_dist_inv)
                 
     def mine(self):
         """

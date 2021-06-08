@@ -13,6 +13,7 @@ from Bio.PDB.QCPSuperimposer import QCPSuperimposer
 
 from cluster.Cluster import Cluster
 from structure.representation import USR, FullStride
+from structure.similarity import QCPSimilarity
 from utils.structure import lengths_within
 from utils.tm_align import run_tm_align
 from utils.ProgressBar import ProgressBar
@@ -222,7 +223,6 @@ class AtomicSuperImpose(GreedyCluster):
         None.
         """
         super(AtomicSuperImpose, self).__init__(structures, score_thr, le, verbose)
-        self.score_thr = score_thr
         self.length_pct = length_pct
         
     def condition(self, i, j):
@@ -259,117 +259,8 @@ class AtomicSuperImpose(GreedyCluster):
         float
             The RMSD score.
         """
-        return self._compare(i, j)
-        
-    def _get_atoms(self, index):
-        """
-        Get the atoms from the specified structure.
-
-        Parameters
-        ----------
-        index : int
-            The index of the structure.
-
-        Returns
-        -------
-        ca_atoms : list of Bio.PDB.Atom
-            The atoms of the structure.
-        """
-        structure = self.structures[index]
-        atoms = []
-        for model in structure:
-            for chain in model:
-                for residue in chain:
-                    if 'CA' in residue:
-                        atoms.append(residue['CA'])
-        return atoms
-    
-    def _get_shifted_atoms(self, atoms_long, atoms_short):
-        """
-        Compute all subsets of contiguous atoms for the longer chain.
-        
-        This may be necessary because superimposition requires structures of the same length.
-
-        Parameters
-        ----------
-        atoms_long : list of Bio.PDB.Atoms 
-            The list of the atoms of the larger structure.
-        atoms_short : list of Bio.PDB.Atoms
-            The list of the atoms of the shorter structure..
-
-        Returns
-        -------
-        shifted_atoms : list of list of Bio.PDB.Atoms
-            The list of shifted atoms.
-        """
-        shifted_atoms, i = [], 0
-        while i + len(atoms_short) <= len(atoms_long):
-            shifted_atoms.append(atoms_long[i:i+len(atoms_short)])
-            i += 1
-        return shifted_atoms
-    
-    def _superimpose(self, index, atoms_fixed, atoms_moving):
-        """
-        Perform superimposition between the specified structures.
-
-        Parameters
-        ----------
-        index : int
-            The index of the reference structure.
-        atoms_fixed : list of Bio.PDB.Atoms
-            The list of the fixed (reference) atoms.
-        atoms_moving : numpy.ndarray
-            The list of the moving atoms.
-
-        Returns
-        -------
-        float
-            The RMSD. In case of errors numpy.inf is returned.
-        """
-        # Prepare the coordinates
-        fixed, moving = np.zeros(shape=(len(atoms_fixed),3)), np.zeros(shape=(len(atoms_fixed),3))
-        for i in range(len(atoms_fixed)):
-            fixed[i,:], moving[i,:] = atoms_fixed[i].get_coord(), atoms_moving[i].get_coord()
-        # Superimpose
-        qcpsi = QCPSuperimposer()
-        qcpsi.set(fixed, moving)
-        qcpsi.run()
-        return qcpsi.get_rms()
-        
-    def _compare(self, index_1, index_2):
-        """
-        Compare the specified structures by superimposing them.
-
-        Parameters
-        ----------
-        index_1 : int
-            The index of the first structure.
-        index_2 : int
-            The index of the second structure.
-
-        Returns
-        -------
-        float
-            The minimum RMSD value across the computed super-impositions.
-        """
-        atoms_1 = self._get_atoms(index_1)
-        atoms_2 = self._get_atoms(index_2)
-        if len(atoms_1) == len(atoms_2):
-            return self._superimpose(index_1, atoms_1, atoms_2)
-        elif len(atoms_1) > len(atoms_2):
-            shifted_atoms = self._get_shifted_atoms(atoms_1, atoms_2)
-            rmsds = []
-            for sas in shifted_atoms:
-                rmsds.append(self._superimpose(index_1, sas, atoms_2))
-            rmsds = np.array(rmsds)
-            return np.min(rmsds)
-        else:
-            shifted_atoms = self._get_shifted_atoms(atoms_2, atoms_1)
-            rmsds = []
-            for sas in shifted_atoms:
-                rmsds.append(self._superimpose(index_1, atoms_1, sas))
-            rmsds = np.array(rmsds)
-            return np.min(rmsds)
+        qcps = QCPSimilarity(self.structures[i], self.structures[j])
+        return qcps.compare()
             
 class TMAlign(GreedyCluster):
     """
@@ -466,13 +357,13 @@ class USRCluster(GreedyCluster):
     score_thr : float in [0,1]
         The similarity score threshold above which two structures are considered to be similar. The higher
         the tighter.
-    ca_atoms : bool
-        Whether to only use C-alpha atoms to compute the USR.
+    bb_atoms : bool
+        Whether to only use the backbone atoms to compute the USR.
     _features : numpy.ndarray
         A matrix holding the USR features for each structure.
     """
     
-    def __init__(self, structures, score_thr=0.5, ca_atoms=False, verbose=False, **params):
+    def __init__(self, structures, score_thr=0.5, bb_atoms=False, verbose=False, **params):
         """
         Initialize the class.
 
@@ -482,8 +373,8 @@ class USRCluster(GreedyCluster):
             The structures to be clustered.
         score_thr : float in [0,1], optional
             The similarity score threshold. The default is 0.5.
-        ca_atoms : bool, optional
-            Whether to only use C-alpha atoms to compute the USR. The default is False.
+        bb_atoms : bool, optional
+            Whether to only use the backbone atoms to compute the USR. The default is False.
         verbose : bool, optional
             Whether to print progress information. The default is False.
 
@@ -493,7 +384,7 @@ class USRCluster(GreedyCluster):
         """
         super(USRCluster, self).__init__(structures, score_thr, ge, verbose)
         self.score_thr = score_thr
-        self.ca_atoms = ca_atoms
+        self.bb_atoms = bb_atoms
         self._features = None
         
     def condition(self, i, j):
@@ -550,7 +441,7 @@ class USRCluster(GreedyCluster):
         self._features = np.zeros(shape=(n, USR.get_n_features()))
         # Compute USR for each structure
         for i in range(n):
-            usr = USR(self.structures[i], ca_atoms=self.ca_atoms)
+            usr = USR(self.structures[i], bb_atoms=self.bb_atoms)
             self._features[i,:] = usr.get_features()
         # Cluster
         super().cluster(mode)
@@ -621,7 +512,7 @@ class StrideCluster(GreedyCluster):
     
     def score_function(self, i, j):
         """
-        Return the Stride similaroty score between the two structures.
+        Return the Stride similarity score between the two structures.
 
         Parameters
         ----------
