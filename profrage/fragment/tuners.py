@@ -139,8 +139,6 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
             model.mine()
             frags = model.get_fragments()
             fragments[pdb_id] = []
-            if verbose:
-                print('Filtering and clustering validation fragments...')
             for frag in frags:
                 if in_range(frag, **range_params):
                     fragments[pdb_id].append(frag)

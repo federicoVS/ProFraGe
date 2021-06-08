@@ -192,18 +192,15 @@ class AtomicSuperImpose(GreedyCluster):
     """
     Perform clustering of the structures based on their superimposition.
     
-    Two structuress are then considered similar and clustered together if the resulting RMSD is higher
-    than the specified threshold.
+    Two structures are then considered similar and clustered together if the resulting RMSD is lower than the specified threshold.
     
     Attributes
     ----------
-    score_thr : float
-        The RMSD threshold for two structures to be considered similar.
     length_pct : float in [0,1]
         The percentage of length two structures should share to be considered similar.
     """
     
-    def __init__(self, structures, score_thr=2, length_pct=0.5, verbose=False, **params):
+    def __init__(self, structures, rmsd_thr=2.0, length_pct=0.5, verbose=False, **params):
         """
         Initialize the class.
 
@@ -211,7 +208,7 @@ class AtomicSuperImpose(GreedyCluster):
         ----------
         structures : list of Bio.PDB.Structure
             The structures to cluster.
-        score_thr : float, optional
+        rmsd_thr : float, optional
             The RMSD threshold below which two fragments are considered similar. The default is 2.
         length_pct : float in [0,1], optional
             The length percentage threshold. The default is 0.5.
@@ -222,7 +219,7 @@ class AtomicSuperImpose(GreedyCluster):
         -------
         None.
         """
-        super(AtomicSuperImpose, self).__init__(structures, score_thr, le, verbose)
+        super(AtomicSuperImpose, self).__init__(structures, rmsd_thr, le, verbose)
         self.length_pct = length_pct
         
     def condition(self, i, j):
