@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Created on Mon May 17 14:37:33 2021
 
@@ -7,7 +6,7 @@ Created on Mon May 17 14:37:33 2021
 
 import numpy as np
 
-from structure.representation import USR
+from structure.similarity import QCPSimilarity
 
 class LanguageModel:
     """
@@ -18,7 +17,7 @@ class LanguageModel:
     
     The training and testing set are represented with clusters. All elements of a single cluster
     represent single words. This is because no two fragments are exactly equal, so clustering is introduced
-    based on USR-similarity.
+    based on QCPSimilarity.
     
     Attributes
     ----------
@@ -31,21 +30,20 @@ class LanguageModel:
     words : list of (Bio.PDB.Structure, int)
             A list of words, where each word is a tuple holding a structure and the number of times it
             appears.
-    score_thr : float in [0,1]
-        The USR score threshold above which two words (fragments) are considered to be similar.
+    rmsd_thr : float
+        The RMSD score threshold below which two words (fragments) are considered to be similar.
     """
     
-    def __init__(self, words, score_thr):
+    def __init__(self, words, rmsd_thr):
         """
         Initialize the class.
 
         Parameters
         ----------
-        words : list of (str, Bio.PDB.Structure, int)
-            A list of words, where each word is a tuple holding the secondary structure ID (obtained with
-            the Stride tool), the structure itself, and the number of times it appears in the dataset.
-        score_thr : float in [0,1]
-            The USR score threshold. The higher, the tighter.
+        words : list of (Bio.PDB.Structure, int)
+            A list of words, where each word is a tuple holding the structure and the number of times it appears in the dataset.
+        rmsd_thr : float
+            The RMSD score threshold. The lower, the tighter.
 
         Returns
         -------
@@ -54,7 +52,7 @@ class LanguageModel:
         self.sentence_probs = {}
         self.word_probs = {}
         self.words = words
-        self.score_thr = score_thr
+        self.rmsd_thr = rmsd_thr
         
     def compute_sentence_probs(self, pdb_id, fragments, ep=1e-3):
         """
@@ -63,10 +61,9 @@ class LanguageModel:
         Parameters
         ----------
         pdb_id : str
-            The ID of the protein.
-        fragments : list of (str, Bio.PDB.Structure)
-            A list of structures along with their secondary structure ID. Note that the fragments should be
-            filtered but not further clustered.
+            The PDB ID of the protein the fragments belong to.
+        fragments : list of Bio.PDB.Structure
+            The list of structures. Note that the fragments should be filtered but not further clustered.
         ep : float in [0,1], optional
             The probability to assign to fragments that are not found in the training data. The default is 1e-3.
 
@@ -76,15 +73,13 @@ class LanguageModel:
         """
         probs = []
         for fragment in fragments:
-            f_momenta = USR(fragment[1]).get_features()
-            best_score, best_pdb_id = -1, -1
+            best_rmsd, best_pdb_id = -1, -1
             for word in self.words:
-                if word[0] == fragment[0]:
-                    w_momenta = USR(word[1]).get_features()
-                    score = USR.get_similarity_score(f_momenta, w_momenta)
-                    if score > self.score_thr and score > best_score:
-                        best_pdb_id = word[1].get_id()
-                        best_score = score
+                qcps = QCPSimilarity(fragment, word[0])
+                rmsd = qcps.compare()
+                if rmsd < self.rmsd_thr and rmsd < best_rmsd:
+                    best_pdb_id = word[0].get_id()
+                    best_rmsd = rmsd
             if best_pdb_id == -1:
                 probs.append(ep)
             else:
@@ -105,10 +100,10 @@ class LanguageModel:
         """
         total = 0
         for word in self.words:
-            total += word[2]
+            total += word[1]
         for word in self.words:
-            pdb_id = word[1].get_id()
-            self.word_probs[pdb_id] = word[2]/total
+            pdb_id = word[0].get_id()
+            self.word_probs[pdb_id] = word[1]/total
             
     def get_avg_plausibility(self):
         """
@@ -123,4 +118,3 @@ class LanguageModel:
         for pdb_id in self.sentence_probs:
             probs.append(self.sentence_probs[pdb_id])
         return np.mean(np.array(probs))
-            

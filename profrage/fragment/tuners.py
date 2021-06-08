@@ -1,24 +1,20 @@
-# -*- coding: utf-8 -*-
 """
 Created on Mon May 17 11:22:23 2021
 
 @author: Federico van Swaaij
 """
 import os
-import itertools
-import numpy as np
 
-from cluster.distance import Agglomerative
-from cluster.greedy import USRCluster, StrideCluster
+import itertools
+
+from cluster.greedy import USRCluster, StrideCluster, AtomicSuperImpose
 from fragment.mine import LeidenMiner
-from fragment.filtering import in_range, is_spherical, is_compact, is_connected
+from fragment.filtering import in_range
 from fragment.LanguageModel import LanguageModel
-from structure.representation import FullStride
-from utils.stride import single_stride, get_composition, get_stride_frequencies
 from utils.io import get_files, from_pdb, to_pdb
 from utils.ProgressBar import ProgressBar
 
-def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, cluster_name, miner_params, pre_cluster_params, cluster_params, range_params, spherical_params, compact_params, connected_params, lm_score_thr=0.6, to_show=3, verbose=False):
+def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, leiden_params, first_cluster_params, second_cluster_params, third_cluster_params, range_params, lm_score_thr=2.5, train_size=500, to_show=3, verbose=False):
     """
     Perform GridSearch based on the Leiden mining algorithm coupled with Agglomerative clustering.
 
@@ -34,25 +30,21 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
         The directory holding the CMAP files for the test set.
     stride_dir : str
         The directory holding the Stride tool.
-    cluster_name : str
-        The name of the clustering algorithm to use.
-        Valid names are: 'aggl', 'usrc', 'stridec', 'usrstridec'
-    miner_params : dict of str -> Any
+    leiden_params : dict of str -> Any
         The parameters to try for the Leiden algorithm.
-    pre_cluster_params : dict of str -> Any
-        The parameters for the pre-clustering (using Stride).
-    cluster_params : dict of str -> Any
-        The parameters for the Agglomerative clustering.
+    first_cluster_params : dict of str -> Any
+        The parameters for the first level clustering (Stride).
+    second_cluster_params : dict of str -> Any
+        The parameters for the second level clustering (USR).
+    third_cluster_params : dict of str -> Any
+        The parameters for the third level clustering (Super Imposition).
     range_params : dict of str -> Any
         The parameters for the range filtering. Note that just the `lower` key is needed.
-    spherical_params : dict of str -> Any
-        The parameters for the spherical filtering.
-    compact_params : dict of str -> Any
-        The parameters for the compact filtering.
-    connected_params : dict of str -> Any
-        The parameters for the connected components filtering.
-    lm_score_thr : float in [0,1], optional
-        The USR threshold score to be used in the language model. The default is 0.6.
+    lm_score_thr : float, optional
+        The RMSE threshold score to be used in the language model. The default is 2.5.
+    train_size : int, optional
+        The number of training sample to use. The reason for the limit is the fact that the full pipeline can be quite time-consuming.
+        The default is 500.
     to_show : int, optional
         The best configurations to show. The default is 3.
     verbose : bool optional
@@ -64,9 +56,9 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
     """
     # Compute total number of permutations
     total_len, counter = 1, 1
-    for p in miner_params:
-        total_len *= len(miner_params[p])
-    search_space = (dict(zip(miner_params, x)) for x in itertools.product(*miner_params.values()))
+    for p in leiden_params:
+        total_len *= len(leiden_params[p])
+    search_space = (dict(zip(leiden_params, x)) for x in itertools.product(*leiden_params.values()))
     best_params = []
     # Start the grid search
     for param_config in search_space:
@@ -79,8 +71,7 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
         if not os.path.exists('lhg-tmp/'):
             os.makedirs('lhg-tmp/')
         # Train, filter, and cluster the model
-        pdbs = get_files(train_set_dir, ext='.pdb')
-        fragments = []
+        pdbs = get_files(train_set_dir, ext='.pdb')[0:train_size]
         progress_bar = ProgressBar(len(pdbs))
         if verbose:
             print('Generating fragments for training...')
@@ -95,50 +86,42 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
             model.mine()
             frags = model.get_fragments()
             for frag in frags:
-                if in_range(frag, **range_params) and is_spherical(frag, **spherical_params) and is_compact(frag, **compact_params) and is_connected(frag, **connected_params):
+                if in_range(frag, **range_params):
                     to_pdb(frag, frag.get_id(), out_dir='lhg-tmp/')
         if verbose:
             progress_bar.end()
-        pdbs = get_files('lhg-tmp/')
-        assignements = {}
+        all_structures = []
         pre_clusters = {}
+        pdbs = get_files('lhg-tmp/')
+        for pdb in pdbs:
+            pdb_id = os.path.basename(pdb)[:-4]
+        all_structures.append(from_pdb(pdb_id, pdb))
         representatives = []
         if verbose:
             print('Clustering training fragments...')
-        for pdb in pdbs:
-            pdb_id = os.path.basename(pdb)[:-4]
-            stride_desc = single_stride(stride_dir, pdb)
-            code_dict = get_stride_frequencies(stride_desc)
-            keys = get_composition(code_dict, **pre_cluster_params)
-            assignements[pdb_id] = keys
-        for pdb in pdbs:
-            pdb_id = os.path.basename(pdb)[:-4]
-            keys = assignements[pdb_id]
-            if keys is None:
-                continue
-            if keys not in pre_clusters:
-                pre_clusters[keys] = []
-            pre_clusters[keys].append(from_pdb(pdb_id, pdb))
+        # First level clustering
+        first_clualg = StrideCluster(all_structures, stride_dir, 'lhg-tmp/', **first_cluster_params)
+        first_clualg.cluster('greedy')
+        for first_cluster_id in range(len(first_clualg)):
+            pre_clusters[first_cluster_id] = []
+            for idx in first_clualg.clusters[first_cluster_id]:
+                s = first_clualg.structures[idx]
+                pre_clusters[first_cluster_id].append(s)
+        # Second level clustering
         for keys in pre_clusters:
-            structures = pre_clusters[keys]
-            features = np.zeros(shape=(len(structures),FullStride.get_n_features()))
-            if features.shape[0] < 2:
-                continue
-            for i in range(len(structures)):
-                feat = FullStride(stride_dir, 'lhg-tmp/'+structures[i].get_id()+'.pdb').get_features()
-                features[i,:] = feat
-            clualg = None
-            if cluster_name == 'aggl':
-                clualg = Agglomerative(structures, features, **cluster_params)
-            elif cluster_name == 'usrc':
-                clualg = USRCluster(structures, **cluster_params)
-            elif cluster_name == 'stridec':
-                clualg = StrideCluster(structures, stride_dir, 'lhg-tmp/', **cluster_params)
-            clualg.cluster()
-            for cluster_id in range(len(clualg)):
-                rep = clualg.best_representative(cluster_id)
-                freq = len(clualg.clusters[cluster_id])
-                representatives.append((keys, rep, freq))
+            pre_structures = pre_clusters[keys]
+            second_clualg = USRCluster(pre_structures, **second_cluster_params)
+            second_clualg.cluster('greedy')
+            for second_cluster_id in range(len(second_clualg)):
+                structures = []
+                for second_idx in second_clualg.clusters[second_cluster_id]:
+                    structures.append(second_clualg.structures[second_idx])
+                # Third level clutering
+                third_clualg = AtomicSuperImpose(structures, **third_cluster_params)
+                third_clualg.cluster('optim')
+                for third_cluster_id in range(len(third_clualg)):
+                    structure = third_clualg.best_representative(third_cluster_id)
+                    representatives.append((structure, len(third_clualg.clusters[third_cluster_id])))
         # Mine fragments on the test set
         pdbs = get_files(test_set_dir, ext='.pdb')
         progress_bar = ProgressBar(len(pdbs))
@@ -159,15 +142,8 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
             if verbose:
                 print('Filtering and clustering validation fragments...')
             for frag in frags:
-                if in_range(frag) and is_spherical(frag) and is_compact(frag) and is_connected(frag):
-                    to_pdb(frag, 'tmp-pdb')
-                    stride_desc = single_stride(stride_dir, 'tmp-pdb.pdb')
-                    code_dict = get_stride_frequencies(stride_desc)
-                    keys = get_composition(code_dict, **pre_cluster_params)
-                    if keys is None:
-                        continue
-                    fragments[pdb_id].append((keys, frag))
-                    os.remove('tmp-pdb.pdb')
+                if in_range(frag, **range_params):
+                    fragments[pdb_id].append(frag)
         if verbose:
             progress_bar.end()
         # Define language model
