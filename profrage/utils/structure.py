@@ -53,6 +53,32 @@ def structure_length(structure):
         count += 1
     return count
 
+def get_backbone_atoms(structure):
+    """
+    Return the backbone atoms of the specified structure.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure.
+
+    Returns
+    -------
+    list of Bio.PDB.Atom
+        The backbone atoms.
+    """
+    atoms = []
+    for model in structure:
+        for chain in model:
+            for residue in chain:
+                if 'CA' in residue:
+                    atoms.append(residue['CA'])
+                if 'C' in residue:
+                    atoms.append(residue['C'])
+                if 'N' in residue:
+                    atoms.append(residue['N'])
+    return atoms
+
 def get_ca_atoms_coords(structure):
     """
     Return the coordinates of the C-alpha atoms of the given structure.

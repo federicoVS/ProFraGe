@@ -83,10 +83,51 @@ class GreedyCluster(Cluster):
         None.
         """
         pass
-    
-    def greedy_cluster(self):
+
+    def greedy(self):
         """
-        Perform the greedy clustering. This method is meant to  be called by subclasses in their `cluster` method.
+        Perform the full greedy clustering. This method is meant to  be called by subclasses in their `cluster` method.
+
+        Returns
+        -------
+        None.
+        """
+        # Define n for convenience
+        n = len(self.structures)
+        # Data structures for clustering
+        cluster_id = 0
+        progress_bar = ProgressBar(n)
+        if self.verbose:
+            print('Clustering...')
+            progress_bar.start()
+        for i in range(n):
+            if self.verbose:
+                progress_bar.step()
+            if len(self.clusters) == 0:
+                self.clusters[cluster_id] = []
+                self.clusters[cluster_id].append(i)
+                cluster_id += 1
+            else:
+                assigned = False
+                for idx in range(cluster_id):
+                    scores = []
+                    for j in self.clusters[idx]:
+                        scores.append(self.score_function(i, j))
+                    score = np.mean(np.array(scores))
+                    if self.compare(score, self.score_thr):
+                        self.clusters[idx].append(i)
+                        assigned = True
+                        break
+                if not assigned:
+                    self.clusters[cluster_id] = []
+                    self.clusters[cluster_id].append(i)
+                    cluster_id += 1
+        if self.verbose:
+            progress_bar.end()
+    
+    def optimal(self):
+        """
+        Perform the optimal greedy clustering. This method is meant to  be called by subclasses in their `cluster` method.
 
         Returns
         -------
@@ -125,6 +166,26 @@ class GreedyCluster(Cluster):
                     cluster_id += 1
         if self.verbose:
             progress_bar.end()
+
+    def cluster(self, mode):
+        """
+        Perform the specified clustering algorithm.
+
+        Parameters
+        ----------
+        mode : str
+            The clustering algorithm mode.
+
+        Returns
+        -------
+        None.
+        """
+        if mode == 'greedy':
+            self.greedy()
+        elif mode == 'optim':
+            self.optimal()
+        else:
+            return
     
 class AtomicSuperImpose(GreedyCluster):
     """
@@ -199,16 +260,6 @@ class AtomicSuperImpose(GreedyCluster):
             The RMSD score.
         """
         return self._compare(i, j)
-    
-    def cluster(self):
-        """
-        Perform the clustering.
-
-        Returns
-        -------
-        None.
-        """
-        self.greedy_cluster()
         
     def _get_atoms(self, index):
         """
@@ -402,16 +453,6 @@ class TMAlign(GreedyCluster):
         pdb_i = self.pdb_dir + self.structures[i].get_id() + '.pdb'
         pdb_j = self.pdb_dir + self.structures[j].get_id() + '.pdb'
         return run_tm_align(self.tm_align_dir, pdb_i, pdb_j)
-        
-    def cluster(self):
-        """
-        Perform the clustering.
-
-        Returns
-        -------
-        None.
-        """
-        self.greedy_cluster()
             
 class USRCluster(GreedyCluster):
     """
@@ -490,9 +531,14 @@ class USRCluster(GreedyCluster):
         """
         return USR.get_similarity_score(self._features[i], self._features[j])
         
-    def cluster(self):
+    def cluster(self, mode):
         """
         Perform the clustering.
+
+        Parameters
+        ----------
+        mode : str
+            The clustering algorithm mode.
 
         Returns
         -------
@@ -507,7 +553,7 @@ class USRCluster(GreedyCluster):
             usr = USR(self.structures[i], ca_atoms=self.ca_atoms)
             self._features[i,:] = usr.get_features()
         # Cluster
-        self.greedy_cluster()
+        super().cluster(mode)
             
 class StrideCluster(GreedyCluster):
     """
@@ -591,9 +637,14 @@ class StrideCluster(GreedyCluster):
         """
         return FullStride.get_similarity_score(self._features[i], self._features[j])
         
-    def cluster(self):
+    def cluster(self, mode):
         """
         Perform the clustering.
+
+        Parameters
+        ----------
+        mode : str
+            The clustering algorithm mode.
 
         Returns
         -------
@@ -608,118 +659,4 @@ class StrideCluster(GreedyCluster):
             pdb = self.pdb_dir + self.structures[i].get_id() + '.pdb'
             self._features[i,:] = FullStride(self.stride_dir, pdb).get_features()
         # Cluster
-        self.greedy_cluster()
-            
-class USRStrideCluster(GreedyCluster):
-    """
-    Perform clustering of the structures combining their USR and Stride scores.
-    
-    Two structures are considered to be similar if the sum of the USR and Stride scores are above the
-    specified threshold.
-    
-    Attributes
-    ----------
-    stride_dir : str
-        The directory holding the Stride tool.
-    pdb_dir : str
-        The directory holding the PDB files to cluster.
-    full_thr : float in [0,2]
-        The threshold above which two structures are considered to be equal. The higher the tigher.
-    ca_atoms : bool
-        Whether to only use C-alpha atoms to compute the USR.
-    _usr_features : numpy.ndarray
-        A matrix holding the USR features for each structure.
-    _stride_features : numpy.ndarray
-        A matrix holding the Stride features for each structure.
-    """
-    
-    def __init__(self, structures, stride_dir, pdb_dir, full_thr=1.0, ca_atoms=False, verbose=False, **params):
-        """
-        Initialize the class.
-
-        Parameters
-        ----------
-        structures : list of Bio.PDB.Structure
-            The structures to be clustered.
-        stride_dir : str
-            The directory holding the Stride tool.
-        pdb_dir : str
-            The directory holding the PDB files to cluster.
-        full_thr : float in [0,2], optional
-            The threshold above which two structures are considered to be equal. The default is 1.0
-        ca_atoms : bool, optional
-            Whether to only use C-alpha atoms to compute the USR. The default is False.
-        verbose : bool, optional
-            Whether to print progress information. The default is False.
-
-        Returns
-        -------
-        None.
-        """
-        super(USRStrideCluster, self).__init__(structures, full_thr, ge, verbose)
-        self.stride_dir = stride_dir
-        self.pdb_dir = pdb_dir
-        self.full_thr = full_thr
-        self.ca_atoms = ca_atoms
-        self._usr_features = None
-        self._stride_features = None
-        
-    def condition(self, i, j):
-        """
-        Do nothing.
-
-        Parameters
-        ----------
-        i : int
-            The index of the first structure.
-        j : int
-            The index of the second structure.
-
-        Returns
-        -------
-        None.
-        """
-        pass
-    
-    def score_function(self, i, j):
-        """
-        Return the sum of the USR similarity score and the Stride similarity score.
-
-        Parameters
-        ----------
-        i : int
-            The index of the first structure.
-        j : int
-            The index of the second structure.
-
-        Returns
-        -------
-        float in [0,2]
-            The similarity score.
-        """
-        usr = USR.get_similarity_score(self._usr_features[i], self._usr_features[j])
-        cosine = FullStride.get_similarity_score(self._stride_features[i], self._stride_features[j])
-        return usr + cosine
-        
-    def cluster(self):
-        """
-        Perform the clustering.
-
-        Returns
-        -------
-        None.
-        """
-        # Define n for convenience
-        n = len(self.structures)
-        # Define feature matrices
-        self._usr_features = np.zeros(shape=(n, USR.get_n_features()))
-        self._stride_features = np.zeros(shape=(n, FullStride.get_n_features()))
-        # Compute USR for each structure
-        for i in range(n):
-            pdb = self.pdb_dir + self.structures[i].get_id() + '.pdb'
-            self._usr_features[i,:] = USR(self.structures[i], ca_atoms=self.ca_atoms).get_features()
-            self._stride_features[i,:] = FullStride(self.stride_dir, pdb).get_features()
-        # Cluster
-        self.greedy_cluster()
-    
-    
+        super().cluster(mode)

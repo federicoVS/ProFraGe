@@ -9,7 +9,7 @@ import itertools
 import numpy as np
 
 from cluster.distance import Agglomerative
-from cluster.greedy import USRCluster, StrideCluster, USRStrideCluster
+from cluster.greedy import USRCluster, StrideCluster
 from fragment.mine import LeidenMiner
 from fragment.filtering import in_range, is_spherical, is_compact, is_connected
 from fragment.LanguageModel import LanguageModel
@@ -134,8 +134,6 @@ def leiden_agglomerative_gridsearch(train_set_dir, test_set_dir, cmap_train_dir,
                 clualg = USRCluster(structures, **cluster_params)
             elif cluster_name == 'stridec':
                 clualg = StrideCluster(structures, stride_dir, 'lhg-tmp/', **cluster_params)
-            elif cluster_name == 'usrstridec':
-                clualg = USRStrideCluster(structures, stride_dir, 'lhg-tmp/', **cluster_params)
             clualg.cluster()
             for cluster_id in range(len(clualg)):
                 rep = clualg.best_representative(cluster_id)

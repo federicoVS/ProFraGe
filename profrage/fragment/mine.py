@@ -76,7 +76,7 @@ class Miner:
             splitted = pdb_id.split('_')
             p_id = splitted[0]
             dir_name = ''
-            if len(splitted) > 1 and splitted[1].isalpha():
+            if len(splitted) > 1:
                 c_id = splitted[1]
                 dir_name += p_id + '_' + c_id + '/fragments/'
             else:
