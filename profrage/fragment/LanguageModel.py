@@ -73,7 +73,7 @@ class LanguageModel:
         """
         probs = []
         for fragment in fragments:
-            best_rmsd, best_pdb_id = -1, 1e10
+            best_pdb_id, best_rmsd = -1, 1e10
             for word in self.words:
                 qcps = QCPSimilarity(fragment, word[0])
                 rmsd = qcps.compare()
