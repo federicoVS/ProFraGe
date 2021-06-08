@@ -5,6 +5,8 @@ Created on Mon May 17 11:22:23 2021
 """
 import os
 
+import shutil
+
 import itertools
 
 from cluster.greedy import USRCluster, StrideCluster, AtomicSuperImpose
@@ -159,7 +161,7 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
             progress_bar.end()
         best_params.append((lm.get_avg_plausibility(), param_config))
         if os.path.exists('lhg-tmp/'):
-            os.rmdir('lhg-tmp/')
+            shutil.rmtree('lhg-tmp/')
     best_configs = sorted(best_params, key=lambda x: x[0], reverse=True)[0:to_show]
     for best_config in best_configs:
         print(f'Probability: {best_config[0]}, Parameters: {best_config[1]}')
