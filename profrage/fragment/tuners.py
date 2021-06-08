@@ -14,7 +14,7 @@ from fragment.LanguageModel import LanguageModel
 from utils.io import get_files, from_pdb, to_pdb
 from utils.ProgressBar import ProgressBar
 
-def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, leiden_params, first_cluster_params, second_cluster_params, third_cluster_params, range_params, lm_score_thr=2.5, train_size=500, to_show=3, verbose=False):
+def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, leiden_params, first_cluster_params, second_cluster_params, third_cluster_params, range_params, lm_rmsd_thr=2.5, train_size=500, to_show=3, verbose=False):
     """
     Perform GridSearch based on the Leiden mining algorithm coupled with Agglomerative clustering.
 
@@ -40,8 +40,8 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
         The parameters for the third level clustering (Super Imposition).
     range_params : dict of str -> Any
         The parameters for the range filtering. Note that just the `lower` key is needed.
-    lm_score_thr : float, optional
-        The RMSE threshold score to be used in the language model. The default is 2.5.
+    lm_rmsd_thr : float, optional
+        The RMSD threshold score to be used in the language model. The default is 2.5.
     train_size : int, optional
         The number of training sample to use. The reason for the limit is the fact that the full pipeline can be quite time-consuming.
         The default is 500.
@@ -147,7 +147,7 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
         if verbose:
             progress_bar.end()
         # Define language model
-        lm = LanguageModel(representatives, lm_score_thr)
+        lm = LanguageModel(representatives, lm_rmsd_thr)
         lm.get_word_probs()
         progress_bar = ProgressBar(len(fragments))
         if verbose:
