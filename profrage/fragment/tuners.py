@@ -95,7 +95,7 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
         pdbs = get_files('lhg-tmp/')
         for pdb in pdbs:
             pdb_id = os.path.basename(pdb)[:-4]
-            all_structures.append(from_pdb(pdb_id, pdb))
+            all_structures.append(from_pdb(pdb_id, pdb, quiet=True))
         representatives = []
         if verbose:
             print('Clustering training fragments...')
@@ -154,7 +154,7 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
         for pdb_id in fragments:
             if verbose:
                 progress_bar.step()
-            lm.compute_sentence_probs(pdb_id, fragments[pdb_id])
+            lm.compute_sentence_probs(pdb_id, fragments[pdb_id], ep=1/(10*len(get_files('lhg-tmp/', ext='.pdb'))))
         if verbose:
             progress_bar.end()
         avg_plausibility = lm.get_avg_plausibility()
