@@ -92,7 +92,10 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
             progress_bar.end()
         all_structures = []
         pre_clusters = {}
-        pdbs = get_files('lhg-tmp/')
+        pdbs = get_files('lhg-tmp/', ext='.pdb')
+        if len(pdbs) == 0:
+            shutil.rmtree('lhg-tmp/')
+            continue # no fragments have been generated
         for pdb in pdbs:
             pdb_id = os.path.basename(pdb)[:-4]
             all_structures.append(from_pdb(pdb_id, pdb, quiet=True))
@@ -166,4 +169,3 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
     best_configs = sorted(best_params, key=lambda x: x[0], reverse=True)[0:to_show]
     for best_config in best_configs:
         print(f'Probability: {best_config[0]}, Parameters: {best_config[1]}')
-    
