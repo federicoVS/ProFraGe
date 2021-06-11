@@ -1,11 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri May 14 11:05:59 2021
-
-@author: Federico van Swaaij
-"""
-
 import os
+
 from Bio.PDB.PDBList import PDBList
 
 from utils.structure import break_chains, filter_chains, contains_dna_rna, build_structure

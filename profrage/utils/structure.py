@@ -1,11 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Apr  5 20:17:57 2021
-
-@author: Federico van Swaaij
-"""
-
 import numpy as np
+
 from Bio import pairwise2
 from Bio.PDB.Structure import Structure
 from Bio.PDB.Model import Model

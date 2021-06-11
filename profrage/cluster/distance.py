@@ -1,17 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Apr  2 16:42:01 2021
-
-@author: Federico van Swaaij
-"""
-
 import numpy as np
 
 from scipy.sparse import csr_matrix
 
 from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering
 from sklearn.mixture import GaussianMixture
-
 
 from cluster.Cluster import Cluster
 from structure.representation import USR

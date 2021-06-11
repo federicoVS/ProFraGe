@@ -1,9 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-@author: Federico van Swaaij
-"""
-
 import os
+
 from prody.proteins.pdbfile import fetchPDB, parsePDB, writePDB
 
 def read_pdb_ids_file(file_name):

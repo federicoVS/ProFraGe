@@ -1,15 +1,15 @@
-"""
-Created on Tue Apr  6 17:59:26 2021
-
-@author: Federico van Swaaij
-"""
-
 import os
+
 import json
+
 import numpy as np
+
 from sklearn.cluster import AgglomerativeClustering
+
 from Bio.PDB.mmtf import MMTFParser
+
 import leidenalg
+
 import igraph as ig
 
 from fragment.Fragment import Fragment

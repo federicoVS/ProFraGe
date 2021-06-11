@@ -1,11 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri May 21 00:01:13 2021
-
-@author: Federico van Swaaij
-"""
-
 import subprocess
+
 import numpy as np
 
 from utils.io import get_files
@@ -65,9 +59,8 @@ def single_stride(stride_dir, pdb):
 
     Returns
     -------
-    stride_desc : list of (str, float, float, float)
-        The full description of the secondary structure: secondary structure code, Phi angle, Psi angle,
-        and residue solvent accessible area.
+    stride_desc : list of (str, str, float, float, float)
+        The full description of the secondary structure: residue name, secondary structure code, Phi angle, Psi angle, and residue solvent accessible area.
     """
     command = stride_dir + 'stride ' + pdb
     ps = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -77,11 +70,12 @@ def single_stride(stride_dir, pdb):
     for line in lines:
         line = line.decode('utf-8')
         if line[0:4].strip() == 'ASG':
+            res_name = line[6:9].strip()
             code = line[25].strip()
-            phi = float(line[43:49].strip())
-            psi = float(line[53:59].strip())
-            area = float(line[65:69].strip())
-            stride_desc.append((code, phi, psi, area))
+            phi = float(line[43:50].strip())
+            psi = float(line[53:60].strip())
+            area = float(line[65:70].strip())
+            stride_desc.append((res_name, code, phi, psi, area))
     return stride_desc
 
 def get_stride_sequence(stride_desc):
@@ -90,7 +84,7 @@ def get_stride_sequence(stride_desc):
 
     Parameters
     ----------
-    stride_desc : list of (str, float, float, float)
+    stride_desc : list of (str, str, float, float, float)
         The Stride description.
 
     Returns
@@ -100,7 +94,7 @@ def get_stride_sequence(stride_desc):
     """
     sequence = []
     for sd in stride_desc:
-        sequence.append(sd[0])
+        sequence.append(sd[1])
     return sequence
 
 def get_stride_frequencies(stride_desc):
@@ -109,7 +103,7 @@ def get_stride_frequencies(stride_desc):
 
     Parameters
     ----------
-    stride_desc : list of (str, float, float, float)
+    stride_desc : list of (str, str, float, float, float)
         The Stride description.
 
     Returns
@@ -119,7 +113,7 @@ def get_stride_frequencies(stride_desc):
     """
     freqs = {}
     for sd in stride_desc:
-        code = sd[0]
+        code = sd[1]
         if code not in freqs:
             freqs[code] = 0
         freqs[code] += 1
@@ -142,7 +136,7 @@ def get_secondary_ratios(stride_dict):
     ratios = np.zeros(shape=(7,))
     total = 0
     for key in stride_dict:
-        total +=stride_dict[key]
+        total += stride_dict[key]
     if 'H' in stride_dict:
         ratios[0] = stride_dict['H']/total
     else:
@@ -219,41 +213,6 @@ def get_eh_numbers(sequence, ne=3, nh=3):
         h_count += 1
     return 'E' + str(e_count) + 'H' + str(h_count)
 
-def get_simple_composition(stride_dict):
-    """
-    Compute the main composition of the protein in a very simplistic way.
-    
-    It limits itself to cluster: helices, strands, strands+helices, coils, turns.
-
-    Parameters
-    ----------
-    stride_dict : dict of str -> int
-        The dictionary of secondary structures frequencies.
-
-    Returns
-    -------
-    keys : str
-        The secondary structures better representing the protein.
-    """
-    if 'E' in stride_dict and 'H' in stride_dict:
-        return 'EH'
-    elif 'E' in stride_dict and 'G' in stride_dict:
-        return 'EG'
-    elif 'E' in stride_dict and 'I' in stride_dict:
-        return 'EI'
-    elif 'E' in stride_dict:
-        return 'E'
-    elif 'H' in stride_dict:
-        return 'H'
-    elif 'T' in stride_dict:
-        return 'T'
-    elif 'G' in stride_dict:
-        return 'G'
-    elif 'I' in stride_dict:
-        return 'I'
-    elif 'C' in stride_dict:
-        return 'C'
-
 def get_composition(stride_dict, pct_thr=0.6):
     """
     Compute the main composition of the protein.
@@ -285,4 +244,3 @@ def get_composition(stride_dict, pct_thr=0.6):
         if total_probs >= pct_thr:
             keys = ''.join(sorted(keys))
             return keys
-        

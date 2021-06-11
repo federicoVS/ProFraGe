@@ -1,11 +1,7 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Apr  6 02:10:15 2021
-
-@author: Federico van Swaaij
-"""
 import numpy as np
+
 from sklearn.preprocessing import normalize
+
 from Bio.PDB import NeighborSearch, Selection
 
 from fragment.graphs import UUGraph

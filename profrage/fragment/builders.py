@@ -1,10 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Apr 13 14:48:33 2021
-
-@author: Federico van Swaaij
-"""
 import itertools
+
 import numpy as np
 
 from structure.representation import MITResidue

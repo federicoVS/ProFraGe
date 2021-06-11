@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Mar 26 10:28:27 2021
-
-@author: Federico van Swaaij
-"""
-
 def binary_search(target, lst):
     """
     Perform binary search over the specified list with the specified target.

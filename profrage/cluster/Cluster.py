@@ -1,11 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Apr  2 17:55:07 2021
-
-@author: Federico van Swaaij
-"""
-
 import numpy as np
+
 import matplotlib.pyplot as plt
 
 from structure.representation import USR

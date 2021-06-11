@@ -1,11 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Apr  3 00:41:51 2021
-
-@author: Federico van Swaaij
-"""
-
 import subprocess
+
 import numpy as np
 
 def run_tm_align(tm_align_dir, pdb_1, pdb_2):

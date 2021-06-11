@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Apr  5 17:55:58 2021
-
-@author: Federico van Swaaij
-"""
-
 import os
 
 import numpy as np
@@ -340,7 +333,7 @@ class FullStride(Representation):
     def _compute_features(self, full_desc):
         tmp_dict = {}
         for fd in full_desc:
-            code, phi, psi, area = fd
+            _, code, phi, psi, area = fd
             if code not in tmp_dict:
                 tmp_dict[code] = [0, [], [], []]
             tmp_dict[code][0] += 1

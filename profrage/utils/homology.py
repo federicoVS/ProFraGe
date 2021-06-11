@@ -1,12 +1,7 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu May 13 15:31:45 2021
-
-@author: Federico van Swaaij
-"""
-
 import os
+
 import shutil
+
 from prody.proteins.blastpdb import blastPDB
 
 from utils.structure import get_sequences

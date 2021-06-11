@@ -1,14 +1,6 @@
-"""
-Created on Wed Mar 31 15:11:01 2021
-
-@author: Federico van Swaaij
-"""
-
 from operator import le, ge
 
 import numpy as np
-
-from Bio.PDB.QCPSuperimposer import QCPSuperimposer
 
 from cluster.Cluster import Cluster
 from structure.representation import USR, FullStride

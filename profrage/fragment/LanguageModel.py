@@ -1,9 +1,3 @@
-"""
-Created on Mon May 17 14:37:33 2021
-
-@author: Federico van Swaaij
-"""
-
 import numpy as np
 
 from structure.similarity import QCPSimilarity

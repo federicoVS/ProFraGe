@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Apr 26 22:04:21 2021
-
-@author: Federico van Swaaij
-"""
 from scipy.spatial import distance
 
 from structure.representation import USR

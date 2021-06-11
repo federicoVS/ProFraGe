@@ -1,11 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Mar 28 15:46:37 2021
-
-@author: Federico van Swaaij
-"""
-
 import os
+
 from Bio.PDB import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB.mmtf import MMTFParser, MMTFIO

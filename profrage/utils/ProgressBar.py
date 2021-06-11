@@ -1,12 +1,6 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Mar 25 22:46:55 2021
-
-@author: Federico van Swaaij
-"""
+import sys
 
 import math
-import sys
 
 class ProgressBar:
     """
@@ -90,4 +84,3 @@ class ProgressBar:
         """
         sys.stdout.write('#')
         sys.stdout.write('\n')
-    

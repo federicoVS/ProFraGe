@@ -1,7 +1,3 @@
-"""
-@author: Federico van Swaaij
-"""
-
 import numpy as np
 
 from Bio.PDB.QCPSuperimposer import QCPSuperimposer

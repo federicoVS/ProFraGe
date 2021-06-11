@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Apr  6 00:37:42 2021
-
-@author: Federico van Swaaij
-"""
-
 class UUGraph:
     """
     A generic undirected, unweighted graph class.

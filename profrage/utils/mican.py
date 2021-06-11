@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri May 21 16:22:11 2021
-
-@author: Federico van Swaaij
-"""
-
 import subprocess
 
 def run_mican(mican_dir, pdb_1, pdb_2):
