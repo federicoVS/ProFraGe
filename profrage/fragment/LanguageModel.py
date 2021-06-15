@@ -99,16 +99,19 @@ class LanguageModel:
             pdb_id = word[0].get_id()
             self.word_probs[pdb_id] = word[1]/total
             
-    def get_avg_plausibility(self):
+    def get_full_plausibility(self):
         """
-        Return the average plausibility for the language model.
+        Return the plausibility for the language model.
+
+        It includes average, variance, and median.
 
         Returns
         -------
-        float in [0,1]
-            The average probability.
+        list of (float in [0,1], float in [0,1], float in [0,1])
+            The average, variance, and median probability.
         """
         probs = []
         for pdb_id in self.sentence_probs:
             probs.append(self.sentence_probs[pdb_id])
-        return np.mean(np.array(probs))
+        probs = np.array(probs)
+        return (np.mean(probs), np.var(probs), np.median(probs))

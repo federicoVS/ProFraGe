@@ -28,6 +28,48 @@ AA_DICT = {'A': 'ALA',
            'Y': 'TYR',
            'V': 'VAL'}
 
+AA_TO_INT = {'ALA': 1,
+             'ARG': 2,
+             'ASN': 3,
+             'ASP': 4,
+             'CYS': 5,
+             'GLN': 6,
+             'GLY': 7,
+             'GLU': 8,
+             'HIS': 9,
+             'ILE': 10,
+             'LEU': 11,
+             'LYS': 12,
+             'MET': 13,
+             'PHE': 14,
+             'PRO': 15,
+             'SER': 16,
+             'THR': 17,
+             'TRP': 18,
+             'TYR': 19,
+             'VAL': 20}
+
+INT_TO_AA = {1: 'ALA',
+             2: 'ARG',
+             3: 'ASN',
+             4: 'ASP',
+             5: 'CYS',
+             6: 'GLN',
+             7: 'GLY',
+             8: 'GLU',
+             9: 'HIS',
+             10: 'ILE',
+             11: 'LEU',
+             12: 'LYS',
+             13: 'MET',
+             14: 'PHE',
+             15: 'PRO',
+             16: 'SER',
+             17: 'THR',
+             18: 'TRP',
+             19: 'TYR',
+             20: 'VAL'}
+
 def structure_length(structure):
     """
     Return the length of the specified structure in terms of its number of residues.

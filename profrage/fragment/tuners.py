@@ -120,6 +120,7 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
                 for third_cluster_id in range(len(third_clualg)):
                     structure = third_clualg.best_representative(third_cluster_id)
                     representatives.append((structure, len(third_clualg.clusters[third_cluster_id])))
+                write_cluster_stats(str(keys)+str(second_cluster_id), third_clualg)
         # Mine fragments on the test set
         pdbs = get_files(test_set_dir, ext='.pdb')
         progress_bar = ProgressBar(len(pdbs))
@@ -155,12 +156,19 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
             lm.compute_sentence_probs(pdb_id, fragments[pdb_id], ep=1/(10*len(get_files('lhg-tmp/', ext='.pdb'))))
         if verbose:
             progress_bar.end()
-        avg_plausibility = lm.get_avg_plausibility()
+        avg_plausibility, var_plausibility, median_plausibility = lm.get_full_plausibility()
         best_params.append((avg_plausibility, param_config))
         if verbose:
-            print(f'Configuration {param_config} has plausibility {avg_plausibility}')
+            print(f'Configuration {param_config} has Avg: {avg_plausibility}, Var: {var_plausibility}, Median: {median_plausibility}')
         if os.path.exists('lhg-tmp/'):
             shutil.rmtree('lhg-tmp/')
     best_configs = sorted(best_params, key=lambda x: x[0], reverse=True)[0:to_show]
     for best_config in best_configs:
         print(f'Probability: {best_config[0]}, Parameters: {best_config[1]}')
+
+def write_cluster_stats(full_id, clualg):
+    file = open('lhg-cluster-log', 'a')
+    for cluster_id in range(len(clualg)):
+        total = len(clualg.clusters[cluster_id])
+        file.write(str(full_id) + str(cluster_id) + ": " + str(total) + "\n")
+    file.close()
