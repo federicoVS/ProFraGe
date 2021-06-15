@@ -157,14 +157,14 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
         if verbose:
             progress_bar.end()
         avg_plausibility, var_plausibility, median_plausibility = lm.get_full_plausibility()
-        best_params.append((avg_plausibility, param_config))
+        best_params.append((median_plausibility, param_config))
         if verbose:
             print(f'Configuration {param_config} has Avg: {avg_plausibility}, Var: {var_plausibility}, Median: {median_plausibility}')
         if os.path.exists('lhg-tmp/'):
             shutil.rmtree('lhg-tmp/')
     best_configs = sorted(best_params, key=lambda x: x[0], reverse=True)[0:to_show]
     for best_config in best_configs:
-        print(f'Probability: {best_config[0]}, Parameters: {best_config[1]}')
+        print(f'Median Probability: {best_config[0]}, Parameters: {best_config[1]}')
 
 def write_cluster_stats(full_id, clualg):
     file = open('lhg-cluster-log', 'a')
