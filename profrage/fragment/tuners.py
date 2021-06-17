@@ -11,7 +11,7 @@ from fragment.LanguageModel import LanguageModel
 from utils.io import get_files, from_pdb, to_pdb
 from utils.ProgressBar import ProgressBar
 
-def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, leiden_params, first_cluster_params, second_cluster_params, third_cluster_params, range_params, lm_rmsd_thr=2.5, train_size=500, to_show=3, verbose=False):
+def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, leiden_params, first_cluster_params, second_cluster_params, third_cluster_params, range_params, lm_rmsd_thr=2.5, train_size=500, to_show=3, verbose=False, write_stats=False):
     """
     Perform GridSearch based on the Leiden mining algorithm coupled with Agglomerative clustering.
 
@@ -46,6 +46,8 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
         The best configurations to show. The default is 3.
     verbose : bool optional
         Whether to print progress information. The default is False.
+    write_stats : bool, optional
+        Whether to write cluster statistics on a file. The default is False.
 
     Returns
     -------
@@ -120,7 +122,8 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
                 for third_cluster_id in range(len(third_clualg)):
                     structure = third_clualg.best_representative(third_cluster_id)
                     representatives.append((structure, len(third_clualg.clusters[third_cluster_id])))
-                write_cluster_stats(str(keys)+str(second_cluster_id), third_clualg)
+                if write_stats:
+                    write_cluster_stats(str(keys)+str(second_cluster_id), third_clualg)
         # Mine fragments on the test set
         pdbs = get_files(test_set_dir, ext='.pdb')
         progress_bar = ProgressBar(len(pdbs))
