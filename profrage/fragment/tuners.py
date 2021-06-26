@@ -68,7 +68,7 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
         if not os.path.exists('lhg-tmp/'):
             os.makedirs('lhg-tmp/')
         # Train, filter, and cluster the model
-        pdbs = get_files(train_set_dir, ext='.pdb')[0:train_size]
+        pdbs = sorted(get_files(train_set_dir, ext='.pdb'))[0:train_size]
         progress_bar = ProgressBar(len(pdbs))
         if verbose:
             print('Generating fragments for training...')

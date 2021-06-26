@@ -798,7 +798,7 @@ class LeidenMiner(SingleMiner):
         """
         Fill the residue dictionary with the residues.
         
-        Residues belonging to W-/HET-ATOM are discarded.
+        Residues belonging to W-/HET-ATOM or not having CA atoms are discarded.
 
         Returns
         -------
@@ -806,7 +806,7 @@ class LeidenMiner(SingleMiner):
         """
         for residue in self.structure.get_residues():
             r_id = residue.get_id()
-            if r_id[0] == ' ' and r_id[1] >= 0:
+            if r_id[0] == ' ' and r_id[1] >= 0 and 'CA' in residue:
                 self._res_dict[r_id[1]] = residue
         
     def _compute_adjacency(self, entries):

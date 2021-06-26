@@ -14,6 +14,14 @@ SS_CODE_TO_INT = {'H': 0,
                   'T': 5,
                   'C': 6}
 
+INT_TO_SS_CODE = {0: 'H',
+                  1: 'G',
+                  2: 'I',
+                  3: 'E',
+                  4: 'B',
+                  5: 'T',
+                  6: 'C'}
+
 def multi_stride(stride_dir, pdb_dir, out_dir='./', save=False, verbose=False):
     """
     Compute the secondary structures for multiple proteins.
