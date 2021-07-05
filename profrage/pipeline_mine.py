@@ -39,7 +39,6 @@ def _mine(pdb_dir, cmap_dir, stride_dir, filter_dir, cluster_dir, max_size, cont
     for pdbf in pdbs:
         pdb_id = os.path.basename(pdbf)[:-4]
         all_structures.append(from_pdb(pdb_id, pdbf, quiet=True))
-    representatives = []
     if verbose:
         print('Clustering...')
     # First level clustering

@@ -92,6 +92,7 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
             progress_bar.end()
         all_structures = []
         pre_clusters = {}
+        inter_clusters = {}
         pdbs = get_files('lhg-tmp/', ext='.pdb')
         if len(pdbs) == 0:
             shutil.rmtree('lhg-tmp/')
@@ -116,17 +117,20 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
             second_clualg = USRCluster(pre_structures, **second_cluster_params)
             second_clualg.cluster('greedy')
             for second_cluster_id in range(len(second_clualg)):
-                structures = []
+                inter_clusters[str(keys) + '-' + str(second_cluster_id)] = []
                 for second_idx in second_clualg.clusters[second_cluster_id]:
-                    structures.append(second_clualg.structures[second_idx])
-                # Third level clutering
-                third_clualg = AtomicSuperImpose(structures, **third_cluster_params)
-                third_clualg.cluster('optim')
-                for third_cluster_id in range(len(third_clualg)):
-                    structure = third_clualg.best_representative(third_cluster_id)
-                    representatives.append((structure, len(third_clualg.clusters[third_cluster_id])))
-                if write_stats:
-                    write_cluster_stats(str(keys)+str(second_cluster_id), third_clualg)
+                    s = second_clualg.structures[second_idx]
+                    inter_clusters[str(keys) + '-' + str(second_cluster_id)].append(s)
+        # Third level clutering
+        for keys in inter_clusters:
+            inter_structures = inter_clusters[keys]
+            third_clualg = AtomicSuperImpose(inter_structures, **third_cluster_params)
+            third_clualg.cluster('optim')
+            for third_cluster_id in range(len(third_clualg)):
+                structure = third_clualg.best_representative(third_cluster_id)
+                representatives.append((structure, len(third_clualg.clusters[third_cluster_id])))
+            if write_stats:
+                write_cluster_stats(str(keys)+str(second_cluster_id), third_clualg)
         # Mine fragments on the test set
         pdbs = get_files(test_set_dir, ext='.pdb')
         progress_bar = ProgressBar(len(pdbs))
