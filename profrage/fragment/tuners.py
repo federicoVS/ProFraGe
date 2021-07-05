@@ -8,6 +8,7 @@ from cluster.greedy import USRCluster, StrideCluster, AtomicSuperImpose
 from fragment.mine import LeidenMiner
 from fragment.filtering import in_range
 from fragment.LanguageModel import LanguageModel
+from utils.structure import is_complete
 from utils.io import get_files, from_pdb, to_pdb
 from utils.ProgressBar import ProgressBar
 
@@ -79,6 +80,8 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
             pdb_id = os.path.basename(pdbf)[:-4]
             cmapf = cmap_train_dir + pdb_id + '.cmap'
             structure = from_pdb(pdb_id, pdbf, quiet=True)
+            if not is_complete(structure):
+                continue
             model = LeidenMiner(structure, cmapf, **param_config)
             model.mine()
             frags = model.get_fragments()

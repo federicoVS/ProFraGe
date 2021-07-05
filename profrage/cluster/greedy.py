@@ -531,11 +531,20 @@ class StrideCluster(GreedyCluster):
         """
         # Define n for convenience
         n = len(self.structures)
+        # Keep for valid structures
+        valid_structures = []
         # Define feature matrices
-        self._features = np.zeros(shape=(n, FullStride.get_n_features()))
-        # Compute USR for each structure
+        self._features = [] #np.zeros(shape=(n, FullStride.get_n_features()))
+        # Compute Stride for each structure
         for i in range(n):
             pdb = self.pdb_dir + self.structures[i].get_id() + '.pdb'
-            self._features[i,:] = FullStride(self.stride_dir, pdb).get_features()
+            feats = FullStride(self.stride_dir, pdb).get_features()
+            if feats is not None:
+                self._features.append(feats)
+                valid_structures.append(self.structures[i])
+        # Set structures to valid ones
+        self.structures = valid_structures
+        # Numpify features
+        self._features = np.array(self._features)
         # Cluster
         super().cluster(mode)

@@ -69,6 +69,7 @@ def single_stride(stride_dir, pdb):
     -------
     stride_desc : list of (str, str, float, float, float)
         The full description of the secondary structure: residue name, secondary structure code, Phi angle, Psi angle, and residue solvent accessible area.
+        In case of errors, `None` is returned
     """
     command = stride_dir + 'stride ' + pdb
     ps = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -84,7 +85,7 @@ def single_stride(stride_dir, pdb):
             psi = float(line[53:60].strip())
             area = float(line[65:70].strip())
             stride_desc.append((res_name, code, phi, psi, area))
-    return stride_desc
+    return stride_desc if len(stride_desc) > 0 else None
 
 def get_stride_sequence(stride_desc):
     """

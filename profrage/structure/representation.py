@@ -293,9 +293,10 @@ class FullStride(Representation):
         super(FullStride, self).__init__()
         self.pdb_id = os.path.basename(pdb)[:-4]
         self.pdb = pdb
-        self.features = np.zeros(shape=(28,))
+        self.features = None
         full_desc = single_stride(stride_dir, pdb)
-        self._compute_features(full_desc)
+        if full_desc is not None:
+            self._compute_features(full_desc)
         
     @staticmethod
     def get_similarity_score(features_1, features_2):
@@ -331,6 +332,7 @@ class FullStride(Representation):
         return 28
     
     def _compute_features(self, full_desc):
+        self.features = np.zeros(shape=(28,))
         tmp_dict = {}
         for fd in full_desc:
             _, code, phi, psi, area = fd

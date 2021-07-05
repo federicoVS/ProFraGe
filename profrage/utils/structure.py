@@ -70,6 +70,25 @@ INT_TO_AA = {1: 'ALA',
              19: 'TYR',
              20: 'VAL'}
 
+def is_complete(structure):
+    """
+    Check whether the given structure is complete. A structure is considered complete if all residues contain the carbon-alpha atom.
+
+    Parameters
+    ----------
+    structure : Bio.PDB.Structure
+        The structure to check.
+
+    Returns
+    -------
+    bool
+        Whether the structure is complete.
+    """
+    for residue in structure.get_residues():
+        if 'CA' not in residue:
+            return False
+    return True
+
 def structure_length(structure):
     """
     Return the length of the specified structure in terms of its number of residues.

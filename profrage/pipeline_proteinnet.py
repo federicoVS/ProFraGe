@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed May 12 16:17:17 2021
-
-@author: Federico van Swaaij
-"""
-
 import os
 import argparse
 

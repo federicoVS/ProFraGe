@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Mar 25 15:20:13 2021
-
-@author: Federico van Swaaij
-"""
-
 import argparse
 
 from utils.pdb_file import read_pdb_ids_file, fetch_pdb
