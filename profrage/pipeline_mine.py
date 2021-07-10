@@ -19,14 +19,12 @@ def _mine(pdb_dir, cmap_dir, stride_dir, filter_dir, cluster_dir, max_size, cont
             progress_bar.start()
         pdb_id = os.path.basename(pdbf)[:-4]
         structure = from_pdb(pdb_id, pdbf, quiet=True)
-        if not is_complete(structure):
-            continue
         cmapf = cmap_dir + pdb_id + '.cmap'
         miner = LeidenMiner(structure, cmapf, contacts=contacts, bb_strenght=bb_strength, n_iters=n_iters, max_size=max_size, f_thr=f_thr)
         miner.mine()
         frags = miner.get_fragments()
         for frag in frags:
-            if in_range(frag, lower=lower_size, upper=max_size):
+            if in_range(frag, lower=lower_size, upper=max_size) and is_complete(frag):
                 to_pdb(frag, frag.get_id(), out_dir=filter_dir)
     if verbose:
         progress_bar.end()

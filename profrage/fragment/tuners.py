@@ -80,13 +80,11 @@ def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir
             pdb_id = os.path.basename(pdbf)[:-4]
             cmapf = cmap_train_dir + pdb_id + '.cmap'
             structure = from_pdb(pdb_id, pdbf, quiet=True)
-            if not is_complete(structure):
-                continue
             model = LeidenMiner(structure, cmapf, **param_config)
             model.mine()
             frags = model.get_fragments()
             for frag in frags:
-                if in_range(frag, **range_params):
+                if in_range(frag, **range_params) and is_complete(frag):
                     to_pdb(frag, frag.get_id(), out_dir='lhg-tmp/')
         if verbose:
             progress_bar.end()
