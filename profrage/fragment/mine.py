@@ -753,7 +753,7 @@ class LeidenMiner(SingleMiner):
         A dictionary mapping the segment ID of the residue to the residue itself.
     """
     
-    def __init__(self, structure, cmap, partition=leidenalg.ModularityVertexPartition, contacts='cmap', bb_strength=1.0, f_thr=0.1, n_iters=5, max_size=25, **params):
+    def __init__(self, structure, cmap, partition=leidenalg.ModularityVertexPartition, contacts='cmap', bb_strength=1.0, f_thr=0.1, dist_thr=12, n_iters=5, max_size=25, **params):
         """
         Initialize the class.
 
@@ -771,8 +771,11 @@ class LeidenMiner(SingleMiner):
         bb_strength : float, optional
             The offset strength to add to the weights of the backbone. The default is 1.0.
         f_thr : float in [0,1], optional
-            The threshold above which two residues are interacting. It is also used as the weight
-            assigned to the edges. The default is 0.1.
+            The threshold above which two residues are interacting.
+            It's inverse is used as the weight assigned to the edges. The default is 0.1.
+        dist_thr : float, optional
+            The distance in Angstroms under which two residues are interacting.
+            It's inverse is used as the weight assigned to the edges. The default is 12.
         n_iters : int, optional
             The number of iterations of the Leiden algorithm. The default is 5.
         max_size : int, optional
@@ -790,6 +793,7 @@ class LeidenMiner(SingleMiner):
         self.contacts = contacts
         self.bb_strength = bb_strength
         self.f_thr = f_thr
+        self.dist_thr = dist_thr
         self.n_iters = n_iters
         self.max_size = max_size
         self._res_dict = {}
@@ -865,7 +869,7 @@ class LeidenMiner(SingleMiner):
                             ca_2 = self._res_dict[res_2]['CA']
                             ca_dist = np.linalg.norm(ca_1.get_vector()-ca_2.get_vector())
                             ca_dist_inv = 1/ca_dist
-                        if 1/ca_dist_inv < 12:
+                        if 1/ca_dist_inv < self.dist_thr:
                             self.adjacency.append((res_1, res_2))
                             self.weights.append(ca_dist_inv)
                 
