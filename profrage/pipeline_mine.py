@@ -13,10 +13,12 @@ def _mine(pdb_dir, cmap_dir, stride_dir, filter_dir, cluster_dir, max_size, cont
           first_score_thr, second_score_thr, second_bb_atoms, third_rmsd_thr, third_length_pct, write_stats=False, verbose=False):
     pdbs = get_files(pdb_dir, ext='.pdb')
     progress_bar = ProgressBar(len(pdbs))
+    if verbose:
+        print('Mining and filtering...')
+        progress_bar.start()
     for pdbf in pdbs:
         if verbose:
-            print('Mining and filtering...')
-            progress_bar.start()
+            progress_bar.step()
         pdb_id = os.path.basename(pdbf)[:-4]
         structure = from_pdb(pdb_id, pdbf, quiet=True)
         cmapf = cmap_dir + pdb_id + '.cmap'
