@@ -101,5 +101,5 @@ if __name__ == '__main__':
     # Begin pipeline
     _mine(args.pdb_dir, args.cmap_dir, args.stride_dir, args.filter_dir, args.cluster_dir,
           args.max_size, args.contacts, args.bb_strength, args.n_iters, args.f_thr,
-          args.lower_size, args.first_score_thr, args.second_score_thr, args.second_bb_atoms, args.third_score_thr, args.thrid_length_pct,
+          args.lower_size, args.first_score_thr, args.second_score_thr, args.second_bb_atoms, args.third_score_thr, args.third_length_pct,
           write_stats=args.write_stats, verbose=args.verbose)
