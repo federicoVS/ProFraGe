@@ -1,4 +1,8 @@
+import numpy as np
+
 import torch
+
+from Bio.PDB.QCPSuperimposer import QCPSuperimposer
 
 def graph_metrics(adj):
     """
@@ -46,6 +50,24 @@ def graph_metrics(adj):
     return scores
 
 def amino_acid_metrics(x, aa_num=20):
+    """
+    Compute metrics associated with with amino acids.
+
+    It counts how many times an amino acid appears in the proteins, and the median length of a sequence of
+    amino acids, e.g. ALA, ALA, ..., ALA.
+
+    Parameters
+    ----------
+    x : torch.tensor:
+        The node features.
+    aa_num : int, optional
+        The number of amino acids. The default is 20.
+
+    Returns
+    -------
+    scores : torch.tensor
+        The score having the following format: [AA_1_count, ..., AA_aa_num_count, median_seq_len]
+    """
     # Get number of amino acids
     n = x.shape[0]
     # Initialize scores
@@ -71,6 +93,24 @@ def amino_acid_metrics(x, aa_num=20):
     return scores
 
 def secondary_sequence_metrics(x, ss_num=7):
+    """
+    Compute metrics associated with with secondary structure.
+
+    It counts how many times a secondary structure appears in the proteins, and the median length of a sequence of
+    secondary structure, e.g. H, H, ..., H.
+
+    Parameters
+    ----------
+    x : torch.tensor:
+        The node features.
+    ss_num : int, optional
+        The number of secondary structures. The default is 7.
+
+    Returns
+    -------
+    scores : torch.tensor
+        The score having the following format: [SS_1_count, ..., SS_ss_num_count, median_seq_len]
+    """
     # Get number of amino acids
     n = x.shape[0]
     # Initialize scores
@@ -94,3 +134,29 @@ def secondary_sequence_metrics(x, ss_num=7):
     seq_len = torch.median(torch.tensor(seq_len))
     scores = torch.tensor(ss_counts + seq_len)
     return scores
+
+def ca_metrics(coords_fixed, coords_moving):
+    """
+    Compute the superimposing of a two sets of C-alpha atoms.
+
+    Parameters
+    ----------
+    coords_fixed : list of torch.tensor
+        The list of target C-alpha coordinates.
+    coords_moving : list of torch.tensor
+        The list of input C-alpha coordinates.
+
+    Returns
+    -------
+    float
+        The RMSD score of the superimposition.
+    """
+    # Prepare the coordinates
+    fixed, moving = np.zeros(shape=(len(coords_fixed),3)), np.zeros(shape=(len(coords_moving),3))
+    for i in range(len(coords_fixed)):
+        fixed[i,:], moving[i,:] = coords_fixed[i], coords_moving[i]
+    # Superimpose
+    qcpsi = QCPSuperimposer()
+    qcpsi.set(fixed, moving)
+    qcpsi.run()
+    return qcpsi.get_rms()

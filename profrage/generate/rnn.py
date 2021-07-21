@@ -6,15 +6,54 @@ import torch_geometric.nn as gnn
 from torch.autograd import Variable
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 
 from generate.layers import GRULayer, GruMLPLayer, MLPLayer
-from generate.utils import sample_softmax
 
 class GraphRNN_A(nn.Module):
+    """
+    An augmented (A) version of the `GraphRNN` model.
+
+    A GRU layer (f_trans) initially computes the state of the graph. From there, an MLP (f_out_x) computes the node
+    features while another GRU (f_out_edge) layer computes the adjacency/edge features matrix.
+
+    In this model for the edge features only the class (i.e. type of connections) are taken into account.
+
+    Source
+    ------
+    Paper => GraphRNN: Generating Realistic Graphs with Deep Auto-regressive Models
+             Jiaxuan You, Rex Ying, Xiang Ren, William L. Hamilton, Jure Leskovec
+    Code  => https://github.com/snap-stanford/GraphRNN
+    """
 
     def __init__(self, max_prev_node,
-                 t_hidden_dim=64, o_hidden_dim=16, t_embed_dim=32, o_embed_dim=8, num_layers=4, node_dim=5, edge_dim=3, dropout=0, device='cpu'):
+                 t_hidden_dim=64, o_hidden_dim=16, t_embed_dim=32, o_embed_dim=8, num_layers=4, node_dim=10, edge_dim=3, dropout=0, device='cpu'):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        max_prev_node : int
+            The maximum number of nodes.
+        t_hidden_dim : int, optional
+            The hidden dimension for f_trans. The default is 64.
+        o_hidden_dim : int, optional
+            The output dimension for f_trans. The default is 16.
+        t_embed_dim : int, optional
+            The embedding dimension of f_trans. The default is 32.
+        o_embed_dim : int, optional
+            The embedding dimension for f_out_x and f_out_edge. The default is 8.
+        num_layers : int, optional
+            The number of layers for f_trans and f_out_edge. The default is 4.
+        node_dim : int, optional
+            The dimension of the node features. The default is 10.
+        edge_dim : int, optional
+            The dimension of the edge features. The default is 3.
+        dropout : float in [0,1], optional
+            The dropout probability. The default is 0.1.
+        device : str, optional
+            The device where to put the data. The default is 'cpu'.
+        """
         super(GraphRNN_A, self).__init__()
         self.max_prev_node = max_prev_node
         self.num_layers = num_layers
@@ -34,13 +73,43 @@ class GraphRNN_A(nn.Module):
                 adj[i,j] = adj[j,i] = adj_seq[b,i,j]
         return adj
 
-    def train(self, loader, num_epochs, batch_size, lr_trans=3e-3, lr_out_x=3e-3, lr_out_edge=3e-3, elw=10, milstones=[400,1000], decay=0.3, verbose=False):
+    def train(self, loader, num_epochs, batch_size, lr_trans=3e-3, lr_out_x=3e-3, lr_out_edge=3e-3, elw=10, milestones=[400,1000], decay=0.3, verbose=False):
+        """
+        Train the model.
+
+        Parameters
+        ----------
+        loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader.
+        num_epochs : int
+            The number of epochs to perform.
+        batch_size : int
+            The batch size.
+        lr_trans : float, optional
+            The learning rate for f_trans. The default is 3e-3.
+        lr_out_x : float, optional
+            The learning rate for f_out_x. The default is 3e-3.
+        lr_out_edge : float, optional
+            The learning rate for f_out_edge. The default is 3e-3.
+        elw : float, optional
+            The scaling factor to apply to the cross-entropy loss. The default is 10.
+        milestones : list of int, optional
+            The list of milestones at which to decay the learning rate. The default is [400,1000].
+        decay : float in [0,1], optional
+            The decay of to apply to the learning rate. The default is 0.3.
+        verbose : bool, optional
+            Whether to print the loss. The default is False.
+
+        Returns
+        -------
+        None
+        """
         optimizer_trans = Adam(self.f_trans.parameters(), lr=lr_trans)
         optimizer_out_x = Adam(self.f_out_x.parameters(), lr=lr_out_x)
         optimizer_out_edge = Adam(self.f_out_edge.parameters(), lr=lr_out_edge)
-        scheduler_trans = MultiStepLR(optimizer_trans, milestones=milstones, gamma=decay)
-        scheduler_out_x = MultiStepLR(optimizer_out_x, milestones=milstones, gamma=decay)
-        scheduler_out_edge = MultiStepLR(optimizer_out_edge, milestones=milstones, gamma=decay)
+        scheduler_trans = MultiStepLR(optimizer_trans, milestones=milestones, gamma=decay)
+        scheduler_out_x = MultiStepLR(optimizer_out_x, milestones=milestones, gamma=decay)
+        scheduler_out_edge = MultiStepLR(optimizer_out_edge, milestones=milestones, gamma=decay)
         for epoch in range(num_epochs):
             for i, (data) in enumerate(loader):
                 self.f_trans.zero_grad()
@@ -116,6 +185,29 @@ class GraphRNN_A(nn.Module):
                 print(f'epoch {epoch+1}/{num_epochs}, loss = {loss.item():.4}')
 
     def eval(self, max_num_nodes, test_batch_size=1, aa_min=1, aa_max=20, ss_min=0, ss_max=6):
+        """
+        Evaluate the model by generating new data.
+
+        Parameters
+        ----------
+        max_num_nodes : int
+            The number of nodes to generate.
+        test_batch_size : int, optional
+            The number of samples to generate. The default is 1.
+        aa_min : int, optional
+            The minimum amino acid code. The default is 1.
+        aa_max : int, optional
+            The maximum amino acid code. The default is 20.
+        ss_min : int, optional
+            The minimum secondary structure code. The default is 0.
+        ss_max : int, optional
+            The maximum secondary structure code. The default is 6.
+
+        Returns
+        -------
+        (x_pred, adj_pred) : (torch.tensor, torch.tensor)
+            The predicted node features and adjacency matrix.
+        """
         self.f_trans.hidden = self.f_trans.init_hidden(test_batch_size)
         node_pred_float = Variable(torch.zeros(test_batch_size,max_num_nodes,self.node_dim)).to(self.device)
         edge_pred_long = Variable(torch.zeros(test_batch_size,max_num_nodes,self.max_prev_node-1)).to(self.device)
@@ -131,7 +223,7 @@ class GraphRNN_A(nn.Module):
             x_step[:,:,0:self.node_dim] = node_pred # update step
             for j in range(min(self.max_prev_node,i+1)):
                 _, output_y_pred_step = self.f_out_edge(output_x_step)
-                output_x_step = sample_softmax(output_y_pred_step) #sample_sigmoid(output_y_pred_step, sample=True, sample_time=1)
+                output_x_step = torch.softmax(output_y_pred_step, dim=2)
                 x_step[:,:,self.node_dim+j:self.node_dim+j+1] = output_x_step
                 output_x_step = torch.FloatTensor([[[output_x_step]]]) # convert and reshape prediction
                 self.f_out_edge.hidden = Variable(self.f_out_edge.hidden.data).to(self.device) # update hidden state
@@ -148,22 +240,133 @@ class GraphRNN_A(nn.Module):
         return x_pred, adj_pred
 
 class GraphRNN_G(nn.Module):
+    """
+    A graph (G) version of the `GraphRNN` model.
 
-    def __init__(self, node_dim, edge_dim, hidden_dim, embed_dim, mlp_dims, num_layers=4, dropout=0, device='cpu'):
+    Instead of representing the graph as a sequence, an EC graph convolutional layer is used to get an embedding
+    of the graph. This sequence is then fed to a GRU layer to be processed.
+    Last, predictions (node classes and values) are carried out by two distinct MLPs.
+    """
+
+    def __init__(self, max_prev_node, node_dim, edge_dim, hidden_dim, g_latent_dim, embed_dim, mlp_dims, num_layers=4,
+                 dropout=0, class_dim=2, aa_dim=20, ss_dim=7, ignore_idx=-100, device='cpu'):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        max_prev_node : int
+            The maximum number of nodes.
+        node_dim : int
+            The dimension of the node features.
+        edge_dim : int
+            The dimension of the edge features.
+        hidden_dim : int
+            The hidden dimension.
+        g_latent_dim : int
+            The latent dimension in the EC graph convolution.
+        embed_dim : int
+            The embedding dimension in the GRU layer.
+        mlp_dims : list of int
+            The dimensions of the MLP layers.
+        num_layers : int, optional
+            The number of GRU cells.
+        dropout : float in [0,1], optional
+            The dropout probability. The default is 0.
+        class_dim : int, optional
+            The number of classes in the node features. The default is 2.
+        aa_dim : int, optional
+            The number of amino acids. The default is 20.
+        ss_dim : int, optional
+            The number of secondary structures. The default is 7.
+        ignore_idx : int, optional
+            The index of classes to be ignored by the cross-entropy loss. The default is -100.
+        device : str, optional
+            The device where to put the data. The default is 'cpu'.
+        """
         super(GraphRNN_G, self).__init__()
+        self.max_prev_node = max_prev_node
         self.node_dim = node_dim
         self.edge_dim = edge_dim
         self.num_layers = num_layers
+        self.class_dim = class_dim
+        self.aa_dim = aa_dim
+        self.ss_dim = ss_dim
+        self.ignore_idx = ignore_idx
         self.device = device
 
-        self.ecc = gnn.ECConv(node_dim, node_dim, nn.Sequential(nn.Linear(edge_dim,node_dim*node_dim)))
-        self.norm = nn.LayerNorm(node_dim)
+        self.ecc = gnn.ECConv(node_dim, g_latent_dim, nn.Sequential(nn.Linear(edge_dim,node_dim*g_latent_dim)))
+        self.lin = nn.Linear(g_latent_dim, node_dim)
         self.gru = GRULayer(node_dim, hidden_dim, embed_dim, num_layers, dropout=dropout, device=device)
-        self.fc_out = MLPLayer([hidden_dim] + mlp_dims + [node_dim])
+        self.fc_out_class = MLPLayer([hidden_dim] + mlp_dims + [aa_dim*ss_dim])
+        self.fc_out_reg = MLPLayer([hidden_dim] + mlp_dims + [node_dim-class_dim])
 
-    def train(self, loader, num_epochs, batch_size, lr=3e-3, l_kld=1e-5, milstones=[400,1000], decay=0.3, verbose=False):
+        self._init_weights(self.lin)
+        self.fc_out_class.apply(self._init_weights)
+        self.fc_out_reg.apply(self._init_weights)
+
+    def _init_weights(self, m, mode='he'):
+        if isinstance(m, nn.Linear):
+            if mode == 'he':
+                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+            elif mode == 'unif':
+                nn.init.uniform_(m.weight, a=-0.005, b=0.005)
+
+    def _input_classes(self, x):
+        b_dim, n = x.shape[0], x.shape[1]
+        x_classes = torch.zeros(b_dim,n, dtype=torch.long)
+        for b in range(b_dim):
+            for i in range(n):
+                a, s = x[b,i,0] - 1, x[b,i,1] - 1 # subtract one because classes begin with 1
+                mapping = s*self.aa_dim + a
+                if mapping < 0:
+                    x_classes[b,i] = self.ignore_idx
+                else:
+                    x_classes[b,i] = mapping
+        return x_classes
+
+    def _encode_rnn_data(self, x_true, x_gen, batch_len):
+        x_true_seq, x_gen_seq = [], []
+        prev = 0
+        for i in range(len(batch_len)):
+            x_true_seq.append(x_true[prev:prev+batch_len[i]].clone().detach())
+            x_gen_seq.append(x_gen[prev:prev+batch_len[i]].clone().detach())
+            prev += batch_len[i]
+        x_true_seq = pad_sequence(x_true_seq, batch_first=True)
+        x_gen_seq = pad_sequence(x_gen_seq, batch_first=True)
+        n, m = len(x_true_seq), max(batch_len)
+        xt, yt = torch.zeros(n,m,self.node_dim), torch.zeros(n,m,self.node_dim)
+        xt[:,0:m,:] = x_gen_seq
+        yt[:,0:m,:] = x_true_seq
+        return xt, yt
+
+    def train(self, loader, num_epochs, batch_size, lr=3e-3, milestones=[400,1000], decay=0.3, verbose=False):
+        """
+        Train the model.
+
+        Parameters
+        ----------
+        loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader.
+        num_epochs : int
+            The number of epochs.
+        batch_size : int
+            The batch size.
+        lr : float, optional
+            The learning rate. The default is 3e-3.
+        milestones : list of int, optional
+            The list of milestones at which to decay the learning rate. The default is [400,1000].
+        decay : float, optional
+            The decay to apply to the learning rate. The default is 0.3.
+        verbose : bool, optional
+            Whether to print the loss. The default is False.
+
+        Returns
+        -------
+        None
+        """
         optimizer = Adam(self.parameters(), lr=lr)
-        scheduler = MultiStepLR(optimizer, milestones=milstones, gamma=decay)
+        scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=decay)
         for epoch in range(num_epochs):
             for i, (data) in enumerate(loader):
                 optimizer.zero_grad()
@@ -171,38 +374,63 @@ class GraphRNN_G(nn.Module):
                 x, adj, edge, batch_len = data.x, data.edge_index, data.edge_attr, data.batch_len
                 # Encode the graph
                 graph = self.ecc(x, adj, edge_attr=edge)
-                graph = self.norm(graph)
-                # Reshape graph emebdding
-                graph_reshape = graph.view(graph.shape[0],1,graph.shape[1])
-                graph_input = torch.cat((torch.ones(1,1,self.node_dim), graph_reshape))
-                x_output = torch.cat((x, torch.zeros(1,x.shape[1])))
-                graph_input = Variable(graph_input).to(self.device)
-                x_output = Variable(x_output).to(self.device)
+                graph = self.lin(graph)
+                # Get RNN data and sort it
+                xt, yt = self._encode_rnn_data(x, graph, batch_len)
+                # Sort the input
+                y_len, sort_index = torch.sort(batch_len, 0, descending=True)
+                y_len = y_len.numpy().tolist()
+                xt, yt = torch.index_select(xt, 0, sort_index), torch.index_select(yt, 0, sort_index)
+                xt = torch.cat((torch.ones(xt.shape[0],1,self.node_dim), xt), dim=1)
+                xt = Variable(xt).to(self.device)
+                yt = Variable(yt).to(self.device)
                 # Initialize hidden state
-                self.gru.hidden = self.gru.init_hidden(batch_size=graph_input.shape[0])
-                out, _ = self.gru(graph_input)
-                out = out.view(out.shape[0],out.shape[2])
-                out = self.fc_out(out)
-                loss = F.mse_loss(out, x_output)
+                self.gru.hidden = self.gru.init_hidden(batch_size=xt.shape[0])
+                out, _ = self.gru(xt, pack=True, input_len=y_len)
+                out_class = self.fc_out_class(out)
+                out_reg = self.fc_out_reg(out)
+                # Clean
+                y_pred_class = pack_padded_sequence(out_class, y_len, batch_first=True)
+                y_pred_class = pad_packed_sequence(y_pred_class, batch_first=True)[0]
+                y_pred_reg = pack_padded_sequence(out_reg, y_len, batch_first=True)
+                y_pred_reg = pad_packed_sequence(y_pred_reg, batch_first=True)[0]
+                # Compute the loss
+                mse = F.mse_loss(y_pred_reg, yt[:,:,self.class_dim:])
+                ce = F.cross_entropy(torch.transpose(y_pred_class, 1,2), self._input_classes(yt[:,:,0:self.class_dim]))
+                beta = torch.abs(ce.detach()/mse.detach()).detach()
+                loss = beta*mse + ce
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
             if verbose:
                 print(f'epoch {epoch+1}/{num_epochs}, loss = {loss.item():.4}')
 
-    def eval(self, max_num_nodes, aa_min=1, aa_max=20, ss_min=0, ss_max=6):
+    def eval(self, max_num_nodes):
+        """
+        Evaluate the model by generating new data.
+
+        Parameters
+        ----------
+        max_num_nodes : int
+            The number of nodes to generate.
+
+        Returns
+        -------
+        x_pred : torch.tensor
+            The predicted node features.
+        """
         self.gru.hidden = self.gru.init_hidden(batch_size=1)
-        x_pred = Variable(torch.zeros(max_num_nodes,self.node_dim)).to(self.device)
-        x_step = Variable(torch.ones(1,self.node_dim)).to(self.device)
+        x_pred = Variable(torch.zeros(1,max_num_nodes,self.node_dim)).to(self.device)
+        x_step = Variable(torch.ones(1,1,self.node_dim)).to(self.device)
         for i in range(max_num_nodes):
-            x_step = x_step.view(x_step.shape[0],1,x_step.shape[1])
             h_raw, _ = self.gru(x_step)
-            h_raw = h_raw.view(h_raw.shape[0],h_raw.shape[2])
-            x_step = self.fc_out(h_raw)
-            x_pred[i] = x_step
+            x_class_idx = torch.argmax(self.fc_out_class(h_raw)[:,:,])
+            a_tensor, s_tensor = x_class_idx - (x_class_idx//self.aa_dim)*self.aa_dim + 1, x_class_idx//self.aa_dim
+            x_step_class = torch.tensor([[[a_tensor, s_tensor]]])
+            x_step_reg = self.fc_out_reg(h_raw)
+            x_step = torch.cat((x_step_class, x_step_reg), dim=2)
+            x_pred[:,i,:] = x_step
             self.gru.hidden = Variable(self.gru.hidden.data).to(self.device)
         x_pred = x_pred.data.float()
-        for i in range(max_num_nodes):
-            x_pred[i,0] = torch.clip(x_pred[i,0], min=aa_min, max=aa_max)
-            x_pred[i,1] = torch.clip(x_pred[i,1], min=ss_min, max=ss_max)
+        x_pred = x_pred.view(x_pred.shape[1],x_pred.shape[2])
         return x_pred

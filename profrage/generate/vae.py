@@ -4,86 +4,137 @@ import torch.nn as nn
 import torch_geometric.nn as gnn
 from torch.optim import Adam
 
-from generate.layers import MLPLayer, CNN1Layer
+from generate.layers import MLPLayer
 
 class GraphVAE(nn.Module):
+    """
+    A VAE model to generate a graph.
 
-    def __init__(self, node_dim, hidden_dim, latent_dim, enc_dims, x_mlp_dims, adj_mlp_dims, adj_cnn_dims=None,
-                 kernel_size=2, dropout=0.1, max_size=30, aa_dim=20, ss_dim=7, atom_dim=5, l_kld=1e-3, ignore_idx=-100,
-                 use_cnn=False, device='cpu'):
+    It takes as input a graph in a sparse format: this means that the number of nodes is fixed, and thus it does not
+    compute the probability of nodes being in the graph.
+
+    The encoder is a EC graph convolutional layer, which results in a graph embedding based on its node features,
+    adjacency, and edge features.
+    The decoder consists of three MLPs: a node feature classifier (amino acid code, secondary structure code), a node
+    feature regressor (e.g. atomic coordinates and angles), and an adjacency and edge MLP, which itself is divided
+    into a classifier and regressor.
+    """
+
+    def __init__(self, node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=0.1,
+                 x_class_dim=2, edge_class_dim=3, max_size=30, aa_dim=20, ss_dim=7, l_kld=1e-3, ignore_idx=-100, weight_init=5e-5, device='cpu'):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        node_dim : int
+            The dimension of the node features.
+        edge_dim : int
+            The dimension of the edge features.
+        hidden_dim : int
+            The hidden dimension.
+        latent_dim : int
+            The dimension of the latent space.
+        mlp_dims : list of int
+            The dimensions for the MLP layers.
+        dropout : float in [0,1], optional
+            The dropout probability. The default is 0.1.
+        x_class_dim : int, optional
+            The number of node features which represent classes. The default is 2.
+        edge_class_dim : int, optional
+            The number of edge features which represent classes. The default is 3.
+        max_size : int, optional
+            The maximum number of amino acids in a protein. The default is 30.
+        aa_dim : int, optional
+            The number of amino acids. The default is 20.
+        ss_dim : int, optional
+            The number of secondary structures. The default is 7.
+        l_kld : float, optional
+            The penalty to apply to the Kullback-Leibler loss, for stability reasons. The default is 1e-3.
+        ignore_idx : int, optional
+            The classes to ignore in the cross-entropy loss. The default is -100.
+        weight_init : float, optional
+            The weight initialization bounds. The default is 5e-5.
+        device : str, optional
+            The device where to put the data. The default is 'cpu'.
+        """
         super(GraphVAE, self).__init__()
+        self.node_dim = node_dim
+        self.edge_dim = edge_dim
         self.latent_dim = latent_dim
-        self.kernel_size = kernel_size
+        self.dropout = dropout
         self.max_size = max_size
         self.aa_dim = aa_dim
         self.ss_dim = ss_dim
-        self.atom_dim = atom_dim
+        self.x_class_dim = x_class_dim
+        self.edge_class_dim = edge_class_dim
         self.l_kld = l_kld
         self.ignore_idx = ignore_idx
+        self.weight_init = weight_init
         self.device = device
 
-        self.enc_sage = gnn.DenseSAGEConv(node_dim, hidden_dim)
-        self.enc_dropout = nn.Dropout(dropout)
-        self.enc_mlp = MLPLayer([hidden_dim] + enc_dims + [hidden_dim])
+        # Encoding
+        self.enc = gnn.ECConv(node_dim, hidden_dim, nn.Sequential(nn.Linear(edge_dim,node_dim*hidden_dim)))
+        # Sampling
         self.latent_mu = nn.Linear(hidden_dim, latent_dim)
         self.latent_log_var = nn.Linear(hidden_dim, latent_dim)
-        self.dec_mlp_x = MLPLayer([latent_dim] + x_mlp_dims + [hidden_dim])
-        self.dec_mlp_x_atomic = MLPLayer([latent_dim] + x_mlp_dims + [hidden_dim])
-        if use_cnn:
-            self.dec_adj = CNN1Layer([max_size] + adj_cnn_dims + [max_size], kernel_size)
-        else:
-            self.dec_adj = MLPLayer([latent_dim] + adj_mlp_dims + [hidden_dim])
-        self.dec_dropout_x = nn.Dropout(dropout)
-        self.dec_dropout_x_atomic = nn.Dropout(dropout)
-        self.dec_dropout_adj = nn.Dropout(dropout)
-        self.fc_out_x = nn.Linear(hidden_dim,aa_dim*ss_dim)
-        self.fc_out_x_atomic = nn.Linear(hidden_dim,atom_dim)
-        if use_cnn:
-            self.fc_out_adj = nn.Linear(self.gen_adj.out_dim(latent_dim),2*max_size)
-        else:
-            self.fc_out_adj = nn.Linear(hidden_dim,2*max_size)
+        # Decoding
+        self.dec_x_class = MLPLayer([latent_dim] + mlp_dims + [hidden_dim])
+        self.dec_x_reg = MLPLayer([latent_dim] + mlp_dims + [hidden_dim])
+        self.dec_adj_edge = MLPLayer([latent_dim] + mlp_dims + [hidden_dim])
+        # Output
+        self.fc_out_x_class = nn.Linear(hidden_dim,aa_dim*ss_dim)
+        self.fc_out_x_reg = nn.Linear(hidden_dim,node_dim-x_class_dim)
+        self.fc_out_adj_edge = nn.Linear(hidden_dim,max_size*(edge_dim+edge_class_dim-1))
+
         # Weights initialization
-        self.enc_mlp.apply(self._init_weights)
-        self.dec_mlp_x.apply(self._init_weights)
-        self.dec_adj.apply(self._init_weights)
-        self._init_weights(self.latent_mu, mode='unif')
-        self._init_weights(self.latent_log_var, mode='unif')
+        self._init_weights(self.latent_mu)
+        self._init_weights(self.latent_log_var)
+        self.dec_x_class.apply(self._init_weights)
+        self.dec_x_reg.apply(self._init_weights)
+        self.dec_adj_edge.apply(self._init_weights)
+        self.fc_out_x_class.apply(self._init_weights)
+        self.fc_out_x_reg.apply(self._init_weights)
+        self.fc_out_adj_edge.apply(self._init_weights)
 
-    def _init_weights(self, m, mode='he'):
+    def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            if mode == 'he':
-                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
-            elif mode == 'unif':
-                nn.init.uniform_(m.weight, a=-0.005, b=0.005)
-        elif isinstance(m, nn.Conv1d):
-            nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('relu'))
-
-    def _binary_adjacency(self, adj, node_mask):
-        adj_bin = torch.zeros_like(adj)
-        num_batch, n = adj.shape[0], adj.shape[1]
-        for b in range(num_batch):
-            for i in range(n):
-                if node_mask[b,i]:
-                    for j in range(n):
-                        if i == j and node_mask[b,j]:
-                            adj_bin[b,i,j] = 1 # aka probability of one for nodes (i,j) to exist
-                        elif node_mask[b,j]:
-                            if adj[b,i,j] > 0:
-                                adj_bin[b,i,j] = 1 # contact
-        return adj_bin
+            nn.init.uniform_(m.weight, a=-self.weight_init, b=self.weight_init)
 
     def _input_classes(self, x):
         b_dim, n = x.shape[0], x.shape[1]
-        x_classes = torch.zeros(b_dim,n, dtype=torch.long)
+        x_classes = torch.zeros(b_dim,1, dtype=torch.long)
         for b in range(b_dim):
-            for i in range(n):
-                a, s = x[b,i,0] - 1, x[b,i,1] - 1 # subtract one because classes begin with 1
-                mapping = s*self.aa_dim + a
-                if mapping < 0:
-                    x_classes[b,i] = self.ignore_idx
-                else:
-                    x_classes[b,i] = mapping
+            a, s = x[b,0] - 1, x[b,1] - 1 # subtract one because classes begin with 1
+            mapping = s*self.aa_dim + a
+            if mapping < 0:
+                x_classes[b,0] = self.ignore_idx
+            else:
+                x_classes[b,0] = mapping
+        x_classes = x_classes.view(b_dim)
         return x_classes
+
+    def _adjacency_classes(self, adj_sparse, edge_sparse, x_len, edge_len):
+        ae_dense = torch.zeros(len(edge_len),self.max_size,self.max_size,self.edge_dim)
+        prev_i, prev_x = 0, 0
+        for i in range(len(edge_len)):
+            el = edge_len[i]
+            i_idx, j_idx = adj_sparse[:,prev_i:prev_i+el][0] - prev_x, adj_sparse[:,prev_i:prev_i+el][1] - prev_x
+            edge_type, edge_dist = edge_sparse[prev_i:prev_i+el][:,1], edge_sparse[prev_i:prev_i+el][:,0]
+            ae_dense[i,i_idx,j_idx,0] = edge_dist
+            ae_dense[i,i_idx,j_idx,1] = edge_type + 1 # now 0 means no connections
+            prev_i += el
+            prev_x += x_len[i]
+        return ae_dense
+
+    def _adjacency_input(self, adj_edge, x_len):
+        ae_dense = torch.zeros(len(x_len),self.max_size,self.max_size,self.edge_dim+self.edge_class_dim-1)
+        prev = 0
+        for i in range(len(x_len)):
+            xl = x_len[i]
+            ae_dense[i,0:xl,:,:] = adj_edge[prev:prev+xl]
+            prev += xl
+        return ae_dense
 
     def _reparametrize(self, mu, log_var):
         sigma = torch.exp(0.5*log_var)
@@ -91,214 +142,376 @@ class GraphVAE(nn.Module):
         z = mu + epsilon*sigma
         return z
 
-    def _vae_loss(self, x, adj, node_mask, dec_x, dec_x_atom, dec_adj, mu, log_var):
-        x_classes = self._input_classes(x)
-        adj_bin = self._binary_adjacency(adj, node_mask)
-        ce_x, ce_adj = nn.CrossEntropyLoss(reduction='none'), nn.CrossEntropyLoss(reduction='none')
-        mse_x_atom = nn.MSELoss(reduction='none')
-        # Node classification and atomic regression
-        ce_loss_x = ce_x(torch.transpose(dec_x, 1,2), x_classes) # transpose to comply with cross entropy loss function
-        ce_loss_x[~node_mask] = 0 # ignore padding
-        ce_loss_x = torch.mean(ce_loss_x)
-        mse_loss_x_atom = mse_x_atom(dec_x_atom, x[:,:,self.atom_dim:])
-        mse_loss_x_atom[~node_mask] = 0 # ignore padding
-        mse_loss_x_atom = torch.mean(mse_loss_x_atom)
-        # Adjacency probability
-        ce_loss_adj = ce_adj(torch.transpose(dec_adj, 1,3), adj_bin.type(torch.LongTensor))
-        ce_loss_adj[~node_mask] = 0 # ignore padding
-        ce_loss_adj = torch.mean(ce_loss_adj)
+    def _vae_loss(self, x, adj, edge, dec_x_class, dec_x_reg, dec_adj_edge, mu, log_var, x_len, edge_len):
+        # Get target classes
+        x_classes, adj_edge_classes = self._input_classes(x), self._adjacency_classes(adj, edge, x_len, edge_len)
+        # Get input classes
+        adj_edge_input = self._adjacency_input(dec_adj_edge, x_len)
+        # Get lower triangular indexes
+        tril_idx = torch.tril_indices(adj_edge_input.shape[1],adj_edge_input.shape[1])
+        # Node classification and regression
+        ce_loss_x = F.cross_entropy(dec_x_class, x_classes) # transpose to comply with cross entropy loss function
+        mse_loss_x_reg = F.mse_loss(dec_x_reg, x[:,self.x_class_dim:])
+        # Adjacency/edge classification
+        ce_loss_adj_edge = F.cross_entropy(torch.transpose(adj_edge_input[:,:,:,0:self.edge_class_dim], 1,3), adj_edge_classes[:,:,:,1].long(), reduction='none')
+        ce_loss_adj_edge[:,~tril_idx,:] = 0
+        ce_loss_adj_edge = torch.mean(ce_loss_adj_edge)
+        # Edge regression
+        mse_loss_edge = F.mse_loss(adj_edge_input[:,:,:,self.edge_class_dim:].squeeze(3), adj_edge_classes[:,:,:,0], reduction='none')
+        mse_loss_edge[:,~tril_idx,:] = 0
+        mse_loss_edge = torch.mean(mse_loss_edge)
         # Kullback-Leibler divergence
         kl_loss = -0.5*torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
-        # Balance the losses
-        beta = torch.abs((ce_loss_x.detach()+ce_loss_adj.detach())/mse_loss_x_atom.detach()).detach()
-        return ce_loss_x + beta*mse_loss_x_atom + ce_loss_adj + self.l_kld*kl_loss
+        return ce_loss_x + mse_loss_x_reg + ce_loss_adj_edge + mse_loss_edge + self.l_kld*kl_loss
 
-    def encode(self, x, adj, node_mask):
-        out = self.enc_sage(x, adj, mask=node_mask)
+    def encode(self, x, adj, edge):
+        """
+        Compute the encoding.
+
+        Parameters
+        ----------
+        x : torch.tensor
+            The node features tensor.
+        adj : torch.tensor
+            The adjacency tensor.
+        edge : torch.tensor
+            The edge features tensor.
+
+        Returns
+        -------
+        (out, mu, log_var) : (torch.tensor, torch.tensor, torch.tensor)
+            The encoded value, the mean and variance logarithm.
+        """
+        out = self.enc(x, adj, edge_attr=edge)
         out = F.relu(out)
-        out = self.enc_dropout(out)
-        out = self.enc_mlp(out)
         mu, log_var = self.latent_mu(out), self.latent_log_var(out)
         return out, mu, log_var
 
     def decode(self, z):
-        dec_x, dec_x_atom, dec_adj = self.dec_mlp_x(z), self.dec_mlp_x_atomic(z), self.dec_adj(z)
-        dec_x, dex_x_atom, dec_adj = self.dec_dropout_x(dec_x), self.dec_dropout_x_atomic(dec_x_atom), self.dec_dropout_adj(dec_adj)
-        dec_x_class, dec_x_atom = self.fc_out_x(dec_x), self.fc_out_x_atomic(dex_x_atom)
-        dec_adj = self.fc_out_adj(dec_adj)
-        dec_adj = dec_adj.view(dec_adj.shape[0],self.max_size,self.max_size,2)
-        return dec_x_class, dec_x_atom, dec_adj
+        """
+        Decode the sample space.
+
+        Parameters
+        ----------
+        z : torch.tensor
+            The sample space.
+
+        Returns
+        -------
+        (out_x_class, out_x_reg, out_adj_edge) : (torch.tensor, torch.tensor, torch.tensor)
+            The decoded node features classes, node features values, and adjacency/edge feature matrix.
+        """
+        dec_x_class, dec_x_reg, dec_adj_edge = self.dec_x_class(z), self.dec_x_reg(z), self.dec_adj_edge(z)
+        out_x_class = self.fc_out_x_class(dec_x_class)
+        out_x_reg = self.fc_out_x_reg(dec_x_reg)
+        out_adj_edge = self.fc_out_adj_edge(dec_adj_edge)
+        out_adj_edge = out_adj_edge.view(out_adj_edge.shape[0],self.max_size,self.edge_dim+self.edge_class_dim-1)
+        return out_x_class, out_x_reg, out_adj_edge
 
     def train(self, loader, n_epochs, lr=1e-3, verbose=False):
-        optimizer = Adam(self.parameters(), lr=lr)
+        """
+        Train the model.
+
+        Parameters
+        ----------
+        loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader.
+        n_epochs : int
+            The number of epochs to perform.
+        lr : float, optional
+            The learning rate. The default is 1e-3.
+        verbose : bool, optional
+            Whether to print loss information. The default is False.
+
+        Returns
+        -------
+        None
+        """
+        optimizer = Adam(self.parameters(), lr=lr) # TODO try to optmize them separately
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
-                x, adj, edge, node_mask = data['x'], data['adj'], data['edge'], data['mask']
+                # Get the data
+                x, adj, edge, x_len, edge_len = data.x, data.edge_index, data.edge_attr, data.x_len, data.edge_len
+                # Put the data on the device
+                x, adj, edge = x.to(self.device), adj.to(self.device), edge.to(self.device)
                 optimizer.zero_grad()
-                _, mu, log_var = self.encode(x, adj, node_mask)
+                _, mu, log_var = self.encode(x, adj, edge)
                 z = self._reparametrize(mu, log_var)
-                out_x, out_x_atom, out_adj = self.decode(z)
-                loss = self._vae_loss(x, adj, node_mask, out_x, out_x_atom, out_adj, mu, log_var)
+                out_x_class, out_x_reg, out_adj_edge = self.decode(z)
+                loss = self._vae_loss(x, adj, edge, out_x_class, out_x_reg, out_adj_edge, mu, log_var, x_len, edge_len)
                 loss.backward()
                 optimizer.step()
             if verbose:
                 print(f'epoch {epoch+1}/{n_epochs}, loss = {loss.item():.4}')
 
-    def eval(self, verbose=False):
+    def eval(self, max_num_nodes):
+        """
+        Evaluate the model by generating new data.
+
+        Parameters
+        ----------
+        max_num_nodes : int
+            The maximum number of nodes to generate.
+
+        Returns
+        -------
+        (x_pred, adj_edge_pred) : (torch.tensor, torch.tensor)
+            The predicted node features and adjacency/edge features.
+        """
         # Get the generated data
-        gaussian = torch.distributions.Normal(torch.zeros(self.max_size,self.latent_dim), torch.ones(self.max_size,self.latent_dim))
-        z = gaussian.sample()
-        gen_x, gen_x_atom, gen_adj = self.decode(z.unsqueeze(0))
-        gen_adj = F.softmax(gen_adj, dim=3)
-        # Refine the generated data
-        exists, n_exist = [0]*self.max_size, 0
-        for i in range(gen_adj.shape[1]):
-            if torch.argmax(gen_adj[0,i,i]) == 1:
-                exists[i] = True
-                n_exist += 1
-        if verbose:
-            print(f'The generated graph has {n_exist} nodes.')
-        x_pred, adj_pred = torch.zeros(n_exist,2), torch.zeros(n_exist,n_exist)
-        x_pred_atom = gen_x_atom
-        i_pred = 0
-        for i in range(gen_x.shape[1]):
-            if exists[i]:
-                idx = torch.argmax(gen_x[0,i,:])
-                a_tensor, s_tensor = idx - (idx//self.aa_dim)*self.aa_dim + 1, idx//self.aa_dim
-                a, s = int(a_tensor.item()), int(s_tensor.item())
-                x_pred[i_pred] = torch.LongTensor([a, s])
-                i_pred += 1
-        i_pred = 0
-        for i in range(gen_adj.shape[1]):
-            if exists[i]:
-                j_pred = 0
-                for j in range(gen_adj.shape[1]):
-                    if exists[j]:
-                        adj_pred[i_pred,j_pred] = torch.argmax(gen_adj[0,i,j])
-                        j_pred += 1
-                i_pred += 1
-        return x_pred, x_pred_atom, adj_pred
+        gaussian = torch.distributions.Normal(torch.zeros(max_num_nodes,self.latent_dim), torch.ones(max_num_nodes,self.latent_dim))
+        z = gaussian.sample() # FIXME should I use rsample?
+        gen_x_class, gen_x_reg, gen_adj_edge = self.decode(z)
+        # Softmax on classes
+        gen_x_class = torch.softmax(gen_x_class, dim=1)
+        gen_adj_edge[:,0:self.edge_class_dim] = torch.softmax(gen_adj_edge[:,0:self.edge_class_dim], dim=1)
+        # Define data to be returned
+        x_pred, adj_edge_pred = torch.zeros(max_num_nodes,self.node_dim), torch.zeros(max_num_nodes,max_num_nodes,self.edge_dim)
+        # Refine node predictions
+        for i in range(x_pred.shape[0]):
+            idx = torch.argmax(gen_x_class[i,:])
+            a_tensor, s_tensor = idx - (idx//self.aa_dim)*self.aa_dim + 1, idx//self.aa_dim
+            a, s = int(a_tensor.item()), int(s_tensor.item())
+            x_pred[i,0:2] = torch.LongTensor([a, s])
+            x_pred[i,2:] = gen_x_reg[i,:]
+        # Refine adjacency prediction
+        for i in range(adj_edge_pred.shape[0]):
+            idx = torch.argmax(gen_adj_edge[i,0:i+1,0:self.edge_class_dim], dim=1)
+            adj_edge_pred[i,0:i+1,0] = idx
+            adj_edge_pred[i,0:i+1,1] = gen_adj_edge[i,0:i+1,self.edge_class_dim]
+        return x_pred, adj_edge_pred
 
-class GraphVAEEdge(GraphVAE):
+class GraphDAE(GraphVAE):
+    """
+    A DAE with the same structure as the `GraphVAE` model.
+    """
 
-    def __init__(self, node_dim, edge_dim, hidden_dim, latent_dim, enc_dims, x_mlp_dims, adj_mlp_dims, edge_mlp_dims, adj_cnn_dims=None,
-                 kernel_size=2, dropout=0.1, max_size=30, aa_dim=20, ss_dim=7, atom_dim=5, l_kld=1e-3, ignore_idx=-100,
-                 use_cnn=False, device='cpu'):
-        super(GraphVAEEdge, self).__init__(node_dim, hidden_dim, latent_dim, enc_dims, x_mlp_dims, adj_mlp_dims,
-                                           adj_cnn_dims=adj_cnn_dims, kernel_size=kernel_size, dropout=dropout, max_size=max_size,
-                                           aa_dim=aa_dim, ss_dim=ss_dim, atom_dim=atom_dim, l_kld=l_kld, ignore_idx=ignore_idx,
-                                           use_cnn=use_cnn, device=device)
-        self.edge_dim = edge_dim
-        self.dec_mlp_edge = MLPLayer([latent_dim] + edge_mlp_dims + [hidden_dim])
-        self.dec_dropout_edge = nn.Dropout(dropout)
-        self.fc_out_edge = nn.Linear(hidden_dim,edge_dim*max_size)
+    def __init__(self, node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=0.1,
+                 x_class_dim=2, edge_class_dim=3, max_size=30, aa_dim=20, ss_dim=7, l_kld=1e-3, ignore_idx=-100, weight_init=5e-5, device='cpu'):
+        super(GraphDAE, self).__init__(node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=dropout,
+                                       x_class_dim=x_class_dim, edge_class_dim=edge_class_dim, max_size=max_size, aa_dim=aa_dim, ss_dim=ss_dim,
+                                       l_kld=l_kld, ignore_idx=ignore_idx, weight_init=weight_init, device=device)
+
+    def _noise_x(self, x, p=0.9):
+        x_noised = x.clone()
+        n = x.shape[0]
+        noised = torch.rand(n) > p
+        means, stds = x.mean(0), x.std(0) # mean, std across all batches
+        x_noised[noised,0] = torch.FloatTensor([torch.randint(self.aa_dim, (1,1))[0,0] + 1])
+        x_noised[noised,1] = torch.FloatTensor([torch.randint(self.ss_dim, (1,1))[0,0] + 1])
+        x_noised[noised,1:] = torch.normal(mean=means[1:], std=stds[1:])
+        return x_noised
+
+    def encode(self, x, adj, edge):
+        x_noised = self._noise_x(x)
+        return super().encode(x_noised, adj, edge)
+
+class GraphVAE_Seq(nn.Module):
+    """
+    A VAE model to generate the node features belonging to a graph. Such node features should be sequential.
+    Similarly to the `GraphVAE` model, the number of nodes is fixed.
+
+    The encoder consists in a EC graph convolutional layer, much like the `GraphVAE` model.
+    The decoder however only has two MLPs, one for the node features classes and one for the node features values.
+    """
+
+    def __init__(self, node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=0.1,
+                 x_class_dim=2, aa_dim=20, ss_dim=7, l_kld=1e-3, ignore_idx=-100, weight_init=5e-5, device='cpu'):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        node_dim : int
+            The dimension of the node features.
+        edge_dim : int
+            The dimension of the edge features.
+        hidden_dim : int
+            The hidden dimension.
+        latent_dim : int
+            The latent dimension.
+        mlp_dims : list of int
+            The dimensions for the MLP layers.
+        dropout : float in [0,1], optional
+            The dropout probability. The default is 0.1.
+        x_class_dim : int, optional
+            The number of node features which represent classes. The default is 2.
+        aa_dim : int, optional
+            The number of amino acids. The default is 20.
+        ss_dim : int, optional
+            The number of secondary structures. The default is 7.
+        l_kld : float, optional
+            The penalty to apply to the Kullback-Leibler loss, for stability reasons. The default is 1e-3.
+        ignore_idx : int, optional
+            The classes to ignore in the cross-entropy loss. The default is -100.
+        weight_init : float, optional
+            The weight initialization bounds. The default is 5e-5.
+        device : str, optional
+            The device where to put the data. The default is 'cpu'.
+        """
+        super(nn.Module, self).__init__()
+        self.node_dim = node_dim
+        self.latent_dim = latent_dim
+        self.dropout = dropout
+        self.aa_dim = aa_dim
+        self.ss_dim = ss_dim
+        self.x_class_dim = x_class_dim
+        self.l_kld = l_kld
+        self.ignore_idx = ignore_idx
+        self.weight_init = weight_init
+        self.device = device
+
+        # Encoding
+        self.enc = gnn.ECConv(node_dim, hidden_dim, nn.Sequential(nn.Linear(edge_dim,node_dim*hidden_dim)))
+        # Sampling
+        self.latent_mu = nn.Linear(hidden_dim, latent_dim)
+        self.latent_log_var = nn.Linear(hidden_dim, latent_dim)
+        # Decoding
+        self.dec_x_class = MLPLayer([latent_dim] + mlp_dims + [hidden_dim])
+        self.dec_x_reg = MLPLayer([latent_dim] + mlp_dims + [hidden_dim])
+        # Output
+        self.fc_out_x_class = nn.Linear(hidden_dim,aa_dim*ss_dim)
+        self.fc_out_x_reg = nn.Linear(hidden_dim,node_dim-x_class_dim)
+
         # Weights initialization
-        self.dec_mlp_edge.apply(self._init_weights)
+        self._init_weights(self.latent_mu)
+        self._init_weights(self.latent_log_var)
+        self.dec_x_class.apply(self._init_weights)
+        self.dec_x_reg.apply(self._init_weights)
+        self.fc_out_x_class.apply(self._init_weights)
+        self.fc_out_x_reg.apply(self._init_weights)
 
-    def _init_weights(self, m, mode='he'):
+    def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            if mode == 'he':
-                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
-            elif mode == 'unif':
-                nn.init.uniform_(m.weight, a=-0.005, b=0.005)
-        elif isinstance(m, nn.Conv1d):
-            nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('relu'))
+            nn.init.uniform_(m.weight, a=-self.weight_init, b=self.weight_init)
 
-    def _edge_clases(self, edge, node_mask):
-        edge_classes = torch.zeros(edge.shape[0],edge.shape[1],edge.shape[2])
-        num_batch, n = edge.shape[0], edge.shape[1]
-        for b in range(num_batch):
-            for i in range(n):
-                if node_mask[b,i]:
-                    for j in range(n):
-                        if node_mask[b,j]:
-                            edge_classes[b,i,j] = edge[b,i,j,1]
-                        else:
-                            edge_classes[b,i,j] = self.ignore_idx
-                else:
-                    for j in range(n):
-                        edge_classes[b,i,j] = self.ignore_idx
-        return edge_classes
+    def _input_classes(self, x):
+        b_dim, n = x.shape[0], x.shape[1]
+        x_classes = torch.zeros(b_dim,1, dtype=torch.long)
+        for b in range(b_dim):
+            a, s = x[b,0] - 1, x[b,1] - 1 # subtract one because classes begin with 1
+            mapping = s*self.aa_dim + a
+            if mapping < 0:
+                x_classes[b,0] = self.ignore_idx
+            else:
+                x_classes[b,0] = mapping
+        x_classes = x_classes.view(b_dim)
+        return x_classes
 
-    def _vae_loss(self, x, adj, edge, node_mask, dec_x, dec_x_atom, dec_adj, dec_edge, mu, log_var):
+    def _vae_loss(self, x, dec_x_class, dec_x_reg, mu, log_var):
+        # Get target classes
         x_classes = self._input_classes(x)
-        adj_bin = self._binary_adjacency(adj, node_mask)
-        edge_classes = self._edge_clases(edge, node_mask)
-        ce_x, ce_adj, ce_edge = nn.CrossEntropyLoss(), nn.CrossEntropyLoss(), nn.CrossEntropyLoss()
-        mse_x_atom = nn.MSELoss()
-        # Node classification and atomic regression
-        ce_loss_x = ce_x(torch.transpose(dec_x, 1,2), x_classes) # transpose to comply with cross entropy loss function
-        mse_loss_x_atom = mse_x_atom(dec_x_atom, x[:,:,self.atom_dim:])
-        # Adjacency probability
-        ce_loss_adj = ce_adj(torch.transpose(dec_adj, 1,3), adj_bin.type(torch.LongTensor))
-        # Edge classification loss
-        ce_loss_edge = ce_edge(torch.transpose(dec_edge, 1,3), edge_classes.type(torch.LongTensor))
+        # Node classification and regression
+        ce_loss_x = F.cross_entropy(dec_x_class, x_classes) # transpose to comply with cross entropy loss function
+        mse_loss_x_reg = F.mse_loss(dec_x_reg, x[:,self.x_class_dim:])
         # Kullback-Leibler divergence
         kl_loss = -0.5*torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
-        # Balance the loss
-        beta = torch.abs((ce_loss_x.detach()+ce_loss_edge.detach())/mse_loss_x_atom.detach()).detach()
-        return ce_loss_x + beta*mse_loss_x_atom + ce_loss_adj + ce_loss_edge + self.l_kld*kl_loss
+        return ce_loss_x + mse_loss_x_reg + self.l_kld*kl_loss
+
+    def encode(self, x, adj, edge):
+        """
+        Compute the encoding.
+
+        Parameters
+        ----------
+        x : torch.tensor
+            The node features tensor.
+        adj : torch.tensor
+            The adjacency tensor.
+        edge : torch.tensor
+            The edge features tensor.
+
+        Returns
+        -------
+        (out, mu, log_var) : (torch.tensor, torch.tensor, torch.tensor)
+            The encoded value, the mean and variance logarithm.
+        """
+        out = self.enc(x, adj, edge_attr=edge)
+        out = F.relu(out)
+        mu, log_var = self.latent_mu(out), self.latent_log_var(out)
+        return out, mu, log_var
 
     def decode(self, z):
-        dec_x_class, dec_x_atom, dec_adj = super().decode(z)
-        dec_edge = self.dec_mlp_edge(z)
-        dec_edge = self.dec_dropout_edge(dec_edge)
-        dec_edge = self.fc_out_edge(dec_edge)
-        dec_edge = dec_edge.view(dec_edge.shape[0],self.max_size,self.max_size,self.edge_dim)
-        return dec_x_class, dec_x_atom, dec_adj, dec_edge
+        """
+        Decode the sample space.
+
+        Parameters
+        ----------
+        z : torch.tensor
+            The sample space.
+
+        Returns
+        -------
+        (out_x_class, out_x_reg) : (torch.tensor, torch.tensor)
+            The decoded node features classes and the node features values.
+        """
+        dec_x_class, dec_x_reg = self.dec_x_class(z), self.dec_x_reg(z)
+        out_x_class = self.fc_out_x_class(dec_x_class)
+        out_x_reg = self.fc_out_x_reg(dec_x_reg)
+        return out_x_class, out_x_reg
 
     def train(self, loader, n_epochs, lr=1e-3, verbose=False):
-        optimizer = Adam(self.parameters(), lr=lr)
+        """
+        Train the model.
+
+        Parameters
+        ----------
+        loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader.
+        n_epochs : int
+            The number of epochs to perform.
+        lr : float, optional
+            The learning rate. The default is 1e-3.
+        verbose : bool, optional
+            Whether to print loss information. The default is False.
+
+        Returns
+        -------
+        None
+        """
+        optimizer = Adam(self.parameters(), lr=lr) # TODO try to optmize them separately
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
+                # Get the data
+                x, adj, edge = data.x, data.edge_index, data.edge_attr
+                # Put the data on the device
+                x, adj, edge = x.to(self.device), adj.to(self.device), edge.to(self.device)
                 optimizer.zero_grad()
-                x, adj, edge, node_mask = data['x'], data['bb'], data['edge'], data['mask']
-                _, mu, log_var = self.encode(x, adj, node_mask)
+                _, mu, log_var = self.encode(x, adj, edge)
                 z = self._reparametrize(mu, log_var)
-                out_x, out_x_atom, out_adj, out_edge = self.decode(z)
-                loss = self._vae_loss(x, adj, edge, node_mask, out_x, out_x_atom, out_adj, out_edge, mu, log_var)
+                out_x_class, out_x_reg = self.decode(z)
+                loss = self._vae_loss(x, out_x_class, out_x_reg, mu, log_var)
                 loss.backward()
                 optimizer.step()
             if verbose:
                 print(f'epoch {epoch+1}/{n_epochs}, loss = {loss.item():.4}')
 
-    def eval(self, verbose=False):
+    def eval(self, max_num_nodes):
+        """
+        Evaluate the model by generating new data.
+
+        Parameters
+        ----------
+        max_num_nodes : int
+            The maximum number of nodes to generate.
+
+        Returns
+        -------
+        x_pred : torch.tensor
+            The predicted node features.
+        """
         # Get the generated data
-        gaussian = torch.distributions.Normal(torch.zeros(self.max_size,self.latent_dim), torch.ones(self.max_size,self.latent_dim))
+        gaussian = torch.distributions.Normal(torch.zeros(max_num_nodes,self.latent_dim), torch.ones(max_num_nodes,self.latent_dim))
         z = gaussian.sample()
-        gen_x, gen_x_atom, gen_adj, gen_edge = self.decode(z.unsqueeze(0))
-        gen_adj, gen_edge = F.softmax(gen_adj, dim=3), F.softmax(gen_edge, dim=3)
+        gen_x_class, gen_x_reg = self.decode(z)
+        # Softmax on classes
+        gen_x_class = torch.softmax(gen_x_class, dim=1)
         # Refine the generated data
-        exists, n_exist = [0]*self.max_size, 0
-        for i in range(gen_adj.shape[1]):
-            if torch.argmax(gen_adj[0,i,i]) == 1:
-                exists[i] = True
-                n_exist += 1
-        if verbose:
-            print(f'The generated graph has {n_exist} nodes.')
-        x_pred, adj_pred = torch.zeros(n_exist,2), torch.zeros(n_exist,n_exist)
-        x_pred_atom = gen_x_atom
-        i_pred = 0
-        for i in range(gen_x.shape[1]):
-            if exists[i]:
-                idx = torch.argmax(gen_x[0,i,:])
-                a_tensor, s_tensor = idx - (idx//self.aa_dim)*self.aa_dim + 1, idx//self.aa_dim
-                a, s = int(a_tensor.item()), int(s_tensor.item())
-                x_pred[i_pred] = torch.LongTensor([a, s])
-                i_pred += 1
-        i_pred = 0
-        for i in range(gen_adj.shape[1]):
-            if exists[i]:
-                j_pred = 0
-                for j in range(gen_adj.shape[1]):
-                    if exists[j]:
-                        ee = torch.argmax(gen_adj[0,i,j])
-                        if ee == 1:
-                            et = torch.argmax(gen_edge[0,i,j])
-                            adj_pred[i_pred,j_pred] = ee + et
-                            j_pred += 1
-                        else:
-                            adj_pred[i_pred,j_pred] = ee
-                            j_pred += 1
-                i_pred += 1
-        return x_pred, x_pred_atom, adj_pred
+        x_pred = torch.zeros(max_num_nodes,self.node_dim)
+        for i in range(x_pred.shape[0]):
+            idx = torch.argmax(gen_x_class[i,:])
+            a_tensor, s_tensor = idx - (idx//self.aa_dim)*self.aa_dim + 1, idx//self.aa_dim
+            a, s = int(a_tensor.item()), int(s_tensor.item())
+            x_pred[i,0:2] = torch.LongTensor([a, s])
+            x_pred[i,2:] = gen_x_reg[i,:]
+        return x_pred
