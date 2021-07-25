@@ -87,9 +87,9 @@ def amino_acid_metrics(x, aa_num=20):
         else:
             current_seq_len += 1
     seq_len.append(current_seq_len) # last one to add
-    aa_counts = aa_counts/n
-    seq_len = torch.median(torch.tensor(seq_len))
-    scores = torch.tensor(aa_counts + seq_len)
+    aa_counts = [x/n for x in aa_counts]
+    seq_len = float(torch.median(torch.tensor(seq_len)))
+    scores = torch.tensor(aa_counts + [seq_len])
     return scores
 
 def secondary_sequence_metrics(x, ss_num=7):
@@ -119,7 +119,7 @@ def secondary_sequence_metrics(x, ss_num=7):
     # Compute the scores
     for i in range(n):
         ss = int(x[i,1])
-        ss_counts[ss] += 1
+        ss_counts[ss-1] += 1
         if current_ss == -1:
             current_seq_len += 1
             current_ss = ss
@@ -130,9 +130,9 @@ def secondary_sequence_metrics(x, ss_num=7):
         else:
             current_seq_len += 1
     seq_len.append(current_seq_len) # last one to add
-    ss_counts = ss_counts/n
-    seq_len = torch.median(torch.tensor(seq_len))
-    scores = torch.tensor(ss_counts + seq_len)
+    ss_counts = [x/n for x in ss_counts]
+    seq_len = float(torch.median(torch.tensor(seq_len)))
+    scores = torch.tensor(ss_counts + [seq_len])
     return scores
 
 def ca_metrics(coords_fixed, coords_moving):

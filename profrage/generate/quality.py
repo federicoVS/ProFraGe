@@ -57,7 +57,7 @@ class MMD:
                 xx += self._wasserstein_kernel(x[i], x[j], sigma)
         for i in range(m):
             for j in range(m):
-                yy ++ self._wasserstein_kernel(y[i], y[j], sigma)
+                yy += self._wasserstein_kernel(y[i], y[j], sigma)
         for i in range(n):
             for j in range(m):
                 xy += self._wasserstein_kernel(x[i], y[j], sigma)
@@ -69,12 +69,12 @@ class MMD:
         x_adj = graph_metrics(self.pred_graph[1])
         x_aa = amino_acid_metrics(self.pred_graph[0])
         x_ss = secondary_sequence_metrics(self.pred_graph[0])
-        x = torch.tensor([x_adj, x_aa, x_ss])
+        x = torch.cat((x_adj,x_aa,x_ss))
         for target_graph in self.target_graphs:
             y_adj = graph_metrics(target_graph[1])
             y_aa = amino_acid_metrics(target_graph[0])
             y_ss = secondary_sequence_metrics(target_graph[0])
-            y = torch.tensor([y_adj, y_aa, y_ss])
+            y = torch.cat((y_adj,y_aa,y_ss))
             # Compare
             scores.append(self._mmd(x, y))
         scores = np.array(scores)
@@ -143,18 +143,18 @@ class QCP:
         target_coords_list = self._get_target_ca_atoms_coords()
         for target_coords in target_coords_list:
             if len(target_coords) == len(self.pred_coords):
-                return ca_metrics(target_coords, self.pred_coords)
+                scores.append(ca_metrics(target_coords, self.pred_coords))
             elif len(target_coords) > len(self.pred_coords):
                 shifted_coords = self._get_shifted_coords(target_coords, self.pred_coords)
                 rmsds = []
-                for sas in shifted_coords:
-                    rmsds.append(self._superimpose(sas, self.pred_coords))
+                for scs in shifted_coords:
+                    rmsds.append(ca_metrics(scs, self.pred_coords))
                 scores.append(np.min(np.array(rmsds)))
             else:
                 shifted_coords = self._get_shifted_coords(self.pred_coords, target_coords)
                 rmsds = []
-                for sas in shifted_coords:
-                    rmsds.append(self._superimpose(self.pred_coords, sas))
+                for scs in shifted_coords:
+                    rmsds.append(ca_metrics(target_coords, scs))
                 scores.append(np.min(np.array(rmsds)))
         scores = np.array(scores)
         return scores

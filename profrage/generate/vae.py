@@ -20,13 +20,15 @@ class GraphVAE(nn.Module):
     into a classifier and regressor.
     """
 
-    def __init__(self, node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=0.1,
-                 x_class_dim=2, edge_class_dim=3, max_size=30, aa_dim=20, ss_dim=7, l_kld=1e-3, ignore_idx=-100, weight_init=5e-5, device='cpu'):
+    def __init__(self, root, node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=0.1,
+                 x_class_dim=2, edge_class_dim=3, max_size=30, aa_dim=20, ss_dim=7, ignore_idx=-100, weight_init=5e-5, device='cpu'):
         """
         Initialize the class.
 
         Parameters
         ----------
+        root : str
+            The directory where to save the model state.
         node_dim : int
             The dimension of the node features.
         edge_dim : int
@@ -49,8 +51,6 @@ class GraphVAE(nn.Module):
             The number of amino acids. The default is 20.
         ss_dim : int, optional
             The number of secondary structures. The default is 7.
-        l_kld : float, optional
-            The penalty to apply to the Kullback-Leibler loss, for stability reasons. The default is 1e-3.
         ignore_idx : int, optional
             The classes to ignore in the cross-entropy loss. The default is -100.
         weight_init : float, optional
@@ -59,6 +59,7 @@ class GraphVAE(nn.Module):
             The device where to put the data. The default is 'cpu'.
         """
         super(GraphVAE, self).__init__()
+        self.root = root
         self.node_dim = node_dim
         self.edge_dim = edge_dim
         self.latent_dim = latent_dim
@@ -68,7 +69,6 @@ class GraphVAE(nn.Module):
         self.ss_dim = ss_dim
         self.x_class_dim = x_class_dim
         self.edge_class_dim = edge_class_dim
-        self.l_kld = l_kld
         self.ignore_idx = ignore_idx
         self.weight_init = weight_init
         self.device = device
@@ -142,7 +142,7 @@ class GraphVAE(nn.Module):
         z = mu + epsilon*sigma
         return z
 
-    def _vae_loss(self, x, adj, edge, dec_x_class, dec_x_reg, dec_adj_edge, mu, log_var, x_len, edge_len):
+    def _vae_loss(self, x, adj, edge, dec_x_class, dec_x_reg, dec_adj_edge, mu, log_var, x_len, edge_len, l_kld):
         # Get target classes
         x_classes, adj_edge_classes = self._input_classes(x), self._adjacency_classes(adj, edge, x_len, edge_len)
         # Get input classes
@@ -154,15 +154,18 @@ class GraphVAE(nn.Module):
         mse_loss_x_reg = F.mse_loss(dec_x_reg, x[:,self.x_class_dim:])
         # Adjacency/edge classification
         ce_loss_adj_edge = F.cross_entropy(torch.transpose(adj_edge_input[:,:,:,0:self.edge_class_dim], 1,3), adj_edge_classes[:,:,:,1].long(), reduction='none')
-        ce_loss_adj_edge[:,~tril_idx,:] = 0
+        ce_loss_adj_edge = ce_loss_adj_edge[:,tril_idx]
         ce_loss_adj_edge = torch.mean(ce_loss_adj_edge)
         # Edge regression
         mse_loss_edge = F.mse_loss(adj_edge_input[:,:,:,self.edge_class_dim:].squeeze(3), adj_edge_classes[:,:,:,0], reduction='none')
-        mse_loss_edge[:,~tril_idx,:] = 0
+        mse_loss_edge = mse_loss_edge[:,tril_idx]
         mse_loss_edge = torch.mean(mse_loss_edge)
+        # Beta parameters for stability
+        beta_x = torch.abs(ce_loss_x.detach()/mse_loss_x_reg.detach()).detach()
+        beta_adj_edge = torch.abs(ce_loss_adj_edge.detach()/mse_loss_edge.detach()).detach()
         # Kullback-Leibler divergence
         kl_loss = -0.5*torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
-        return ce_loss_x + mse_loss_x_reg + ce_loss_adj_edge + mse_loss_edge + self.l_kld*kl_loss
+        return ce_loss_x + beta_x*mse_loss_x_reg + ce_loss_adj_edge + beta_adj_edge*mse_loss_edge + l_kld*kl_loss
 
     def encode(self, x, adj, edge):
         """
@@ -208,7 +211,31 @@ class GraphVAE(nn.Module):
         out_adj_edge = out_adj_edge.view(out_adj_edge.shape[0],self.max_size,self.edge_dim+self.edge_class_dim-1)
         return out_x_class, out_x_reg, out_adj_edge
 
-    def train(self, loader, n_epochs, lr=1e-3, verbose=False):
+    def checkpoint(self, epoch, optimizer, loss):
+        """
+        Create a checkpoint saving the results on the ongoing optimization.
+
+        The checkpoint is saved at ROOT/checkpoint_<epoch>.
+
+        Parameters
+        ----------
+        epoch : int
+            The current epoch.
+        optimizer : torch.optim.Optimizer
+            The optimizer.
+        loss : float
+            The current loss.
+
+        Returns
+        -------
+        None
+        """
+        torch.save({'epoch': epoch,
+                    'model_state_dict': self.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss}, self.root + 'checkpoint_' + str(epoch))
+
+    def fit(self, loader, n_epochs, lr=1e-3, l_kld=1e-3, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -220,6 +247,10 @@ class GraphVAE(nn.Module):
             The number of epochs to perform.
         lr : float, optional
             The learning rate. The default is 1e-3.
+        l_kld : float, optional
+            The penalty to apply to the Kullback-Leibler loss, for stability reasons. The default is 1e-3.
+        checkpoint : int, optional
+            The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
             Whether to print loss information. The default is False.
 
@@ -238,13 +269,50 @@ class GraphVAE(nn.Module):
                 _, mu, log_var = self.encode(x, adj, edge)
                 z = self._reparametrize(mu, log_var)
                 out_x_class, out_x_reg, out_adj_edge = self.decode(z)
-                loss = self._vae_loss(x, adj, edge, out_x_class, out_x_reg, out_adj_edge, mu, log_var, x_len, edge_len)
+                loss = self._vae_loss(x, adj, edge, out_x_class, out_x_reg, out_adj_edge, mu, log_var, x_len, edge_len, l_kld)
                 loss.backward()
                 optimizer.step()
+            if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
+                self.checkpoint(epoch, optimizer, loss)
             if verbose:
                 print(f'epoch {epoch+1}/{n_epochs}, loss = {loss.item():.4}')
 
-    def eval(self, max_num_nodes):
+    def eval_loss(self, x, adj, edge, x_len, edge_len, l_kld):
+        """
+        Compute the evaluation loss of the model.
+
+        A forward pass is performed, and from the loss the Kullback-Leibler loss is subtracted.
+
+        Parameters
+        ----------
+        x : torch.tensor
+            The node features.
+        adj : torch.tensor
+            The adjacency matrix.
+        edge : torch.tensor
+            The edge features.
+        x_len : list of int
+            The number of nodes in each batch.
+        edge_len : list of int
+            The number of edges in each batch.
+        l_kld : float in [0,1]
+            The penalty to apply to the Kullback-Leibler loss, for stability reasons.
+
+        Returns
+        -------
+        dict of str -> float
+            The losses.
+        """
+        # Forward pass
+        _, mu, log_var = self.encode(x, adj, edge)
+        z = self._reparametrize(mu, log_var)
+        out_x_class, out_x_reg, out_adj_edge = self.decode(z)
+        # Compute the loss
+        kl_loss = -0.5*torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+        loss = self._vae_loss(x, adj, edge, out_x_class, out_x_reg, out_adj_edge, mu, log_var, x_len, edge_len, l_kld) - l_kld*kl_loss
+        return {'Loss': loss}
+
+    def generate(self, max_num_nodes):
         """
         Evaluate the model by generating new data.
 
@@ -259,8 +327,7 @@ class GraphVAE(nn.Module):
             The predicted node features and adjacency/edge features.
         """
         # Get the generated data
-        gaussian = torch.distributions.Normal(torch.zeros(max_num_nodes,self.latent_dim), torch.ones(max_num_nodes,self.latent_dim))
-        z = gaussian.sample() # FIXME should I use rsample?
+        z = torch.randn((max_num_nodes,self.latent_dim))
         gen_x_class, gen_x_reg, gen_adj_edge = self.decode(z)
         # Softmax on classes
         gen_x_class = torch.softmax(gen_x_class, dim=1)
@@ -270,7 +337,7 @@ class GraphVAE(nn.Module):
         # Refine node predictions
         for i in range(x_pred.shape[0]):
             idx = torch.argmax(gen_x_class[i,:])
-            a_tensor, s_tensor = idx - (idx//self.aa_dim)*self.aa_dim + 1, idx//self.aa_dim
+            a_tensor, s_tensor = idx - (idx//self.aa_dim)*self.aa_dim + 1, idx//self.aa_dim + 1
             a, s = int(a_tensor.item()), int(s_tensor.item())
             x_pred[i,0:2] = torch.LongTensor([a, s])
             x_pred[i,2:] = gen_x_reg[i,:]
@@ -315,13 +382,15 @@ class GraphVAE_Seq(nn.Module):
     The decoder however only has two MLPs, one for the node features classes and one for the node features values.
     """
 
-    def __init__(self, node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=0.1,
+    def __init__(self, root, node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=0.1,
                  x_class_dim=2, aa_dim=20, ss_dim=7, l_kld=1e-3, ignore_idx=-100, weight_init=5e-5, device='cpu'):
         """
         Initialize the class.
 
         Parameters
         ----------
+        root : str
+            Where to save the data.
         node_dim : int
             The dimension of the node features.
         edge_dim : int
@@ -349,7 +418,8 @@ class GraphVAE_Seq(nn.Module):
         device : str, optional
             The device where to put the data. The default is 'cpu'.
         """
-        super(nn.Module, self).__init__()
+        super(GraphVAE_Seq, self).__init__()
+        self.root = root
         self.node_dim = node_dim
         self.latent_dim = latent_dim
         self.dropout = dropout
@@ -398,15 +468,23 @@ class GraphVAE_Seq(nn.Module):
         x_classes = x_classes.view(b_dim)
         return x_classes
 
-    def _vae_loss(self, x, dec_x_class, dec_x_reg, mu, log_var):
+    def _reparametrize(self, mu, log_var):
+        sigma = torch.exp(0.5*log_var)
+        epsilon = torch.rand_like(sigma)
+        z = mu + epsilon*sigma
+        return z
+
+    def _vae_loss(self, x, dec_x_class, dec_x_reg, mu, log_var, l_kld):
         # Get target classes
         x_classes = self._input_classes(x)
         # Node classification and regression
         ce_loss_x = F.cross_entropy(dec_x_class, x_classes) # transpose to comply with cross entropy loss function
         mse_loss_x_reg = F.mse_loss(dec_x_reg, x[:,self.x_class_dim:])
+        # Beta parameter for stability
+        beta = torch.abs(ce_loss_x.detach()/mse_loss_x_reg.detach()).detach()
         # Kullback-Leibler divergence
         kl_loss = -0.5*torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
-        return ce_loss_x + mse_loss_x_reg + self.l_kld*kl_loss
+        return ce_loss_x + beta*mse_loss_x_reg + l_kld*kl_loss
 
     def encode(self, x, adj, edge):
         """
@@ -450,7 +528,31 @@ class GraphVAE_Seq(nn.Module):
         out_x_reg = self.fc_out_x_reg(dec_x_reg)
         return out_x_class, out_x_reg
 
-    def train(self, loader, n_epochs, lr=1e-3, verbose=False):
+    def checkpoint(self, epoch, optimizer, loss):
+        """
+        Create a checkpoint saving the results on the ongoing optimization.
+
+        The checkpoint is saved at ROOT/checkpoint_<epoch>.
+
+        Parameters
+        ----------
+        epoch : int
+            The current epoch.
+        optimizer : torch.optim.Optimizer
+            The optimizer.
+        loss : float
+            The current loss.
+
+        Returns
+        -------
+        None
+        """
+        torch.save({'epoch': epoch,
+                    'model_state_dict': self.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss}, self.root + 'checkpoint_' + str(epoch))
+
+    def fit(self, loader, n_epochs, lr=1e-3, l_kld=1e-3, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -462,6 +564,10 @@ class GraphVAE_Seq(nn.Module):
             The number of epochs to perform.
         lr : float, optional
             The learning rate. The default is 1e-3.
+        l_kld : float, optional
+            The penalty to apply to the Kullback-Leibler loss, for stability reasons. The default is 1e-3.
+        checkpoint : int, optional
+            The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
             Whether to print loss information. The default is False.
 
@@ -469,7 +575,7 @@ class GraphVAE_Seq(nn.Module):
         -------
         None
         """
-        optimizer = Adam(self.parameters(), lr=lr) # TODO try to optmize them separately
+        optimizer = Adam(self.parameters(), lr=lr)
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
                 # Get the data
@@ -480,13 +586,46 @@ class GraphVAE_Seq(nn.Module):
                 _, mu, log_var = self.encode(x, adj, edge)
                 z = self._reparametrize(mu, log_var)
                 out_x_class, out_x_reg = self.decode(z)
-                loss = self._vae_loss(x, out_x_class, out_x_reg, mu, log_var)
+                loss = self._vae_loss(x, out_x_class, out_x_reg, mu, log_var, l_kld)
                 loss.backward()
                 optimizer.step()
+            if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
+                self.checkpoint(epoch, optimizer, loss)
             if verbose:
                 print(f'epoch {epoch+1}/{n_epochs}, loss = {loss.item():.4}')
 
-    def eval(self, max_num_nodes):
+    def eval_loss(self, x, adj, edge, l_kld):
+        """
+        Compute the evaluation loss of the model.
+
+        A forward pass is performed, and from the loss the Kullback-Leibler loss is subtracted.
+
+        Parameters
+        ----------
+        x : torch.tensor
+            The node features.
+        adj : torch.tensor
+            The adjacency matrix.
+        edge : torch.tensor
+            The edge features.
+        l_kld : float
+            The penalty to apply to the Kullback-Leibler loss, for stability reasons.
+
+        Returns
+        -------
+        dict of str -> float
+            The losses.
+        """
+        # Forward pass
+        _, mu, log_var = self.encode(x, adj, edge)
+        z = self._reparametrize(mu, log_var)
+        out_x_class, out_x_reg = self.decode(z)
+        # Compute the loss
+        kl_loss = -0.5*torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+        loss = self._vae_loss(x, out_x_class, out_x_reg, mu, log_var, l_kld) - l_kld*kl_loss
+        return {'Loss': loss}
+
+    def generate(self, max_num_nodes):
         """
         Evaluate the model by generating new data.
 
@@ -501,8 +640,7 @@ class GraphVAE_Seq(nn.Module):
             The predicted node features.
         """
         # Get the generated data
-        gaussian = torch.distributions.Normal(torch.zeros(max_num_nodes,self.latent_dim), torch.ones(max_num_nodes,self.latent_dim))
-        z = gaussian.sample()
+        z = torch.randn((max_num_nodes,self.latent_dim))
         gen_x_class, gen_x_reg = self.decode(z)
         # Softmax on classes
         gen_x_class = torch.softmax(gen_x_class, dim=1)

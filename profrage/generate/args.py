@@ -19,7 +19,7 @@ graph_dataset = {'dist_thr': 12,
                  'bb_type': torch.LongTensor,
                  'adj_type': torch.LongTensor,
                  'edge_type': torch.FloatTensor,
-                 'mode': 'dense', # should be sparse for GraphVAE, GraphVAE_Seq, GraphDAE
+                 'mode': 'sparse', # should be sparse for GraphVAE, GraphVAE_Seq, GraphDAE
                  'weighted': False,
                  'probabilistic': False, # should be True for ProGAN
                  'load': False}
@@ -55,13 +55,13 @@ graph_vae_params = {'node_dim': 10,
                     'max_size': 30,
                     'aa_dim': 20,
                     'ss_dim': 7,
-                    'atom_dim': 5,
-                    'l_kld': 1e-3,
                     'ignore_idx': -100,
                     'weight_init': 5e-5,
                     'device': device}
-graph_vae_train = {'n_epochs': 1000,
-                   'lr': 1e-3,
+graph_vae_train = {'n_epochs': 100,
+                   'lr': 1e-5,
+                   'l_kld': 1e-5,
+                   'checkpoint': 10,
                    'verbose': True}
 graph_vae_eval = {'max_num_nodes': 20}
 
@@ -75,12 +75,13 @@ graph_vae_seq_params = {'node_dim': 10,
                         'x_class_dim': 2,
                         'aa_dim': 20,
                         'ss_dim': 7,
-                        'l_kld': 1e-3,
                         'ignore_idx': -100,
                         'weight_init': 5e-5,
                         'device': device}
-graph_vae_seq_train = {'n_epochs': 1000,
-                       'lr': 1e-3,
+graph_vae_seq_train = {'n_epochs': 1,
+                       'lr': 1e-5,
+                       'l_kld': 1e-4,
+                       'checkpoint': 10,
                        'verbose': True}
 graph_vae_seq_eval = {'max_num_nodes': 20}
 
@@ -96,12 +97,13 @@ graph_dae_params = {'node_dim': 10,
                     'aa_dim': 20,
                     'ss_dim': 7,
                     'atom_dim': 5,
-                    'l_kld': 1e-3,
                     'ignore_idx': -100,
                     'weight_init': 5e-5,
                     'device': device}
 graph_dae_train = {'n_epochs': 1000,
                    'lr': 1e-3,
+                   'l_kld': 1e-4,
+                   'checkpoint': 500,
                    'verbose': True}
 graph_dae_eval = {'max_num_nodes': 20}
 
@@ -123,12 +125,13 @@ pro_gan_train = {'n_epochs': 1000,
                  'lr_g': 5e-5,
                  'lr_d': 5e-5,
                  'lr_r': 5e-5,
+                 'checkpoint': 500,
                  'verbose': True}
 pro_gan_eval = {'test_batch_size': 1,
                 'aa_min': 1,
                 'aa_max': 20,
-                'ss_min': 0,
-                'ss_max': 6,
+                'ss_min': 1,
+                'ss_max': 7,
                 'verbose': False}
 
 ### GraphRNN_A parameters
@@ -143,11 +146,10 @@ graph_rnn_a_params = {'max_prev_node': 30,
                       'dropout': 0,
                       'device': device}
 graph_rnn_a_train = {'num_epochs': 3000,
-                     'batch_size': batch_size,
                      'lr_trans': 3e-3,
                      'lr_out_x': 3e-3,
                      'lr_out_edge': 3e-3,
-                     'elw': 10,
+                     'checkpoint': 500,
                      'milestones': [400,1000],
                      'decay': 0.3,
                      'verbose': True}
@@ -155,8 +157,8 @@ graph_rnn_a_eval = {'max_num_nodes': 20,
                     'test_batch_size': 1,
                     'aa_min': 1,
                     'aa_max': 20,
-                    'ss_min': 0,
-                    'ss_max': 6}
+                    'ss_min': 1,
+                    'ss_max': 7}
 
 ### GraphRNN_G parameters
 graph_rnn_g_params = {'max_prev_node': 30,
@@ -174,8 +176,8 @@ graph_rnn_g_params = {'max_prev_node': 30,
                       'ignore_idx': -100,
                       'device': device}
 graph_rnn_g_train = {'num_epochs': 3000,
-                     'batch_size': batch_size,
                      'lr': 3e-3,
+                     'checkpoint': 500,
                      'milestones': [400,1000],
                      'decay': 0.3,
                      'verbose': True}
@@ -185,8 +187,25 @@ graph_rnn_g_eval = {'max_num_nodes': 20}
 cv_best_n_to_show = 5
 
 ### GraphVAE CV
-graph_vae_cv_params = {}
-graph_vae_cv_train = {}
+graph_vae_cv_params = {'node_dim': [10],
+                       'edge_dim': [2],
+                       'hidden_dim': [32],
+                       'latent_dim': [8, 16],
+                       'mlp_dims': [[32,64,128,128,64,32], [32,64,128,256,128,64,32]],
+                       'dropout': [0.1],
+                       'x_class_dim': [2],
+                       'edge_class_dim': [3],
+                       'max_size': [30],
+                       'aa_dim': [20],
+                       'ss_dim': [7],
+                       'ignore_idx': [-100],
+                       'weight_init': [5e-5],
+                       'device': [device]}
+graph_vae_cv_train = {'n_epochs': [10],
+                      'lr': [1e-5],
+                      'l_kld': [1e-5, 1e-6],
+                      'checkpoint': [None],
+                      'verbose': [False]}
 
 ### GraphVAE_Seq CV
 graph_vae_seq_cv_params = {}

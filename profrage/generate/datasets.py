@@ -143,7 +143,6 @@ class GraphDataset(Dataset):
                 gdata.node_mask = nm
                 gdata.x_len = x.shape[0]
                 gdata.edge_len = adj.shape[0]
-                gdata.batch_len = x.shape[0]
                 sparse_data_list.append(gdata)
         if self._mode == 'dense':
             self.length = len(dense_data_list)
@@ -160,7 +159,7 @@ class GraphDataset(Dataset):
         -------
         None
         """
-        torch.save(self._data, self.root + self._mode + '.pt')
+        torch.save(self._data, self.root + 'graph_' + self._mode + '.pt')
 
     def load(self):
         """
@@ -170,7 +169,7 @@ class GraphDataset(Dataset):
         -------
         None
         """
-        self._data = torch.load(self.root + self._mode + '.pt')
+        self._data = torch.load(self.root + 'graph_' + self._mode + '.pt')
 
     def get_data(self):
         """
@@ -316,7 +315,7 @@ class RNNDataset_Feat(Dataset):
             data.append({'x': xt, 'y_edge': y_edge, 'y_feat': y_feat, 'len': n})
         return data
 
-    def save(self, path):
+    def save(self):
         """
         Save the data.
 
@@ -324,9 +323,9 @@ class RNNDataset_Feat(Dataset):
         -------
         None
         """
-        torch.save(self._data, path + 'rnn_feat.pt')
+        torch.save(self._data, self.root + 'rnn_' + self._mode + '.pt')
 
-    def load(self, path):
+    def load(self):
         """
         Load the data.
 
@@ -334,4 +333,4 @@ class RNNDataset_Feat(Dataset):
         -------
         None
         """
-        self._data = torch.load(path + 'rnn_feat.pt')
+        self._data = torch.load(self.root + 'rnn_' + self._mode + '.pt')

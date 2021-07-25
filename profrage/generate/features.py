@@ -76,7 +76,7 @@ class ResidueFeature:
         self._features[0] = float(AA_TO_INT[stride_entry[0]])
         for i in range(1, len(stride_entry)):
             self._features[i] = stride_entry[i]
-        self._features[1] = float(SS_CODE_TO_INT[stride_entry[1]]+1) # add one as to not have zeros, which are used for padding
+        self._features[1] = float(SS_CODE_TO_INT[stride_entry[1]]+1) # add one here, so different from stride that starts from 0
         self._features[2] = circular_mean([self._features[2]])
         self._features[3] = circular_mean([self._features[3]])
         ca_atom = residue['CA']

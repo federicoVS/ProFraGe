@@ -73,7 +73,40 @@ class GraphRNN_A(nn.Module):
                 adj[i,j] = adj[j,i] = adj_seq[b,i,j]
         return adj
 
-    def train(self, loader, num_epochs, batch_size, lr_trans=3e-3, lr_out_x=3e-3, lr_out_edge=3e-3, elw=10, milestones=[400,1000], decay=0.3, verbose=False):
+    def checkpoint(self, epoch, optimizers, schedulers, loss):
+        """
+        Create a checkpoint saving the results on the ongoing optimization.
+
+        The checkpoint is saved at ROOT/checkpoint_<epoch>.
+
+        Parameters
+        ----------
+        epoch : int
+            The current epoch.
+        optimizers : list of torch.optim.Optimizer
+            The list of optimizers. The first one should be the associated with f_trans, the second with f_out_x, and
+            the third for f_out_edge.
+        schedulers : list of torch.optim.lr_scheduler.Scheduler
+            The list of scheduler. The first one should be the associated with optimizer_trans_trans, the second with
+            optimizer_trans_out_x, and the third for optimizer_trans_out_edge.
+        loss : float
+            The current loss.
+
+        Returns
+        -------
+        None
+        """
+        torch.save({'epoch': epoch,
+                    'model_state_dict': self.state_dict(),
+                    'trans_optimizer_state_dict': optimizers[0].state_dict(),
+                    'x_optimizer_state_dict': optimizers[1].state_dict(),
+                    'edge_optimizer_state_dict': optimizers[2].state_dict(),
+                    'trans_scheduler_state_dict': schedulers[0].state_dict(),
+                    'x_scheduler_state_dict': schedulers[1].state_dict(),
+                    'edge_scheduler_state_dict': schedulers[2].state_dict(),
+                    'loss': loss}, self.root + 'checkpoint_' + str(epoch))
+
+    def fit(self, loader, num_epochs, lr_trans=3e-3, lr_out_x=3e-3, lr_out_edge=3e-3, checkpoint=500, milestones=[400,1000], decay=0.3, verbose=False):
         """
         Train the model.
 
@@ -83,16 +116,14 @@ class GraphRNN_A(nn.Module):
             The data loader.
         num_epochs : int
             The number of epochs to perform.
-        batch_size : int
-            The batch size.
         lr_trans : float, optional
             The learning rate for f_trans. The default is 3e-3.
         lr_out_x : float, optional
             The learning rate for f_out_x. The default is 3e-3.
         lr_out_edge : float, optional
             The learning rate for f_out_edge. The default is 3e-3.
-        elw : float, optional
-            The scaling factor to apply to the cross-entropy loss. The default is 10.
+        checkpoint : int, optional
+            The epoch interval at which a checkpoint is created. The default is 500.
         milestones : list of int, optional
             The list of milestones at which to decay the learning rate. The default is [400,1000].
         decay : float in [0,1], optional
@@ -172,8 +203,13 @@ class GraphRNN_A(nn.Module):
                 output_y = pad_packed_sequence(output_y, batch_first=True)[0]
                 output_y = output_y.view(output_y.size(0),output_y.size(1)) # suitable shape for cross entropy
                 output_y = output_y.long() # target must have long type
+                # Losses
+                ce_loss = F.cross_entropy(edge_pred, output_y)
+                mse_loss = F.mse_loss(x_pred, y_feat)
+                # Beta parameter for stability
+                beta = torch.abs(ce_loss.detach()/mse_loss.detach()).detach()
                 # Loss and optimization step
-                loss = elw*F.cross_entropy(edge_pred, output_y) + F.mse_loss(x_pred, y_feat)
+                loss = ce_loss + beta*mse_loss
                 loss.backward()
                 optimizer_trans.step()
                 optimizer_out_x.step()
@@ -181,10 +217,96 @@ class GraphRNN_A(nn.Module):
                 scheduler_trans.step()
                 scheduler_out_x.step()
                 scheduler_out_edge.step()
+            if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
+                self.checkpoint(epoch, [optimizer_trans,optimizer_out_x,optimizer_out_edge], [scheduler_trans,scheduler_out_x,scheduler_out_edge], loss)
             if verbose:
                 print(f'epoch {epoch+1}/{num_epochs}, loss = {loss.item():.4}')
 
-    def eval(self, max_num_nodes, test_batch_size=1, aa_min=1, aa_max=20, ss_min=0, ss_max=6):
+    def eval_loss(self, x_unsorted, y_unsorted, y_feat_unsorted, y_len_unsorted):
+        """
+        Compute the evaluation loss of the model.
+
+        A forward pass is performed, and the loss is computed.
+
+        Parameters
+        ----------
+        x_unsorted : torch.tensor
+            The unsorted node features.
+        y_unsorted : torch.tensor
+            The unsorted binary adjacency matrix.
+        y_feat_unsorted : torch.tensor
+            The unsorted edge features.
+        y_len_unsorted : list of int
+            The unsorted number of nodes in each batch.
+
+        Returns
+        -------
+        dict of str -> float
+            The losses.
+        """
+        # Forward pass
+        y_len_max = max(y_len_unsorted)
+        x_unsorted = x_unsorted[:,0:y_len_max,:]
+        y_unsorted = y_unsorted[:,0:y_len_max,:]
+        y_feat_unsorted = y_feat_unsorted[:,0:y_len_max,:]
+        self.f_trans.hidden = self.f_trans.init_hidden(batch_size=x_unsorted.shape[0])
+        # Sort input
+        y_len, sort_index = torch.sort(y_len_unsorted, 0, descending=True)
+        y_len = y_len.numpy().tolist()
+        x = torch.index_select(x_unsorted,0,sort_index)
+        y = torch.index_select(y_unsorted,0,sort_index)
+        y_feat = torch.index_select(y_feat_unsorted,0,sort_index)
+        y_feat = y_feat.float()
+        # Input, output for output RNN
+        y_reshape = pack_padded_sequence(y, y_len, batch_first=True).data
+        idx = [j for j in range(y_reshape.size(0)-1, -1, -1)] # reverse as to keep sorted lengths (also same size as y_edge_reshape)
+        idx = torch.LongTensor(idx)
+        y_reshape = y_reshape.index_select(0, idx)
+        y_reshape = y_reshape.view(y_reshape.size(0),y_reshape.size(1),1)
+        output_x = torch.cat((torch.ones(y_reshape.size(0),1,1), y_reshape[:,0:-1,0:1]), dim=1)
+        output_x = output_x
+        output_y = y_reshape
+        output_y_len = []
+        output_y_len_bin = np.bincount(np.array(y_len))
+        for j in range(len(output_y_len_bin)-1,0,-1):
+            count_temp = np.sum(output_y_len_bin[j:]) # count how many y_len is above j
+            output_y_len.extend([min(j,self.max_prev_node)]*count_temp) # put them in output_y_len; max value should not exceed y.size(2)
+        x = Variable(x).to(self.device)
+        y_feat = Variable(y_feat).to(self.device)
+        output_x = Variable(output_x).to(self.device)
+        output_y = Variable(output_y).to(self.device) #[:,self.node_dim:,]
+        h_raw, h = self.f_trans(x, pack=True, input_len=y_len)
+        h = pack_padded_sequence(h, y_len, batch_first=True).data # get packed hidden vector
+        # Reverse h
+        idx = [j for j in range(h.size(0) - 1, -1, -1)]
+        idx = Variable(torch.LongTensor(idx)).to(self.device)
+        h = h.index_select(0, idx)
+        hidden_null = Variable(torch.zeros(self.num_layers-1, h.size(0), h.size(1))).to(self.device)
+        self.f_out_edge.hidden = torch.cat((h.view(1,h.size(0),h.size(1)), hidden_null),dim=0) # num_layers, batch_size, hidden_size
+        # Predict the edges
+        _, edge_pred = self.f_out_edge(output_x, pack=True, input_len=output_y_len)
+        edge_pred = torch.softmax(edge_pred, dim=2)
+        # Predict the node features
+        x_pred = self.f_out_x(h_raw)
+        x_pred = x_pred.float()
+        # Clean
+        edge_pred = pack_padded_sequence(edge_pred, output_y_len, batch_first=True)
+        edge_pred = pad_packed_sequence(edge_pred, batch_first=True)[0]
+        edge_pred = edge_pred.permute(0,2,1)
+        output_y = pack_padded_sequence(output_y, output_y_len, batch_first=True)
+        output_y = pad_packed_sequence(output_y, batch_first=True)[0]
+        output_y = output_y.view(output_y.size(0),output_y.size(1)) # suitable shape for cross entropy
+        output_y = output_y.long() # target must have long type
+        # Losses
+        ce_loss = F.cross_entropy(edge_pred, output_y)
+        mse_loss = F.mse_loss(x_pred, y_feat)
+        # Beta parameter for stability
+        beta = torch.abs(ce_loss.detach()/mse_loss.detach()).detach()
+        # Loss and optimization step
+        loss = ce_loss + beta*mse_loss
+        return {'Loss': loss}
+
+    def generate(self, max_num_nodes, test_batch_size=1, aa_min=1, aa_max=20, ss_min=1, ss_max=7):
         """
         Evaluate the model by generating new data.
 
@@ -199,9 +321,9 @@ class GraphRNN_A(nn.Module):
         aa_max : int, optional
             The maximum amino acid code. The default is 20.
         ss_min : int, optional
-            The minimum secondary structure code. The default is 0.
+            The minimum secondary structure code. The default is 1.
         ss_max : int, optional
-            The maximum secondary structure code. The default is 6.
+            The maximum secondary structure code. The default is 7.
 
         Returns
         -------
@@ -340,7 +462,34 @@ class GraphRNN_G(nn.Module):
         yt[:,0:m,:] = x_true_seq
         return xt, yt
 
-    def train(self, loader, num_epochs, batch_size, lr=3e-3, milestones=[400,1000], decay=0.3, verbose=False):
+    def checkpoint(self, epoch, optimizer, scheduler, loss):
+        """
+        Create a checkpoint saving the results on the ongoing optimization.
+
+        The checkpoint is saved at ROOT/checkpoint_<epoch>.
+
+        Parameters
+        ----------
+        epoch : int
+            The current epoch.
+        optimizer : torch.optim.Optimizer
+            The optimizer.
+        scheduler : torch.optim.lr_scheduler.Scheduler
+            The scheduler.
+        loss : float
+            The current loss.
+
+        Returns
+        -------
+        None
+        """
+        torch.save({'epoch': epoch,
+                    'model_state_dict': self.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict(),
+                    'loss': loss}, self.root + 'checkpoint_' + str(epoch))
+
+    def fit(self, loader, num_epochs, lr=3e-3, checkpoint=500, milestones=[400,1000], decay=0.3, verbose=False):
         """
         Train the model.
 
@@ -348,12 +497,10 @@ class GraphRNN_G(nn.Module):
         ----------
         loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
             The data loader.
-        num_epochs : int
-            The number of epochs.
-        batch_size : int
-            The batch size.
         lr : float, optional
             The learning rate. The default is 3e-3.
+        checkpoint : int, optional
+            The epoch interval at which a checkpoint is created. The default is 500.
         milestones : list of int, optional
             The list of milestones at which to decay the learning rate. The default is [400,1000].
         decay : float, optional
@@ -371,7 +518,9 @@ class GraphRNN_G(nn.Module):
             for i, (data) in enumerate(loader):
                 optimizer.zero_grad()
                 # Get data
-                x, adj, edge, batch_len = data.x, data.edge_index, data.edge_attr, data.batch_len
+                x, adj, edge, batch_len = data.x, data.edge_index, data.edge_attr, data.x_len
+                # Put the data on device
+                x, adj, edge = x.to(self.device), adj.to(self.device), edge.to(self.device)
                 # Encode the graph
                 graph = self.ecc(x, adj, edge_attr=edge)
                 graph = self.lin(graph)
@@ -394,18 +543,74 @@ class GraphRNN_G(nn.Module):
                 y_pred_class = pad_packed_sequence(y_pred_class, batch_first=True)[0]
                 y_pred_reg = pack_padded_sequence(out_reg, y_len, batch_first=True)
                 y_pred_reg = pad_packed_sequence(y_pred_reg, batch_first=True)[0]
-                # Compute the loss
-                mse = F.mse_loss(y_pred_reg, yt[:,:,self.class_dim:])
-                ce = F.cross_entropy(torch.transpose(y_pred_class, 1,2), self._input_classes(yt[:,:,0:self.class_dim]))
-                beta = torch.abs(ce.detach()/mse.detach()).detach()
-                loss = beta*mse + ce
+                # Losses
+                ce_loss = F.cross_entropy(torch.transpose(y_pred_class, 1,2), self._input_classes(yt[:,:,0:self.class_dim]))
+                mse_loss = F.mse_loss(y_pred_reg, yt[:,:,self.class_dim:])
+                # Beta parameter for stability
+                beta = torch.abs(ce_loss.detach()/mse_loss.detach()).detach()
+                loss = ce_loss + beta*mse_loss
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
+            if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
+                self.checkpoint(epoch, optimizer, scheduler, loss)
             if verbose:
                 print(f'epoch {epoch+1}/{num_epochs}, loss = {loss.item():.4}')
 
-    def eval(self, max_num_nodes):
+    def eval_loss(self, x, adj, edge, batch_len):
+        """
+        Compute the evaluation loss of the model.
+
+        A forward pass is performed, and the loss is computed.
+
+        Parameters
+        ----------
+        x : torch.tensor
+            The node features.
+        adj : torch.tensor
+            The adjacency matrix.
+        edge : torch.tensor
+            The edge features.
+        batch_len : list of int
+            The number of nodes in each batch.
+
+        Returns
+        -------
+        dict of str -> float
+            The losses.
+        """
+        # Forward pass
+        # Encode the graph
+        graph = self.ecc(x, adj, edge_attr=edge)
+        graph = self.lin(graph)
+        # Get RNN data and sort it
+        xt, yt = self._encode_rnn_data(x, graph, batch_len)
+        # Sort the input
+        y_len, sort_index = torch.sort(batch_len, 0, descending=True)
+        y_len = y_len.numpy().tolist()
+        xt, yt = torch.index_select(xt, 0, sort_index), torch.index_select(yt, 0, sort_index)
+        xt = torch.cat((torch.ones(xt.shape[0],1,self.node_dim), xt), dim=1)
+        xt = Variable(xt).to(self.device)
+        yt = Variable(yt).to(self.device)
+        # Initialize hidden state
+        self.gru.hidden = self.gru.init_hidden(batch_size=xt.shape[0])
+        out, _ = self.gru(xt, pack=True, input_len=y_len)
+        out_class = self.fc_out_class(out)
+        out_reg = self.fc_out_reg(out)
+        # Clean
+        y_pred_class = pack_padded_sequence(out_class, y_len, batch_first=True)
+        y_pred_class = pad_packed_sequence(y_pred_class, batch_first=True)[0]
+        y_pred_reg = pack_padded_sequence(out_reg, y_len, batch_first=True)
+        y_pred_reg = pad_packed_sequence(y_pred_reg, batch_first=True)[0]
+        # Losses
+        ce_loss = F.cross_entropy(torch.transpose(y_pred_class, 1,2), self._input_classes(yt[:,:,0:self.class_dim]))
+        mse_loss = F.mse_loss(y_pred_reg, yt[:,:,self.class_dim:])
+        # Beta parameter for stability
+        beta = torch.abs(ce_loss.detach()/mse_loss.detach()).detach()
+        loss = ce_loss + beta*mse_loss
+        return {'Loss': loss}
+
+    def generate(self, max_num_nodes):
         """
         Evaluate the model by generating new data.
 
@@ -425,7 +630,7 @@ class GraphRNN_G(nn.Module):
         for i in range(max_num_nodes):
             h_raw, _ = self.gru(x_step)
             x_class_idx = torch.argmax(self.fc_out_class(h_raw)[:,:,])
-            a_tensor, s_tensor = x_class_idx - (x_class_idx//self.aa_dim)*self.aa_dim + 1, x_class_idx//self.aa_dim
+            a_tensor, s_tensor = x_class_idx - (x_class_idx//self.aa_dim)*self.aa_dim + 1, x_class_idx//self.aa_dim + 1
             x_step_class = torch.tensor([[[a_tensor, s_tensor]]])
             x_step_reg = self.fc_out_reg(h_raw)
             x_step = torch.cat((x_step_class, x_step_reg), dim=2)

@@ -120,7 +120,7 @@ class ProViz:
         for i in range(n):
             aa_num = int(self.x[i,0])
             ss_num = int(self.x[i,1])
-            graph += str(i) + ' [label="' + INT_TO_AA[aa_num] + '", color=' + self._ss_colors[ss_num] + '];' + '\n'
+            graph += str(i) + ' [label="' + INT_TO_AA[aa_num] + '", color=' + self._ss_colors[ss_num-1] + '];' + '\n'
         if self.adj is None:
             for i in range(n-1):
                 graph += str(i) + '--' + str(i+1) + '\n'
