@@ -21,6 +21,8 @@ from utils.io import get_files, from_pdb
 from utils.ProgressBar import ProgressBar
 
 def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir, model_id=0, data_type='graph', data_mode='sparse', verbose=False):
+    if verbose:
+        print('Processing the data...')
     # Get the training proteins
     train_pdbs, val_pdbs = get_files(pdb_train, ext='.pdb'), get_files(pdb_val, ext='.pdb')
     train_proteins, val_proteins = [], []
@@ -38,6 +40,8 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
     elif data_type == 'rnn':
         train_dataset = RNNDataset_Feat(dataset_dir, train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
         val_dataset = RNNDataset_Feat(dataset_dir, val_proteins, pdb_val, stride_dir, **args.rrn_dataset)
+    # Save the training dataset
+    train_dataset.save()
     # Define the loaders
     if data_mode == 'dense' or data_type == 'rnn':
         train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
@@ -146,6 +150,8 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         print(f'Average: {best_config[0]}, Variance: {best_config[1]}, \n Model Params.: {best_config[2]}, Training Params.: {best_config[3]}')
 
 def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, model_id=0, data_type='graph', data_mode='sparse', quality='qcp', train=True, verbose=False):
+    if verbose:
+        print('Processing the data...')
     # Get the training proteins
     train_pdbs, test_pdbs = get_files(pdb_train, ext='.pdb'), get_files(pdb_test, ext='.pdb')
     train_proteins, test_proteins = [], []
@@ -161,6 +167,8 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, m
         train_dataset = GraphDataset(dataset_dir, train_proteins, pdb_train, stride_dir, **args.graph_dataset)
     elif data_type == 'rnn':
         train_dataset = RNNDataset_Feat(dataset_dir, train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
+    # Save the training dataset
+    train_dataset.save()
     # Get the test data
     test_dataset = GraphDataset(dataset_dir, test_proteins, pdb_test, stride_dir, **args.test_dataset)
     # Define the loaders

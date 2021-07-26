@@ -39,9 +39,9 @@ def _mine(pdb_dir, cmap_dir, stride_dir, filter_dir, cluster_dir, max_size, cont
     for pdbf in pdbs:
         pdb_id = os.path.basename(pdbf)[:-4]
         all_structures.append(from_pdb(pdb_id, pdbf, quiet=True))
-    if verbose:
-        print('Clustering...')
     # First level clustering
+    if verbose:
+        print('First level clustering...')
     first_clualg = StrideCluster(all_structures, stride_dir, filter_dir, score_thr=first_score_thr)
     first_clualg.cluster('greedy')
     for first_cluster_id in range(len(first_clualg)):
@@ -50,6 +50,8 @@ def _mine(pdb_dir, cmap_dir, stride_dir, filter_dir, cluster_dir, max_size, cont
             s = first_clualg.structures[idx]
             pre_clusters[first_cluster_id].append(s)
     # Second level clustering
+    if verbose:
+        print('Second level clustering...')
     for keys in pre_clusters:
         pre_structures = pre_clusters[keys]
         second_clualg = USRCluster(pre_structures, score_thr=second_score_thr, bb_atoms=second_bb_atoms)
@@ -60,6 +62,8 @@ def _mine(pdb_dir, cmap_dir, stride_dir, filter_dir, cluster_dir, max_size, cont
                 s = second_clualg.structures[second_idx]
                 inter_clusters[str(keys) + '-' + str(second_cluster_id)].append(s)
     # Third level clustering
+    if verbose:
+        print('Third level clustering...')
     for keys in inter_clusters:
         inter_structures = inter_clusters[keys]
         third_clualg = AtomicSuperImpose(inter_structures, rmsd_thr=third_rmsd_thr, length_pct=third_length_pct)
