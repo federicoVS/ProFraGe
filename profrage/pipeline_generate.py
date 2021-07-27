@@ -62,7 +62,7 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         model_root += 'GraphVAE_Seq/' + str(model_id) + '/full/'
         model_params = args.graph_vae_seq_cv_params
         train_params = args.graph_vae_seq_cv_train
-        eval_params = args.graph_vae_seq_eval_eval
+        eval_params = args.graph_vae_seq_eval
     elif model_type == 'GraphDAE':
         Cmodel = GraphDAE
         model_root += 'GraphDAE/' + str(model_id) + '/full/'
