@@ -85,7 +85,7 @@ def is_complete(structure):
         Whether the structure is complete.
     """
     for residue in structure.get_residues():
-        if 'CA' not in residue:
+        if 'CA' not in residue or residue.get_resname() not in AA_TO_INT:
             return False
     return True
 
