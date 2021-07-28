@@ -278,12 +278,9 @@ if __name__ == '__main__':
     arg_parser.add_argument('--data_mode', type=str, default='sparse', help='The mode of the dataset. Valid types are [sparse,dense]. The default is sparse.')
     arg_parser.add_argument('--quality', type=str, default='qcp', help='The quality metric to use to assess the generated proteins. Valid measurements are [mmd,qcp]. The default is qcp.')
     arg_parser.add_argument('--train', type=bool, default=True, help='Whether to train the model. If not, then the model weights are loaded. The default is True.')
-    arg_parser.add_argument('--gpu_id', type=int, default=0, help='The GPU to use (if available). The default is 0.')
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
     # Parse arguments
     args_parsed = arg_parser.parse_args()
-    # Set device
-    args.set_gpu(args_parsed.gpu_id)
     # Choose pipeline
     if args_parsed.mode == 'grid_cv':
         _grid_cv(args_parsed.model, args_parsed.pdb_train, args_parsed.pdb_val, args_parsed.stride_dir, args_parsed.dataset_dir,
