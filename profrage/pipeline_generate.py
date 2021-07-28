@@ -107,7 +107,7 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
     for param_config, train_config in list(itertools.product(param_search_space, train_search_space)):
         if verbose:
             progress_bar.step()
-        model = Cmodel(model_root, **param_config)
+        model = Cmodel(model_root, **param_config).to(args.device)
         model.train()
         model.fit(train_loader, **train_config)
         model.eval()
@@ -219,7 +219,7 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, m
     if not os.path.exists(model_root):
         os.makedirs(model_root)
     # Define the model
-    model = Cmodel(model_root, **model_params)
+    model = Cmodel(model_root, **model_params).to(args.device)
     # Train the model (if requested)
     if train:
         if verbose:

@@ -1,10 +1,9 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-import torch_geometric.nn as gnn
 from torch.optim import Adam
 
-from generate.layers import MLPLayer
+from generate.layers import MLPLayer, ECCLayer
 
 class GraphVAE(nn.Module):
     """
@@ -20,7 +19,7 @@ class GraphVAE(nn.Module):
     into a classifier and regressor.
     """
 
-    def __init__(self, root, node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=0.1,
+    def __init__(self, root, x_dim, edge_dim, hidden_dim, latent_dim, ecc_dims, mlp_dims, dropout=0.1,
                  x_class_dim=2, edge_class_dim=3, max_size=30, aa_dim=20, ss_dim=7, ignore_idx=-100, weight_init=5e-5, device='cpu'):
         """
         Initialize the class.
@@ -29,7 +28,7 @@ class GraphVAE(nn.Module):
         ----------
         root : str
             The directory where to save the model state.
-        node_dim : int
+        x_dim : int
             The dimension of the node features.
         edge_dim : int
             The dimension of the edge features.
@@ -37,6 +36,8 @@ class GraphVAE(nn.Module):
             The hidden dimension.
         latent_dim : int
             The dimension of the latent space.
+        ecc_dims : list of int
+            The dimensions for the ECC layers.
         mlp_dims : list of int
             The dimensions for the MLP layers.
         dropout : float in [0,1], optional
@@ -60,7 +61,7 @@ class GraphVAE(nn.Module):
         """
         super(GraphVAE, self).__init__()
         self.root = root
-        self.node_dim = node_dim
+        self.x_dim = x_dim
         self.edge_dim = edge_dim
         self.latent_dim = latent_dim
         self.dropout = dropout
@@ -74,7 +75,7 @@ class GraphVAE(nn.Module):
         self.device = device
 
         # Encoding
-        self.enc = gnn.ECConv(node_dim, hidden_dim, nn.Sequential(nn.Linear(edge_dim,node_dim*hidden_dim)))
+        self.enc = ECCLayer([x_dim] + ecc_dims + [hidden_dim], [8,16,8], edge_dim)
         # Sampling
         self.latent_mu = nn.Linear(hidden_dim, latent_dim)
         self.latent_log_var = nn.Linear(hidden_dim, latent_dim)
@@ -84,7 +85,7 @@ class GraphVAE(nn.Module):
         self.dec_adj_edge = MLPLayer([latent_dim] + mlp_dims + [hidden_dim])
         # Output
         self.fc_out_x_class = nn.Linear(hidden_dim,aa_dim*ss_dim)
-        self.fc_out_x_reg = nn.Linear(hidden_dim,node_dim-x_class_dim)
+        self.fc_out_x_reg = nn.Linear(hidden_dim,x_dim-x_class_dim)
         self.fc_out_adj_edge = nn.Linear(hidden_dim,max_size*(edge_dim+edge_class_dim-1))
 
         # Weights initialization
@@ -185,8 +186,7 @@ class GraphVAE(nn.Module):
         (out, mu, log_var) : (torch.tensor, torch.tensor, torch.tensor)
             The encoded value, the mean and variance logarithm.
         """
-        out = self.enc(x, adj, edge_attr=edge)
-        out = F.relu(out)
+        out = self.enc(x, adj, edge)
         mu, log_var = self.latent_mu(out), self.latent_log_var(out)
         return out, mu, log_var
 
@@ -333,7 +333,7 @@ class GraphVAE(nn.Module):
         gen_x_class = torch.softmax(gen_x_class, dim=1)
         gen_adj_edge[:,0:self.edge_class_dim] = torch.softmax(gen_adj_edge[:,0:self.edge_class_dim], dim=1)
         # Define data to be returned
-        x_pred, adj_edge_pred = torch.zeros(max_num_nodes,self.node_dim), torch.zeros(max_num_nodes,max_num_nodes,self.edge_dim)
+        x_pred, adj_edge_pred = torch.zeros(max_num_nodes,self.x_dim), torch.zeros(max_num_nodes,max_num_nodes,self.edge_dim)
         # Refine node predictions
         for i in range(x_pred.shape[0]):
             idx = torch.argmax(gen_x_class[i,:])
@@ -353,9 +353,9 @@ class GraphDAE(GraphVAE):
     A DAE with the same structure as the `GraphVAE` model.
     """
 
-    def __init__(self, node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=0.1,
+    def __init__(self, x_dim, edge_dim, hidden_dim, latent_dim, ecc_dims, mlp_dims, dropout=0.1,
                  x_class_dim=2, edge_class_dim=3, max_size=30, aa_dim=20, ss_dim=7, l_kld=1e-3, ignore_idx=-100, weight_init=5e-5, device='cpu'):
-        super(GraphDAE, self).__init__(node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=dropout,
+        super(GraphDAE, self).__init__(x_dim, edge_dim, hidden_dim, latent_dim, ecc_dims, mlp_dims, dropout=dropout,
                                        x_class_dim=x_class_dim, edge_class_dim=edge_class_dim, max_size=max_size, aa_dim=aa_dim, ss_dim=ss_dim,
                                        l_kld=l_kld, ignore_idx=ignore_idx, weight_init=weight_init, device=device)
 
@@ -382,7 +382,7 @@ class GraphVAE_Seq(nn.Module):
     The decoder however only has two MLPs, one for the node features classes and one for the node features values.
     """
 
-    def __init__(self, root, node_dim, edge_dim, hidden_dim, latent_dim, mlp_dims, dropout=0.1,
+    def __init__(self, root, x_dim, edge_dim, hidden_dim, latent_dim, ecc_dims, mlp_dims, dropout=0.1,
                  x_class_dim=2, aa_dim=20, ss_dim=7, l_kld=1e-3, ignore_idx=-100, weight_init=5e-5, device='cpu'):
         """
         Initialize the class.
@@ -391,7 +391,7 @@ class GraphVAE_Seq(nn.Module):
         ----------
         root : str
             Where to save the data.
-        node_dim : int
+        x_dim : int
             The dimension of the node features.
         edge_dim : int
             The dimension of the edge features.
@@ -399,6 +399,8 @@ class GraphVAE_Seq(nn.Module):
             The hidden dimension.
         latent_dim : int
             The latent dimension.
+        ecc_dims : list of int
+            The dimensions for the ECC layers.
         mlp_dims : list of int
             The dimensions for the MLP layers.
         dropout : float in [0,1], optional
@@ -420,7 +422,7 @@ class GraphVAE_Seq(nn.Module):
         """
         super(GraphVAE_Seq, self).__init__()
         self.root = root
-        self.node_dim = node_dim
+        self.x_dim = x_dim
         self.latent_dim = latent_dim
         self.dropout = dropout
         self.aa_dim = aa_dim
@@ -432,7 +434,7 @@ class GraphVAE_Seq(nn.Module):
         self.device = device
 
         # Encoding
-        self.enc = gnn.ECConv(node_dim, hidden_dim, nn.Sequential(nn.Linear(edge_dim,node_dim*hidden_dim)))
+        self.enc = ECCLayer([x_dim] + ecc_dims + [hidden_dim], [8,16,8], edge_dim)
         # Sampling
         self.latent_mu = nn.Linear(hidden_dim, latent_dim)
         self.latent_log_var = nn.Linear(hidden_dim, latent_dim)
@@ -441,7 +443,7 @@ class GraphVAE_Seq(nn.Module):
         self.dec_x_reg = MLPLayer([latent_dim] + mlp_dims + [hidden_dim])
         # Output
         self.fc_out_x_class = nn.Linear(hidden_dim,aa_dim*ss_dim)
-        self.fc_out_x_reg = nn.Linear(hidden_dim,node_dim-x_class_dim)
+        self.fc_out_x_reg = nn.Linear(hidden_dim,x_dim-x_class_dim)
 
         # Weights initialization
         self._init_weights(self.latent_mu)
@@ -504,8 +506,7 @@ class GraphVAE_Seq(nn.Module):
         (out, mu, log_var) : (torch.tensor, torch.tensor, torch.tensor)
             The encoded value, the mean and variance logarithm.
         """
-        out = self.enc(x, adj, edge_attr=edge)
-        out = F.relu(out)
+        out = self.enc(x, adj, edge)
         mu, log_var = self.latent_mu(out), self.latent_log_var(out)
         return out, mu, log_var
 
@@ -645,7 +646,7 @@ class GraphVAE_Seq(nn.Module):
         # Softmax on classes
         gen_x_class = torch.softmax(gen_x_class, dim=1)
         # Refine the generated data
-        x_pred = torch.zeros(max_num_nodes,self.node_dim)
+        x_pred = torch.zeros(max_num_nodes,self.x_dim)
         for i in range(x_pred.shape[0]):
             idx = torch.argmax(gen_x_class[i,:])
             a_tensor, s_tensor = idx - (idx//self.aa_dim)*self.aa_dim + 1, idx//self.aa_dim

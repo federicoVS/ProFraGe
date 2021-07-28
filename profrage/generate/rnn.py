@@ -27,7 +27,7 @@ class GraphRNN_A(nn.Module):
     """
 
     def __init__(self, max_prev_node,
-                 t_hidden_dim=64, o_hidden_dim=16, t_embed_dim=32, o_embed_dim=8, num_layers=4, node_dim=10, edge_dim=3, dropout=0, device='cpu'):
+                 t_hidden_dim=64, o_hidden_dim=16, t_embed_dim=32, o_embed_dim=8, num_layers=4, x_dim=10, edge_dim=3, dropout=0, device='cpu'):
         """
         Initialize the class.
 
@@ -45,7 +45,7 @@ class GraphRNN_A(nn.Module):
             The embedding dimension for f_out_x and f_out_edge. The default is 8.
         num_layers : int, optional
             The number of layers for f_trans and f_out_edge. The default is 4.
-        node_dim : int, optional
+        x_dim : int, optional
             The dimension of the node features. The default is 10.
         edge_dim : int, optional
             The dimension of the edge features. The default is 3.
@@ -57,12 +57,12 @@ class GraphRNN_A(nn.Module):
         super(GraphRNN_A, self).__init__()
         self.max_prev_node = max_prev_node
         self.num_layers = num_layers
-        self.node_dim = node_dim
+        self.x_dim = x_dim
         self.edge_dim = edge_dim
         self.device = device
 
-        self.f_trans = GRULayer(max_prev_node+node_dim-1, t_hidden_dim, t_embed_dim, num_layers, has_output=True, out_dim=o_hidden_dim, dropout=dropout, device=device)
-        self.f_out_x = GruMLPLayer(t_hidden_dim, o_embed_dim, node_dim)
+        self.f_trans = GRULayer(max_prev_node+x_dim-1, t_hidden_dim, t_embed_dim, num_layers, has_output=True, out_dim=o_hidden_dim, dropout=dropout, device=device)
+        self.f_out_x = GruMLPLayer(t_hidden_dim, o_embed_dim, x_dim)
         self.f_out_edge = GRULayer(1, o_hidden_dim, o_embed_dim, num_layers, has_output=True, out_dim=edge_dim, dropout=dropout, device=device)
 
     def _decode_adj(self, adj_seq, b=0):
@@ -180,7 +180,7 @@ class GraphRNN_A(nn.Module):
                 x = Variable(x).to(self.device)
                 y_feat = Variable(y_feat).to(self.device)
                 output_x = Variable(output_x).to(self.device)
-                output_y = Variable(output_y).to(self.device) #[:,self.node_dim:,]
+                output_y = Variable(output_y).to(self.device) #[:,self.x_dim:,]
                 h_raw, h = self.f_trans(x, pack=True, input_len=y_len)
                 h = pack_padded_sequence(h, y_len, batch_first=True).data # get packed hidden vector
                 # Reverse h
@@ -274,7 +274,7 @@ class GraphRNN_A(nn.Module):
         x = Variable(x).to(self.device)
         y_feat = Variable(y_feat).to(self.device)
         output_x = Variable(output_x).to(self.device)
-        output_y = Variable(output_y).to(self.device) #[:,self.node_dim:,]
+        output_y = Variable(output_y).to(self.device) #[:,self.x_dim:,]
         h_raw, h = self.f_trans(x, pack=True, input_len=y_len)
         h = pack_padded_sequence(h, y_len, batch_first=True).data # get packed hidden vector
         # Reverse h
@@ -331,25 +331,25 @@ class GraphRNN_A(nn.Module):
             The predicted node features and adjacency matrix.
         """
         self.f_trans.hidden = self.f_trans.init_hidden(test_batch_size)
-        node_pred_float = Variable(torch.zeros(test_batch_size,max_num_nodes,self.node_dim)).to(self.device)
+        node_pred_float = Variable(torch.zeros(test_batch_size,max_num_nodes,self.x_dim)).to(self.device)
         edge_pred_long = Variable(torch.zeros(test_batch_size,max_num_nodes,self.max_prev_node-1)).to(self.device)
-        x_step = Variable(torch.ones(test_batch_size,1,self.max_prev_node+self.node_dim-1)).to(self.device)
+        x_step = Variable(torch.ones(test_batch_size,1,self.max_prev_node+self.x_dim-1)).to(self.device)
         for i in range(max_num_nodes):
             h_raw, h = self.f_trans(x_step)
             hidden_null = Variable(torch.zeros(self.num_layers-1,h.size(0),h.size(2))).to(self.device)
             self.f_out_edge.hidden = torch.cat((h.permute(1,0,2),hidden_null), dim=0)  # num_layers, batch_size, hidden_size
-            x_step = Variable(torch.zeros(test_batch_size,1,self.max_prev_node+self.node_dim-1)).to(self.device)
+            x_step = Variable(torch.zeros(test_batch_size,1,self.max_prev_node+self.x_dim-1)).to(self.device)
             output_x_step = Variable(torch.ones(test_batch_size,1,1)).to(self.device)
             node_pred = self.f_out_x(h_raw)
             node_pred_float[:,i,:] = node_pred # insert prediction
-            x_step[:,:,0:self.node_dim] = node_pred # update step
+            x_step[:,:,0:self.x_dim] = node_pred # update step
             for j in range(min(self.max_prev_node,i+1)):
                 _, output_y_pred_step = self.f_out_edge(output_x_step)
                 output_x_step = torch.softmax(output_y_pred_step, dim=2)
-                x_step[:,:,self.node_dim+j:self.node_dim+j+1] = output_x_step
+                x_step[:,:,self.x_dim+j:self.x_dim+j+1] = output_x_step
                 output_x_step = torch.FloatTensor([[[output_x_step]]]) # convert and reshape prediction
                 self.f_out_edge.hidden = Variable(self.f_out_edge.hidden.data).to(self.device) # update hidden state
-            edge_pred_long[:,i:i+1,:] = x_step[:,:,self.node_dim:]
+            edge_pred_long[:,i:i+1,:] = x_step[:,:,self.x_dim:]
             self.f_trans.hidden = Variable(self.f_trans.hidden.data).to(self.device)
         node_pred_float_data = node_pred_float.data.float()
         edge_pred_long_data = edge_pred_long.data.long()
@@ -370,7 +370,7 @@ class GraphRNN_G(nn.Module):
     Last, predictions (node classes and values) are carried out by two distinct MLPs.
     """
 
-    def __init__(self, max_prev_node, node_dim, edge_dim, hidden_dim, g_latent_dim, embed_dim, mlp_dims, num_layers=4,
+    def __init__(self, max_prev_node, x_dim, edge_dim, hidden_dim, g_latent_dim, embed_dim, mlp_dims, num_layers=4,
                  dropout=0, class_dim=2, aa_dim=20, ss_dim=7, ignore_idx=-100, device='cpu'):
         """
         Initialize the class.
@@ -379,7 +379,7 @@ class GraphRNN_G(nn.Module):
         ----------
         max_prev_node : int
             The maximum number of nodes.
-        node_dim : int
+        x_dim : int
             The dimension of the node features.
         edge_dim : int
             The dimension of the edge features.
@@ -408,7 +408,7 @@ class GraphRNN_G(nn.Module):
         """
         super(GraphRNN_G, self).__init__()
         self.max_prev_node = max_prev_node
-        self.node_dim = node_dim
+        self.x_dim = x_dim
         self.edge_dim = edge_dim
         self.num_layers = num_layers
         self.class_dim = class_dim
@@ -417,11 +417,11 @@ class GraphRNN_G(nn.Module):
         self.ignore_idx = ignore_idx
         self.device = device
 
-        self.ecc = gnn.ECConv(node_dim, g_latent_dim, nn.Sequential(nn.Linear(edge_dim,node_dim*g_latent_dim)))
-        self.lin = nn.Linear(g_latent_dim, node_dim)
-        self.gru = GRULayer(node_dim, hidden_dim, embed_dim, num_layers, dropout=dropout, device=device)
+        self.ecc = gnn.ECConv(x_dim, g_latent_dim, nn.Sequential(nn.Linear(edge_dim,x_dim*g_latent_dim)))
+        self.lin = nn.Linear(g_latent_dim, x_dim)
+        self.gru = GRULayer(x_dim, hidden_dim, embed_dim, num_layers, dropout=dropout, device=device)
         self.fc_out_class = MLPLayer([hidden_dim] + mlp_dims + [aa_dim*ss_dim])
-        self.fc_out_reg = MLPLayer([hidden_dim] + mlp_dims + [node_dim-class_dim])
+        self.fc_out_reg = MLPLayer([hidden_dim] + mlp_dims + [x_dim-class_dim])
 
         self._init_weights(self.lin)
         self.fc_out_class.apply(self._init_weights)
@@ -457,7 +457,7 @@ class GraphRNN_G(nn.Module):
         x_true_seq = pad_sequence(x_true_seq, batch_first=True)
         x_gen_seq = pad_sequence(x_gen_seq, batch_first=True)
         n, m = len(x_true_seq), max(batch_len)
-        xt, yt = torch.zeros(n,m,self.node_dim), torch.zeros(n,m,self.node_dim)
+        xt, yt = torch.zeros(n,m,self.x_dim), torch.zeros(n,m,self.x_dim)
         xt[:,0:m,:] = x_gen_seq
         yt[:,0:m,:] = x_true_seq
         return xt, yt
@@ -530,7 +530,7 @@ class GraphRNN_G(nn.Module):
                 y_len, sort_index = torch.sort(batch_len, 0, descending=True)
                 y_len = y_len.numpy().tolist()
                 xt, yt = torch.index_select(xt, 0, sort_index), torch.index_select(yt, 0, sort_index)
-                xt = torch.cat((torch.ones(xt.shape[0],1,self.node_dim), xt), dim=1)
+                xt = torch.cat((torch.ones(xt.shape[0],1,self.x_dim), xt), dim=1)
                 xt = Variable(xt).to(self.device)
                 yt = Variable(yt).to(self.device)
                 # Initialize hidden state
@@ -589,7 +589,7 @@ class GraphRNN_G(nn.Module):
         y_len, sort_index = torch.sort(batch_len, 0, descending=True)
         y_len = y_len.numpy().tolist()
         xt, yt = torch.index_select(xt, 0, sort_index), torch.index_select(yt, 0, sort_index)
-        xt = torch.cat((torch.ones(xt.shape[0],1,self.node_dim), xt), dim=1)
+        xt = torch.cat((torch.ones(xt.shape[0],1,self.x_dim), xt), dim=1)
         xt = Variable(xt).to(self.device)
         yt = Variable(yt).to(self.device)
         # Initialize hidden state
@@ -625,8 +625,8 @@ class GraphRNN_G(nn.Module):
             The predicted node features.
         """
         self.gru.hidden = self.gru.init_hidden(batch_size=1)
-        x_pred = Variable(torch.zeros(1,max_num_nodes,self.node_dim)).to(self.device)
-        x_step = Variable(torch.ones(1,1,self.node_dim)).to(self.device)
+        x_pred = Variable(torch.zeros(1,max_num_nodes,self.x_dim)).to(self.device)
+        x_step = Variable(torch.ones(1,1,self.x_dim)).to(self.device)
         for i in range(max_num_nodes):
             h_raw, _ = self.gru(x_step)
             x_class_idx = torch.argmax(self.fc_out_class(h_raw)[:,:,])

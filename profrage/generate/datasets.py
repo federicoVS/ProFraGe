@@ -26,7 +26,7 @@ class GraphDataset(Dataset):
 
     def __init__(self, root, proteins, pdb_dir, stride_dir,
                  dist_thr=12, max_size=30, x_type=torch.FloatTensor, bb_type=torch.LongTensor, adj_type=torch.LongTensor, edge_type=torch.FloatTensor,
-                 mode='sparse', weighted=False, probabilistic=False, load=False):
+                 mode='sparse', probabilistic=False, load=False):
         """
         Initialize the class.
 
@@ -54,8 +54,6 @@ class GraphDataset(Dataset):
             The type of the edge features. The default is torch.FloatTensor.
         mode : str, optional
             How the data should be. Valid options are ['sparse', 'dense']. The default is 'sparse'.
-        weighted : bool, optional
-            Whether the adjacency matrix should be weighted. The default is False.
         probabilistic : bool, optional
             Whether the adjacency matrix should contain 1s on the diagonal, indicating the existence of a node. The default is False.
         load : bool, optional
@@ -69,7 +67,6 @@ class GraphDataset(Dataset):
         self._adj_type = adj_type
         self._edge_type = edge_type
         self._mode = mode
-        self._weighted = weighted
         self._probabilistic = probabilistic
         if load:
             self.load()
@@ -108,7 +105,7 @@ class GraphDataset(Dataset):
         sparse_data_list = []
         for i in range(len(self.proteins)):
             # Get features
-            bb, adj, edge, x = GraphFeature(self.proteins[i], pdb_dir, stride_dir, dist_thr=dist_thr, mode=self._mode, weighted=self._weighted).get_features()
+            bb, adj, edge, weight, x = GraphFeature(self.proteins[i], pdb_dir, stride_dir, dist_thr=dist_thr, mode=self._mode).get_features()
             if x is None:
                 continue
             if x.shape[0] == 0:
@@ -119,6 +116,7 @@ class GraphDataset(Dataset):
                 bb = np.pad(bb, (0,delta))
                 adj = np.pad(adj, (0,delta))
                 edge = np.pad(edge, ((0,delta),(0,delta),(0,0)))
+                weight = np.pad(weight, (0,delta))
                 x = np.pad(x, ((0,delta),(0,0)))
                 if self._probabilistic:
                     adj = adj + torch.eye(adj.shape[0])
@@ -126,6 +124,7 @@ class GraphDataset(Dataset):
                 bb = torch.from_numpy(adj).type(self._bb_type)
                 adj = torch.from_numpy(adj).type(self._adj_type)
                 edge = torch.from_numpy(edge).type(self._edge_type)
+                weight = torch.from_numpy(weight).type(torch.FloatTensor)
                 x = torch.from_numpy(x).type(self._x_type)
             # Node mask
             nm = torch.ones(max_size).type(torch.BoolTensor)
@@ -136,10 +135,12 @@ class GraphDataset(Dataset):
                                         'bb': torch.tensor(bb).type(self._bb_type),
                                         'adj': torch.tensor(adj).type(self._adj_type),
                                         'edge': torch.tensor(edge).type(self._edge_type),
+                                        'weight': torch.tensor(weight).type(torch.FloatTensor),
                                         'mask': nm,
                                         'len': x.shape[0]})
             elif self._mode == 'sparse':
                 gdata = GData(x=x, edge_index=adj.t().contiguous(), edge_attr=edge)
+                gdata.weight = weight
                 gdata.node_mask = nm
                 gdata.x_len = x.shape[0]
                 gdata.edge_len = adj.shape[0]

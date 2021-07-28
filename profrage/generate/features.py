@@ -132,7 +132,7 @@ class GraphFeature:
         The directory holding the Stride tool.
     """
 
-    def __init__(self, protein, pdb_dir, stride_dir, dist_thr=12, mode='sparse', weighted=False):
+    def __init__(self, protein, pdb_dir, stride_dir, dist_thr=12, mode='sparse'):
         """
         Initialize the class.
 
@@ -148,15 +148,12 @@ class GraphFeature:
             The distance threshold below which two residues are interacting. The default is 12.
         mode : str, optional
             How the data should be. Valid options are ['sparse', 'dense']. The default is 'sparse'.
-        weighted : bool, optional
-            Whether the adjacency matrix should be weighted. The default is False.
         """
         self.protein = protein
         self.pdb_dir = pdb_dir
         self.stride_dir = stride_dir
         self._dist_thr = dist_thr
         self._mode = mode
-        self._weighted = weighted
         self._weights_cache = {}
 
     def _get_backbone(self):
@@ -194,10 +191,7 @@ class GraphFeature:
                     ca_dist = np.linalg.norm(ca_i.get_vector()-ca_j.get_vector())
                     if ca_dist < self._dist_thr:
                         if self._mode == 'dense':
-                            if self._weighted:
-                                adj[i,j] = adj[j,i] = 1/ca_dist
-                            else:
-                                adj[i,j] = adj[j,i] = 1
+                            adj[i,j] = adj[j,i] = 1
                         elif self._mode == 'sparse':
                             adj.append([i,j])
                             adj.append([j,i])
@@ -209,9 +203,9 @@ class GraphFeature:
     def _get_edge_feature(self):
         n = structure_length(self.protein)
         if self._mode == 'dense':
-            edge = np.zeros(shape=(n,n,2))
+            edge, weight = np.zeros(shape=(n,n,2)), np.zeros(shape=(n,n))
         elif self._mode == 'sparse':
-            edge = []
+            edge, weight = [], []
         for i in range(n-1):
             for j in range(i+1, n):
                 if (i,j) in self._weights_cache:
@@ -219,12 +213,15 @@ class GraphFeature:
                     bb = 1 if abs(i-j) == 1 else 0 # 1 is backbone, 0 is contact
                     if self._mode == 'dense':
                         edge[i,j] = edge[j,i] = np.array([w, bb])
+                        weight[i,j] = weight[j,i] = 1/w
                     elif self._mode == 'sparse':
                         edge.append([w, bb])
                         edge.append([w, bb])
+                        weight.append(w)
+                        weight.append(w)
         if self._mode == 'sparse':
-            edge = np.array(edge)
-        return edge
+            edge, weight = np.array(edge), np.array(weight)
+        return edge, weight
 
     def _get_node_feature(self):
         pdb_id = self.protein.get_id()
@@ -249,5 +246,7 @@ class GraphFeature:
         (numpy.ndarray, numpy.ndarray, numpy.ndarray, numpy.ndarray)
             The features.
         """
-        bb, adj, edge, x = self._get_backbone(), self._get_adjacency(), self._get_edge_feature(), self._get_node_feature()
-        return bb, adj, edge, x
+        adj = self._get_adjacency() # remember should always be called before _get_edge_features
+        edge, weight = self._get_edge_feature()
+        bb, x = self._get_backbone(), self._get_node_feature()
+        return bb, adj, edge, weight, x

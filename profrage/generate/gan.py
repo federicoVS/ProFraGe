@@ -16,7 +16,7 @@ class ProGAN(nn.Module):
     Code  => https://github.com/yongqyu/MolGAN-pytorch, https://github.com/ZhenyueQin/Implementation-MolGAN-PyTorch
     """
 
-    def __init__(self, root, max_num_nodes, node_dim, edge_dim, z_dim, conv_out_dim, agg_dim, g_mlp_dims, d_mlp_dims, dropout=0.1, device='cpu'):
+    def __init__(self, root, max_num_nodes, x_dim, edge_dim, z_dim, conv_out_dim, agg_dim, g_mlp_dims, d_mlp_dims, dropout=0.1, device='cpu'):
         """
         Initialize the class.
 
@@ -26,7 +26,7 @@ class ProGAN(nn.Module):
             The directory where the model is stored.
         max_num_nodes : int
             The maximum number of nodes.
-        node_dim : int
+        x_dim : int
             The dimension of the node features.
         edge_dim : int
             The dimension of the edge features.
@@ -48,14 +48,14 @@ class ProGAN(nn.Module):
         super(ProGAN, self).__init__()
         self.root = root
         self.max_num_nodes = max_num_nodes
-        self.node_dim = node_dim
+        self.x_dim = x_dim
         self.edge_dim = edge_dim
         self.z_dim = z_dim
         self.device = device
 
-        self.generator = GANGenerator(max_num_nodes, node_dim, edge_dim, z_dim, g_mlp_dims, dropout=dropout)
-        self.discriminator = GANDiscriminator(node_dim, edge_dim, conv_out_dim, agg_dim, d_mlp_dims, dropout=dropout) # FIXME
-        self.reward = GANDiscriminator(node_dim, edge_dim, conv_out_dim, agg_dim, d_mlp_dims, dropout=dropout) # FIXME
+        self.generator = GANGenerator(max_num_nodes, x_dim, edge_dim, z_dim, g_mlp_dims, dropout=dropout)
+        self.discriminator = GANDiscriminator(x_dim, edge_dim, conv_out_dim, agg_dim, d_mlp_dims, dropout=dropout) # FIXME
+        self.reward = GANDiscriminator(x_dim, edge_dim, conv_out_dim, agg_dim, d_mlp_dims, dropout=dropout) # FIXME
 
     def reset_grad(self):
         self.g_optimizer.zero_grad()
@@ -334,7 +334,7 @@ class ProGAN(nn.Module):
                 n_exist += 1
         if verbose:
             print(f'The generated graph has {n_exist} nodes.')
-        x_pred, adj_edge_pred = torch.zeros(n_exist,self.node_dim), torch.zeros(n_exist,n_exist)
+        x_pred, adj_edge_pred = torch.zeros(n_exist,self.x_dim), torch.zeros(n_exist,n_exist)
         i_pred = 0
         for i in range(x_gen.shape[1]):
             if exists[i]:

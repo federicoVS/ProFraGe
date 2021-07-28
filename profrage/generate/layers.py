@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import torch.nn as nn
 import torch_geometric.nn as gnn
 from torch.autograd import Variable
@@ -388,6 +389,57 @@ class MLPLayer(nn.Module):
         """
         out = self.mlp_layers(x)
         return out
+
+class ECCLayer(nn.Module):
+    """
+    A layer for multiple ECC layers.
+    """
+
+    def __init__(self, dims, inner_dims, edge_dim):
+        """
+        Initialize the class.
+
+        Parameters
+        ----------
+        dims : list of int
+            The dimensions of the ECC layers.
+        inner_dims : list of int
+            The dimensions of the edge features mapping.
+        edge_dim : int
+            The dimension of the edge features.
+        """
+        super(ECCLayer, self).__init__()
+
+        self.ecc_layers = nn.ModuleList()
+        for in_dim, out_dim in zip(dims, dims[1:]):
+            inner_layers = []
+            for inner_in_dim, inner_out_dim in zip([edge_dim] + inner_dims, inner_dims + [in_dim*out_dim]):
+                inner_layers.append(nn.Linear(inner_in_dim,inner_out_dim))
+            inner_sequential = nn.Sequential(*inner_layers)
+            self.ecc_layers.append(gnn.ECConv(in_dim, out_dim, inner_sequential))
+
+    def forward(self, x, adj, edge):
+        """
+        Compute the forward pass.
+
+        Parameters
+        ----------
+        x : torch.tensor
+            The node features.
+        adj : torch.tensor
+            The adjacency matrix.
+        edge : torch.tensor:
+            The edge features.
+
+        Returns
+        -------
+        x : torch.tensor
+            The output.
+        """
+        for ecc_layer in self.ecc_layers:
+            x = ecc_layer(x, adj, edge_attr=edge)
+            x = F.relu(x)
+        return x
 
 class CNN1Layer(nn.Module):
     """
