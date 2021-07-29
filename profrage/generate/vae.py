@@ -478,7 +478,7 @@ class GraphVAE_Seq(nn.Module):
 
     def _vae_loss(self, x, dec_x_class, dec_x_reg, mu, log_var, l_kld):
         # Get target classes
-        x_classes = self._input_classes(x)
+        x_classes = self._input_classes(x).to(self.device)
         # Node classification and regression
         ce_loss_x = F.cross_entropy(dec_x_class, x_classes) # transpose to comply with cross entropy loss function
         mse_loss_x_reg = F.mse_loss(dec_x_reg, x[:,self.x_class_dim:])
