@@ -137,13 +137,15 @@ class GraphDataset(Dataset):
                                         'edge': torch.tensor(edge).type(self._edge_type),
                                         'weight': torch.tensor(weight).type(torch.FloatTensor),
                                         'mask': nm,
-                                        'len': x.shape[0]})
+                                        'len': x.shape[0],
+                                        'pdb_id': self.proteins[i].get_id()})
             elif self._mode == 'sparse':
                 gdata = GData(x=x, edge_index=adj.t().contiguous(), edge_attr=edge)
                 gdata.weight = weight
                 gdata.node_mask = nm
                 gdata.x_len = x.shape[0]
                 gdata.edge_len = adj.shape[0]
+                gdata.pdb_id = self.proteins[i].get_id()
                 sparse_data_list.append(gdata)
         if self._mode == 'dense':
             self.length = len(dense_data_list)
