@@ -226,7 +226,7 @@ class GraphFeature:
     def _get_node_feature(self):
         pdb_id = self.protein.get_id()
         stride_entries = single_stride(self.stride_dir, self.pdb_dir + pdb_id + '.pdb')
-        if stride_entries is None:
+        if stride_entries is None or structure_length(self.protein) != len(stride_entries):
             return None
         structure = from_pdb(pdb_id, self.pdb_dir + pdb_id + '.pdb', quiet=True)
         residues = []
