@@ -10,26 +10,27 @@ from utils.io import get_files, from_pdb, to_pdb
 from utils.ProgressBar import ProgressBar
 
 def _mine(pdb_dir, cmap_dir, stride_dir, filter_dir, cluster_dir, max_size, contacts, bb_strength, n_iters, f_thr, lower_size,
-          first_score_thr, second_score_thr, second_bb_atoms, third_rmsd_thr, third_length_pct, write_stats=False, verbose=False):
-    pdbs = get_files(pdb_dir, ext='.pdb')
-    progress_bar = ProgressBar(len(pdbs))
-    if verbose:
-        print('Mining and filtering...')
-        progress_bar.start()
-    for pdbf in pdbs:
+          first_score_thr, second_score_thr, second_bb_atoms, third_rmsd_thr, third_length_pct, to_mine, write_stats=False, verbose=False):
+    if to_mine:
+        pdbs = get_files(pdb_dir, ext='.pdb')
+        progress_bar = ProgressBar(len(pdbs))
         if verbose:
-            progress_bar.step()
-        pdb_id = os.path.basename(pdbf)[:-4]
-        structure = from_pdb(pdb_id, pdbf, quiet=True)
-        cmapf = cmap_dir + pdb_id + '.cmap'
-        miner = LeidenMiner(structure, cmapf, contacts=contacts, bb_strenght=bb_strength, n_iters=n_iters, max_size=max_size, f_thr=f_thr)
-        miner.mine()
-        frags = miner.get_fragments()
-        for frag in frags:
-            if in_range(frag, lower=lower_size, upper=max_size) and is_complete(frag):
-                to_pdb(frag, frag.get_id(), out_dir=filter_dir)
-    if verbose:
-        progress_bar.end()
+            print('Mining and filtering...')
+            progress_bar.start()
+        for pdbf in pdbs:
+            if verbose:
+                progress_bar.step()
+            pdb_id = os.path.basename(pdbf)[:-4]
+            structure = from_pdb(pdb_id, pdbf, quiet=True)
+            cmapf = cmap_dir + pdb_id + '.cmap'
+            miner = LeidenMiner(structure, cmapf, contacts=contacts, bb_strenght=bb_strength, n_iters=n_iters, max_size=max_size, f_thr=f_thr)
+            miner.mine()
+            frags = miner.get_fragments()
+            for frag in frags:
+                if in_range(frag, lower=lower_size, upper=max_size) and is_complete(frag):
+                    to_pdb(frag, frag.get_id(), out_dir=filter_dir)
+        if verbose:
+            progress_bar.end()
     all_structures = []
     pre_clusters = {}
     inter_clusters = {}
@@ -49,6 +50,8 @@ def _mine(pdb_dir, cmap_dir, stride_dir, filter_dir, cluster_dir, max_size, cont
         for idx in first_clualg.clusters[first_cluster_id]:
             s = first_clualg.structures[idx]
             pre_clusters[first_cluster_id].append(s)
+    # Save checkpoint
+    _save_checkpoint(1, pre_clusters)
     # Second level clustering
     if verbose:
         print('Second level clustering...')
@@ -61,6 +64,10 @@ def _mine(pdb_dir, cmap_dir, stride_dir, filter_dir, cluster_dir, max_size, cont
             for second_idx in second_clualg.clusters[second_cluster_id]:
                 s = second_clualg.structures[second_idx]
                 inter_clusters[str(keys) + '-' + str(second_cluster_id)].append(s)
+    # Save checkpoint
+    _save_checkpoint(2, inter_clusters)
+    # Free memory by dumping first-level clusters
+    pre_clusters = None
     # Third level clustering
     if verbose:
         print('Third level clustering...')
@@ -73,6 +80,16 @@ def _mine(pdb_dir, cmap_dir, stride_dir, filter_dir, cluster_dir, max_size, cont
             to_pdb(s, s.get_id(), cluster_dir)
         if write_stats:
             _write_cluster_stats(keys, third_clualg)
+
+def _save_checkpoint(level, cluster_dict):
+    dir_name = 'lhg-tmp-cluster-' + str(level) + '/'
+    if not os.path.isdir(dir_name):
+        os.makedirs(dir_name)
+    for keys in cluster_dict:
+        full_path = dir_name + str(keys) + '/'
+        structures = cluster_dict[keys]
+        for s in structures:
+            to_pdb(s, s.get_id(), full_path)
 
 def _write_cluster_stats(full_id, clualg):
     file = open('lhg-cluster-log', 'a')
@@ -100,6 +117,7 @@ if __name__ == '__main__':
     arg_parser.add_argument('--second_bb_atoms', type=bool, default=True, help='Whether to only use backbone atoms in the USR-level clustering. The default is True.')
     arg_parser.add_argument('--third_score_thr', type=float, default=2.0, help='The RMSD threshold for the AtomicSuperimposing-level clustering. The default is 2.0.')
     arg_parser.add_argument('--third_length_pct', type=float, default=0.6, help='The length threshold two structures must share in the AtomicSuperimposing-level clustering. Valid range is [0,1]. The default is 0.6.')
+    arg_parser.add_argument('--to_mine', type=bool, default=True, help='Whether to mine the fragments. The default is True.')
     arg_parser.add_argument('--write_stats', type=bool, default=False, help='Whether to write cluster stats. The default is False.')
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
     # Parse arguments
@@ -107,5 +125,5 @@ if __name__ == '__main__':
     # Begin pipeline
     _mine(args.pdb_dir, args.cmap_dir, args.stride_dir, args.filter_dir, args.cluster_dir,
           args.max_size, args.contacts, args.bb_strength, args.n_iters, args.f_thr,
-          args.lower_size, args.first_score_thr, args.second_score_thr, args.second_bb_atoms, args.third_score_thr, args.third_length_pct,
+          args.lower_size, args.first_score_thr, args.second_score_thr, args.second_bb_atoms, args.third_score_thr, args.third_length_pct, args.to_mine,
           write_stats=args.write_stats, verbose=args.verbose)
