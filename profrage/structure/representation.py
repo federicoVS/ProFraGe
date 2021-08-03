@@ -145,7 +145,7 @@ class USR(Representation):
         Returns
         -------
         float in (0,1)
-            The similarity score.
+            The similarity score. The higher the more similar.
         """
         score = 0
         for i in range(12):

@@ -459,7 +459,7 @@ class KTerCloseMiner(SingleMiner):
     Attributes
     ----------
     neighborhoods : fragment.builders.Neighborhoods
-        An object represeting the neighborhoods.
+        An object representing the neighborhoods.
     k : int
         The number of neighbors for each residue.
     score_thr : float in [0,1]
@@ -482,7 +482,7 @@ class KTerCloseMiner(SingleMiner):
             The CMAP file.
         k : int, optional
             The number of residues to the left and to the right of the centroid. The default is 3.
-        cosine_thr : float in [0,1], optional
+        score_thr : float in [0,1], optional
             The similarity threshold between two neighborhoods, the higher the tighter. The default is 0.4.
         f_thr : float in [0,1], optional
             The interaction threshold between two residues. The default is 0.1.
