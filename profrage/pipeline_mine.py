@@ -117,7 +117,7 @@ if __name__ == '__main__':
     arg_parser.add_argument('--second_bb_atoms', type=bool, default=True, help='Whether to only use backbone atoms in the USR-level clustering. The default is True.')
     arg_parser.add_argument('--third_score_thr', type=float, default=2.0, help='The RMSD threshold for the AtomicSuperimposing-level clustering. The default is 2.0.')
     arg_parser.add_argument('--third_length_pct', type=float, default=0.6, help='The length threshold two structures must share in the AtomicSuperimposing-level clustering. Valid range is [0,1]. The default is 0.6.')
-    arg_parser.add_argument('--to_mine', type=bool, default=True, help='Whether to mine the fragments. The default is True.')
+    arg_parser.add_argument('--to_mine', type=bool, default=False, help='Whether to mine the fragments. The default is False.')
     arg_parser.add_argument('--write_stats', type=bool, default=False, help='Whether to write cluster stats. The default is False.')
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
     # Parse arguments
