@@ -11,7 +11,8 @@ from torch.utils.data import DataLoader
 from torch_geometric.data import DataLoader as GDataLoader
 
 from generate import args
-from generate.vae import GraphVAE, GraphVAE_Seq, GraphDAE
+from generate.vae import GraphVAE, GraphVAE_Seq
+from generate.dae import GraphDAAE
 from generate.gan import ProGAN
 from generate.rnn import GraphRNN_A, GraphRNN_G
 from generate.datasets import GraphDataset, RNNDataset_Feat
@@ -56,37 +57,31 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         model_root += 'GraphVAE/' + str(model_id) + '/full/'
         model_params = args.graph_vae_cv_params
         train_params = args.graph_vae_cv_train
-        eval_params = args.graph_vae_eval
     elif model_type == 'GraphVAE_Seq':
         Cmodel = GraphVAE_Seq
         model_root += 'GraphVAE_Seq/' + str(model_id) + '/full/'
         model_params = args.graph_vae_seq_cv_params
         train_params = args.graph_vae_seq_cv_train
-        eval_params = args.graph_vae_seq_eval
-    elif model_type == 'GraphDAE':
-        Cmodel = GraphDAE
-        model_root += 'GraphDAE/' + str(model_id) + '/full/'
-        model_params = args.graph_dae_cv_params
-        train_params = args.graph_dae_cv_train
-        eval_params = args.graph_dae_eval
+    elif model_type == 'GraphDAAE':
+        Cmodel = GraphDAAE
+        model_root += 'GraphDAAE/' + str(model_id) + '/full/'
+        model_params = args.graph_daae_cv_params
+        train_params = args.graph_daae_cv_train
     elif model_type == 'ProGAN':
         Cmodel = ProGAN
         model_root += 'ProGAN/' + str(model_id) + '/full/'
         model_params = args.pro_gan_cv_params
         train_params = args.pro_gan_cv_train
-        eval_params = args.pro_gan_eval
     elif model_type == 'GraphRNN_A':
         Cmodel = GraphRNN_A
         model_root += 'GraphRNN_A/' + str(model_id) + '/full/'
         model_params = args.graph_rnn_a_cv_params
         train_params = args.graph_rnn_a_cv_train
-        eval_params = args.graph_rnn_a_eval
     elif model_type == 'GraphRNN_G':
         Cmodel = GraphRNN_G
         model_root += 'GraphRNN_G/' + str(model_id) + '/full/'
         model_params = args.graph_rnn_g_cv_params
         train_params = args.graph_rnn_g_cv_train
-        eval_params = args.graph_rnn_g_eval
     # Prepare the model parameter configurations
     params_total_len = 1
     for mp in model_params:
@@ -119,9 +114,9 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
             elif model_type == 'GraphVAE_Seq':
                 x, adj, edge = data.x, data.edge_index, data.edge_attr
                 loss_dict = model.eval_loss(x, adj, edge, train_config['l_kld'])
-            elif model_type == 'GraphDAE':
+            elif model_type == 'GraphDAAE':
                 x, adj, edge, x_len, edge_len = data.x, data.edge_index, data.edge_attr, data.x_len, data.edge_len
-                loss_dict = model.eval_loss(x, adj, edge, x_len, edge_len, train_config['l_kld'])
+                loss_dict = model.eval_loss(x, adj, edge, x_len, edge_len, train_config['l_adv'])
             elif model_type == 'ProGAN':
                 x, adj, edge, batch_len = data['x'], data['adj'], data['edge'], data['len']
                 loss_dict = model.eval_loss(x, adj, edge, batch_len, train_config['l_wrl'])
@@ -191,12 +186,12 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, m
         model_params = args.graph_vae_seq_params
         train_params = args.graph_vae_seq_train
         eval_params = args.graph_vae_seq_eval
-    elif model_type == 'GraphDAE':
-        Cmodel = GraphDAE
-        model_root += 'GraphDAE/' + str(model_id) + '/full/'
-        model_params = args.graph_dae_params
-        train_params = args.graph_dae_train
-        eval_params = args.graph_dae_eval
+    elif model_type == 'GraphDAAE':
+        Cmodel = GraphDAAE
+        model_root += 'GraphDAAE/' + str(model_id) + '/full/'
+        model_params = args.graph_daae_params
+        train_params = args.graph_daae_train
+        eval_params = args.graph_daae_eval
     elif model_type == 'ProGAN':
         Cmodel = ProGAN
         model_root += 'ProGAN/' + str(model_id) + '/full/'
@@ -266,7 +261,7 @@ if __name__ == '__main__':
     # Argument parser initialization
     arg_parser = argparse.ArgumentParser(description='Full generation pipeline.')
     arg_parser.add_argument('mode', type=str, help='The mode of the pipeline. Valid modes are [grid_cv,full].')
-    arg_parser.add_argument('model', type=str, help='The model to use. Valid models are [GraphVAE,GraphVAE_Seq,GraphDAE,ProGAN,GraphRNN_A,GraphRNN_G].')
+    arg_parser.add_argument('model', type=str, help='The model to use. Valid models are [GraphVAE,GraphVAE_Seq,GraphDAAE,ProGAN,GraphRNN_A,GraphRNN_G].')
     arg_parser.add_argument('pdb_train', type=str, help='The directory holding the PDB files from the training set.')
     arg_parser.add_argument('pdb_val', type=str, help='The directory holding the PDB files from the validation set.')
     arg_parser.add_argument('pdb_test', type=str, help='The directory holding the PDB files from the test set.')
