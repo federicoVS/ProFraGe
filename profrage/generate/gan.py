@@ -217,9 +217,8 @@ class ProGAN(nn.Module):
                     # Optimize
                     self.reset_grad()
                     loss_d.backward()
+                    torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), w_clip)
                     self.d_optimizer.step()
-                    for p in self.discriminator.parameters():
-                        p.data.clamp_(-w_clip, w_clip)
                 ### 2. Train the generator ###
                 # Sample z
                 z = self._sample_z(x.shape[0])

@@ -178,7 +178,7 @@ class GraphDAAE(nn.Module):
         out = self.enc(x, adj, edge)
         out = F.relu(out)
         mu, log_var = self.latent_mu(out), self.latent_log_var(out)
-        mu, log_var = torch.clip(mu, min=-1, max=1), torch.clip(log_var, min=-1, max=1)
+        mu, log_var = mu/torch.norm(mu), log_var/torch.norm(log_var)
         return out, mu, log_var
 
     def decode(self, z):
@@ -226,7 +226,7 @@ class GraphDAAE(nn.Module):
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss}, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, lr=1e-3, l_adv=1, checkpoint=500, verbose=False):
+    def fit(self, loader, n_epochs, lr=1e-3, l_adv=1, w_norm=1.0, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -240,6 +240,8 @@ class GraphDAAE(nn.Module):
             The learning rate. The default is 1e-3.
         l_adv : float, optional
             The multiplier to apply to the adversarial loss. The default is 1.
+        w_norm : float, optional
+            The maximum norm of the gradient. The default is 1.0.
         checkpoint : int, optional
             The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
@@ -265,6 +267,7 @@ class GraphDAAE(nn.Module):
                 out_x, out_edge = self.decode(z)
                 loss = self._loss(x, adj, edge, out_x, out_edge, z, x_len, edge_len, l_adv)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.parameters(), w_norm)
                 optimizer.step()
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 self.checkpoint(epoch, optimizer, loss)

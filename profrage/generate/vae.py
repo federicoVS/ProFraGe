@@ -143,7 +143,7 @@ class GraphVAE(nn.Module):
         out = self.enc(x, adj, edge)
         out = F.relu_(out)
         mu, log_var = self.latent_mu(out), self.latent_log_var(out)
-        mu, log_var = torch.clip(mu, min=-1, max=1), torch.clip(log_var, min=-1, max=1)
+        mu, log_var = mu/torch.norm(mu), log_var/torch.norm(log_var)
         return out, mu, log_var
 
     def decode(self, z):
@@ -190,7 +190,7 @@ class GraphVAE(nn.Module):
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss}, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, lr=1e-3, l_kld=1e-3, checkpoint=500, verbose=False):
+    def fit(self, loader, n_epochs, lr=1e-3, l_kld=1e-3, w_norm=1.0, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -204,6 +204,8 @@ class GraphVAE(nn.Module):
             The learning rate. The default is 1e-3.
         l_kld : float, optional
             The penalty to apply to the Kullback-Leibler loss, for stability reasons. The default is 1e-3.
+        w_norm : float, optional
+            The maximum norm of the gradient. The default is 1.0.
         checkpoint : int, optional
             The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
@@ -213,7 +215,7 @@ class GraphVAE(nn.Module):
         -------
         None
         """
-        optimizer = Adam(self.parameters(), lr=lr) # TODO try to optmize them separately
+        optimizer = Adam(self.parameters(), lr=lr)
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
                 # Get the data
@@ -226,6 +228,7 @@ class GraphVAE(nn.Module):
                 out_x, out_edge = self.decode(z)
                 loss = self._vae_loss(x, adj, edge, out_x, out_edge, mu, log_var, x_len, edge_len, l_kld)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.parameters(), w_norm)
                 optimizer.step()
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 self.checkpoint(epoch, optimizer, loss)
@@ -409,7 +412,7 @@ class GraphVAE_Seq(nn.Module):
         out = self.enc(x, adj, edge)
         out = F.relu(out)
         mu, log_var = self.latent_mu(out), self.latent_log_var(out)
-        mu, log_var = torch.clip(mu, min=-1, max=1), torch.clip(log_var, min=-1, max=1)
+        mu, log_var = mu/torch.norm(mu), log_var/torch.norm(log_var)
         return out, mu, log_var
 
     def decode(self, z):
@@ -454,7 +457,7 @@ class GraphVAE_Seq(nn.Module):
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss}, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, lr=1e-3, l_kld=1e-3, checkpoint=500, verbose=False):
+    def fit(self, loader, n_epochs, lr=1e-3, l_kld=1e-3, w_norm=1.0, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -468,6 +471,8 @@ class GraphVAE_Seq(nn.Module):
             The learning rate. The default is 1e-3.
         l_kld : float, optional
             The penalty to apply to the Kullback-Leibler loss, for stability reasons. The default is 1e-3.
+        w_norm : float, optional
+            The maximum norm of the gradient. The default is 1.0.
         checkpoint : int, optional
             The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
@@ -490,6 +495,7 @@ class GraphVAE_Seq(nn.Module):
                 out_x = self.decode(z)
                 loss = self._vae_loss(x, out_x, mu, log_var, l_kld)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.parameters(), w_norm)
                 optimizer.step()
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 self.checkpoint(epoch, optimizer, loss)
