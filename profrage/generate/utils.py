@@ -192,7 +192,7 @@ def edge_features_input(adj_edge, x_len, max_size, edge_dim, edge_class_dim, dev
 
 def edge_features_target(adj_sparse, edge_sparse, x_len, edge_len, max_size, edge_dim, device):
     """
-    Combine the adjacency and edge features tensors into a unique tensor to be the target.
+    Target edge features.
 
     Parameters
     ----------

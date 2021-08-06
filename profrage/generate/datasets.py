@@ -296,7 +296,7 @@ class RNNDataset_Feat(Dataset):
         data = []
         for i in range(len(self.proteins)):
             # Get features
-            adj, edge, x = GraphFeature(self.proteins[i], pdb_dir, stride_dir, dist_thr=dist_thr, mode='dense', weighted=False).get_features()
+            _, adj, edge, _, x = GraphFeature(self.proteins[i], pdb_dir, stride_dir, dist_thr=dist_thr, mode='dense').get_features()
             if x is None:
                 continue
             s_pi = self._encode_data(adj, edge, x)

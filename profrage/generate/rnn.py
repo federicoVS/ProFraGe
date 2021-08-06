@@ -2,13 +2,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch_geometric.nn as gnn
 from torch.autograd import Variable
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 
-from generate.layers import GRULayer, GruMLPLayer, MLPLayer
+from generate.layers import GRULayer, GruMLPLayer, MLPLayer, ECCLayer
 
 class GraphRNN_A(nn.Module):
     """
@@ -26,13 +25,15 @@ class GraphRNN_A(nn.Module):
     Code  => https://github.com/snap-stanford/GraphRNN
     """
 
-    def __init__(self, max_prev_node,
-                 t_hidden_dim=64, o_hidden_dim=16, t_embed_dim=32, o_embed_dim=8, num_layers=4, x_dim=10, edge_dim=3, dropout=0, device='cpu'):
+    def __init__(self, root, max_prev_node,
+                 t_hidden_dim=64, o_hidden_dim=16, t_embed_dim=32, o_embed_dim=8, num_layers=4, x_dim=10, edge_class_dim=3, dropout=0, device='cpu'):
         """
         Initialize the class.
 
         Parameters
         ----------
+        root : str
+            Where the model data is saved.
         max_prev_node : int
             The maximum number of nodes.
         t_hidden_dim : int, optional
@@ -47,23 +48,24 @@ class GraphRNN_A(nn.Module):
             The number of layers for f_trans and f_out_edge. The default is 4.
         x_dim : int, optional
             The dimension of the node features. The default is 10.
-        edge_dim : int, optional
-            The dimension of the edge features. The default is 3.
+        edge_class_dim : int, optional
+            The number of the edge classes. The default is 3.
         dropout : float in [0,1], optional
             The dropout probability. The default is 0.1.
         device : str, optional
             The device where to put the data. The default is 'cpu'.
         """
         super(GraphRNN_A, self).__init__()
+        self.root = root
         self.max_prev_node = max_prev_node
         self.num_layers = num_layers
         self.x_dim = x_dim
-        self.edge_dim = edge_dim
+        self.edge_class_dim = edge_class_dim
         self.device = device
 
-        self.f_trans = GRULayer(max_prev_node+x_dim-1, t_hidden_dim, t_embed_dim, num_layers, has_output=True, out_dim=o_hidden_dim, dropout=dropout, device=device)
+        self.f_trans = GRULayer(x_dim+max_prev_node-1, t_hidden_dim, t_embed_dim, num_layers, has_output=True, out_dim=o_hidden_dim, dropout=dropout, device=device)
         self.f_out_x = GruMLPLayer(t_hidden_dim, o_embed_dim, x_dim)
-        self.f_out_edge = GRULayer(1, o_hidden_dim, o_embed_dim, num_layers, has_output=True, out_dim=edge_dim, dropout=dropout, device=device)
+        self.f_out_edge = GRULayer(1, o_hidden_dim, o_embed_dim, num_layers, has_output=True, out_dim=edge_class_dim, dropout=dropout, device=device)
 
     def _decode_adj(self, adj_seq, b=0):
         n = adj_seq.shape[1]
@@ -151,6 +153,7 @@ class GraphRNN_A(nn.Module):
                 y_unsorted = data['y_edge']
                 y_feat_unsorted = data['y_feat']
                 y_len_unsorted = data['len']
+                # Prepare data
                 y_len_max = max(y_len_unsorted)
                 x_unsorted = x_unsorted[:,0:y_len_max,:]
                 y_unsorted = y_unsorted[:,0:y_len_max,:]
@@ -201,7 +204,7 @@ class GraphRNN_A(nn.Module):
                 edge_pred = edge_pred.permute(0,2,1)
                 output_y = pack_padded_sequence(output_y, output_y_len, batch_first=True)
                 output_y = pad_packed_sequence(output_y, batch_first=True)[0]
-                output_y = output_y.view(output_y.size(0),output_y.size(1)) # suitable shape for cross entropy
+                output_y = output_y.view(output_y.size(0),output_y.size(1))
                 output_y = output_y.long() # target must have long type
                 # Losses
                 ce_loss = F.cross_entropy(edge_pred, output_y)
@@ -295,7 +298,7 @@ class GraphRNN_A(nn.Module):
         edge_pred = edge_pred.permute(0,2,1)
         output_y = pack_padded_sequence(output_y, output_y_len, batch_first=True)
         output_y = pad_packed_sequence(output_y, batch_first=True)[0]
-        output_y = output_y.view(output_y.size(0),output_y.size(1)) # suitable shape for cross entropy
+        output_y = output_y.view(output_y.size(0),output_y.size(1))
         output_y = output_y.long() # target must have long type
         # Losses
         ce_loss = F.cross_entropy(edge_pred, output_y)
@@ -345,7 +348,7 @@ class GraphRNN_A(nn.Module):
             x_step[:,:,0:self.x_dim] = node_pred # update step
             for j in range(min(self.max_prev_node,i+1)):
                 _, output_y_pred_step = self.f_out_edge(output_x_step)
-                output_x_step = torch.softmax(output_y_pred_step, dim=2)
+                output_x_step = torch.argmax(torch.softmax(output_y_pred_step, dim=2))
                 x_step[:,:,self.x_dim+j:self.x_dim+j+1] = output_x_step
                 output_x_step = torch.FloatTensor([[[output_x_step]]]) # convert and reshape prediction
                 self.f_out_edge.hidden = Variable(self.f_out_edge.hidden.data).to(self.device) # update hidden state
@@ -357,8 +360,8 @@ class GraphRNN_A(nn.Module):
         adj_pred = self._decode_adj(edge_pred_long_data)
         x_pred = x_pred.view(x_pred.size(1),x_pred.size(2))
         for i in range(max_num_nodes):
-            x_pred[i,0] = torch.clip(x_pred[i,0], min=aa_min, max=aa_max)
-            x_pred[i,1] = torch.clip(x_pred[i,1], min=ss_min, max=ss_max)
+            x_pred[i,0] = torch.clip(x_pred[i,0].round(), min=aa_min, max=aa_max)
+            x_pred[i,1] = torch.clip(x_pred[i,1].round(), min=ss_min, max=ss_max)
         return x_pred, adj_pred
 
 class GraphRNN_G(nn.Module):
@@ -370,13 +373,15 @@ class GraphRNN_G(nn.Module):
     Last, predictions (node classes and values) are carried out by two distinct MLPs.
     """
 
-    def __init__(self, max_prev_node, x_dim, edge_dim, hidden_dim, g_latent_dim, embed_dim, mlp_dims, num_layers=4,
+    def __init__(self, root, max_prev_node, x_dim, edge_dim, hidden_dim, g_latent_dim, embed_dim, ecc_dims, mlp_dims, ecc_inner_dims=[], num_layers=4,
                  dropout=0, class_dim=2, aa_dim=20, ss_dim=7, ignore_idx=-100, device='cpu'):
         """
         Initialize the class.
 
         Parameters
         ----------
+        root : str
+            Where to save the model data.
         max_prev_node : int
             The maximum number of nodes.
         x_dim : int
@@ -389,8 +394,12 @@ class GraphRNN_G(nn.Module):
             The latent dimension in the EC graph convolution.
         embed_dim : int
             The embedding dimension in the GRU layer.
+        ecc_dims : list of int
+            The dimensions of the ECC layers.
         mlp_dims : list of int
             The dimensions of the MLP layers.
+        ecc_inner_dims : list of int, optional
+            The dimensions for the `h` in ECC. The default is [8].
         num_layers : int, optional
             The number of GRU cells.
         dropout : float in [0,1], optional
@@ -407,6 +416,7 @@ class GraphRNN_G(nn.Module):
             The device where to put the data. The default is 'cpu'.
         """
         super(GraphRNN_G, self).__init__()
+        self.root = root
         self.max_prev_node = max_prev_node
         self.x_dim = x_dim
         self.edge_dim = edge_dim
@@ -417,15 +427,13 @@ class GraphRNN_G(nn.Module):
         self.ignore_idx = ignore_idx
         self.device = device
 
-        self.ecc = gnn.ECConv(x_dim, g_latent_dim, nn.Sequential(nn.Linear(edge_dim,x_dim*g_latent_dim)))
+        self.enc = ECCLayer([x_dim] + ecc_dims + [g_latent_dim], ecc_inner_dims, edge_dim)
         self.lin = nn.Linear(g_latent_dim, x_dim)
         self.gru = GRULayer(x_dim, hidden_dim, embed_dim, num_layers, dropout=dropout, device=device)
-        self.fc_out_class = MLPLayer([hidden_dim] + mlp_dims + [aa_dim*ss_dim])
-        self.fc_out_reg = MLPLayer([hidden_dim] + mlp_dims + [x_dim-class_dim])
+        self.fc_out = MLPLayer([hidden_dim] + mlp_dims + [aa_dim*ss_dim+x_dim-class_dim])
 
         self._init_weights(self.lin)
-        self.fc_out_class.apply(self._init_weights)
-        self.fc_out_reg.apply(self._init_weights)
+        self.fc_out.apply(self._init_weights)
 
     def _init_weights(self, m, mode='he'):
         if isinstance(m, nn.Linear):
@@ -522,7 +530,7 @@ class GraphRNN_G(nn.Module):
                 # Put the data on device
                 x, adj, edge = x.to(self.device), adj.to(self.device), edge.to(self.device)
                 # Encode the graph
-                graph = self.ecc(x, adj, edge_attr=edge)
+                graph = self.enc(x, adj, edge)
                 graph = self.lin(graph)
                 # Get RNN data and sort it
                 xt, yt = self._encode_rnn_data(x, graph, batch_len)
@@ -536,16 +544,13 @@ class GraphRNN_G(nn.Module):
                 # Initialize hidden state
                 self.gru.hidden = self.gru.init_hidden(batch_size=xt.shape[0])
                 out, _ = self.gru(xt, pack=True, input_len=y_len)
-                out_class = self.fc_out_class(out)
-                out_reg = self.fc_out_reg(out)
+                out_x = self.fc_out(out)
                 # Clean
-                y_pred_class = pack_padded_sequence(out_class, y_len, batch_first=True)
-                y_pred_class = pad_packed_sequence(y_pred_class, batch_first=True)[0]
-                y_pred_reg = pack_padded_sequence(out_reg, y_len, batch_first=True)
-                y_pred_reg = pad_packed_sequence(y_pred_reg, batch_first=True)[0]
+                y_pred = pack_padded_sequence(out_x, y_len, batch_first=True)
+                y_pred = pad_packed_sequence(y_pred, batch_first=True)[0]
                 # Losses
-                ce_loss = F.cross_entropy(torch.transpose(y_pred_class, 1,2), self._input_classes(yt[:,:,0:self.class_dim]))
-                mse_loss = F.mse_loss(y_pred_reg, yt[:,:,self.class_dim:])
+                ce_loss = F.cross_entropy(torch.transpose(y_pred[:,:,0:self.aa_dim*self.ss_dim], 1,2), self._input_classes(yt[:,:,0:self.class_dim]))
+                mse_loss = F.mse_loss(y_pred[:,:,self.aa_dim*self.ss_dim:], yt[:,:,self.class_dim:])
                 # Beta parameter for stability
                 beta = torch.abs(ce_loss.detach()/mse_loss.detach()).detach()
                 loss = ce_loss + beta*mse_loss
@@ -581,7 +586,7 @@ class GraphRNN_G(nn.Module):
         """
         # Forward pass
         # Encode the graph
-        graph = self.ecc(x, adj, edge_attr=edge)
+        graph = self.enc(x, adj, edge_attr=edge)
         graph = self.lin(graph)
         # Get RNN data and sort it
         xt, yt = self._encode_rnn_data(x, graph, batch_len)
@@ -595,16 +600,13 @@ class GraphRNN_G(nn.Module):
         # Initialize hidden state
         self.gru.hidden = self.gru.init_hidden(batch_size=xt.shape[0])
         out, _ = self.gru(xt, pack=True, input_len=y_len)
-        out_class = self.fc_out_class(out)
-        out_reg = self.fc_out_reg(out)
+        out_x = self.fc_out(out)
         # Clean
-        y_pred_class = pack_padded_sequence(out_class, y_len, batch_first=True)
-        y_pred_class = pad_packed_sequence(y_pred_class, batch_first=True)[0]
-        y_pred_reg = pack_padded_sequence(out_reg, y_len, batch_first=True)
-        y_pred_reg = pad_packed_sequence(y_pred_reg, batch_first=True)[0]
+        y_pred = pack_padded_sequence(out_x, y_len, batch_first=True)
+        y_pred = pad_packed_sequence(y_pred, batch_first=True)[0]
         # Losses
-        ce_loss = F.cross_entropy(torch.transpose(y_pred_class, 1,2), self._input_classes(yt[:,:,0:self.class_dim]))
-        mse_loss = F.mse_loss(y_pred_reg, yt[:,:,self.class_dim:])
+        ce_loss = F.cross_entropy(torch.transpose(y_pred[:,:,0:self.aa_dim*self.ss_dim], 1,2), self._input_classes(yt[:,:,0:self.class_dim]))
+        mse_loss = F.mse_loss(y_pred[:,:,self.aa_dim*self.ss_dim:], yt[:,:,self.class_dim:])
         # Beta parameter for stability
         beta = torch.abs(ce_loss.detach()/mse_loss.detach()).detach()
         loss = ce_loss + beta*mse_loss

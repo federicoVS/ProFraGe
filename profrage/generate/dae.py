@@ -18,7 +18,7 @@ class GraphDAAE(nn.Module):
     Code   => https://github.com/shentianxiao/text-autoencoders
     """
 
-    def __init__(self, root, x_dim, edge_dim, hidden_dim, latent_dim, ecc_dims, mlp_dims, dropout=0.1,
+    def __init__(self, root, x_dim, edge_dim, hidden_dim, latent_dim, ecc_dims, mlp_dims, ecc_inner_dims=[], dropout=0.1,
                  x_class_dim=2, edge_class_dim=3, max_size=30, aa_dim=20, ss_dim=7, ignore_idx=-100, weight_init=5e-5, device='cpu'):
         """
         Initialize the class.
@@ -39,6 +39,8 @@ class GraphDAAE(nn.Module):
             The dimensions for the ECC layers.
         mlp_dims : list of int
             The dimensions for the MLP layers.
+        ecc_inner_dims : list of int, optional
+            The dimensions for the `h` in ECC. The default is [].
         dropout : float in [0,1], optional
             The dropout probability. The default is 0.1
         x_class_dim : int, optional
@@ -74,7 +76,7 @@ class GraphDAAE(nn.Module):
         self.device = device
 
         # Encoding
-        self.enc = ECCLayer([x_dim] + ecc_dims + [hidden_dim], [8,16,8], edge_dim)
+        self.enc = ECCLayer([x_dim] + ecc_dims + [hidden_dim], ecc_inner_dims, edge_dim)
         # Sampling
         self.latent_mu = nn.Linear(hidden_dim, latent_dim)
         self.latent_log_var = nn.Linear(hidden_dim, latent_dim)
@@ -178,7 +180,7 @@ class GraphDAAE(nn.Module):
         out = self.enc(x, adj, edge)
         out = F.relu(out)
         mu, log_var = self.latent_mu(out), self.latent_log_var(out)
-        mu, log_var = mu/torch.norm(mu), log_var/torch.norm(log_var)
+        # mu, log_var = mu/torch.norm(mu), log_var/torch.norm(log_var)
         return out, mu, log_var
 
     def decode(self, z):
@@ -196,7 +198,7 @@ class GraphDAAE(nn.Module):
             The decoded node features classes and and adjacency/edge feature matrix.
         """
         # Decode from z
-        dec_x, dec_edge = self.dec_x(z), self.dec_edge(z)
+        dec_x, dec_edge = F.dropout(self.dec_x(z), p=self.dropout), F.dropout(self.dec_edge(z), p=self.dropout)
         out_x = self.fc_out_x(dec_x)
         out_edge = self.fc_out_edge(dec_edge)
         out_edge = out_edge.view(out_edge.shape[0],self.max_size,self.edge_dim+self.edge_class_dim-1)
@@ -226,7 +228,7 @@ class GraphDAAE(nn.Module):
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss}, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, lr=1e-3, l_adv=1, w_norm=1.0, checkpoint=500, verbose=False):
+    def fit(self, loader, n_epochs, lr=1e-3, l_adv=1, w_clip=1, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -240,8 +242,8 @@ class GraphDAAE(nn.Module):
             The learning rate. The default is 1e-3.
         l_adv : float, optional
             The multiplier to apply to the adversarial loss. The default is 1.
-        w_norm : float, optional
-            The maximum norm of the gradient. The default is 1.0.
+        w_clip : float, optional
+            The maximum value of the gradient. The default is 1e-10.
         checkpoint : int, optional
             The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
@@ -267,7 +269,7 @@ class GraphDAAE(nn.Module):
                 out_x, out_edge = self.decode(z)
                 loss = self._loss(x, adj, edge, out_x, out_edge, z, x_len, edge_len, l_adv)
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.parameters(), w_norm)
+                torch.nn.utils.clip_grad_value_(self.parameters(), w_clip)
                 optimizer.step()
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 self.checkpoint(epoch, optimizer, loss)
