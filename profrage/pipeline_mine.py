@@ -87,6 +87,8 @@ def _save_checkpoint(level, cluster_dict):
         os.makedirs(dir_name)
     for keys in cluster_dict:
         full_path = dir_name + str(keys) + '/'
+        if not os.path.isdir(full_path):
+            os.makedirs(full_path)
         structures = cluster_dict[keys]
         for s in structures:
             to_pdb(s, s.get_id(), full_path)
