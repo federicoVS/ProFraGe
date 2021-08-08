@@ -90,7 +90,7 @@ class GraphVAE(nn.Module):
 
         # Weights initialization
         self._init_weights(self.latent_mu)
-        self._init_weights(self.latent_log_var)
+        nn.init.zeros_(self.latent_log_var.weight)
         self.fc_out_x.apply(self._init_weights)
         self.fc_out_edge.apply(self._init_weights)
 
@@ -375,7 +375,7 @@ class GraphVAE_Seq(nn.Module):
 
         # Weights initialization
         self._init_weights(self.latent_mu)
-        self._init_weights(self.latent_log_var)
+        nn.init.zeros_(self.latent_log_var.weight)
         self.fc_out_x.apply(self._init_weights)
 
     def _init_weights(self, m):
