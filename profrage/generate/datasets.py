@@ -182,6 +182,7 @@ class GraphDataset(Dataset):
         """
         file_name = 'graph_' + self._mode + '_' + self.split + '.pt'
         self._data = torch.load(self.root + file_name)
+        self.length = len(self._data)
 
     def get_data(self):
         """
