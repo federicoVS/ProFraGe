@@ -36,13 +36,14 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         val_proteins.append(from_pdb(pdb_id, pdb, quiet=True))
     # Get the training and validation datasets
     if data_type == 'graph':
-        train_dataset = GraphDataset(dataset_dir, train_proteins, pdb_train, stride_dir, **args.graph_dataset)
-        val_dataset = GraphDataset(dataset_dir, val_proteins, pdb_val, stride_dir, **args.graph_dataset)
+        train_dataset = GraphDataset(dataset_dir, 'train', train_proteins, pdb_train, stride_dir, **args.graph_dataset)
+        val_dataset = GraphDataset(dataset_dir, 'val', val_proteins, pdb_val, stride_dir, **args.graph_dataset)
     elif data_type == 'rnn':
-        train_dataset = RNNDataset_Feat(dataset_dir, train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
-        val_dataset = RNNDataset_Feat(dataset_dir, val_proteins, pdb_val, stride_dir, **args.rrn_dataset)
-    # Save the training dataset
+        train_dataset = RNNDataset_Feat(dataset_dir, 'train', train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
+        val_dataset = RNNDataset_Feat(dataset_dir, 'val', val_proteins, pdb_val, stride_dir, **args.rrn_dataset)
+    # Save the datasets
     train_dataset.save()
+    val_dataset.save()
     # Define the loaders
     if data_mode == 'dense' or data_type == 'rnn':
         train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
@@ -159,17 +160,14 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, m
         test_proteins.append(from_pdb(pdb_id, pdb, quiet=True))
     # Get the training data
     if data_type == 'graph':
-        train_dataset = GraphDataset(dataset_dir, train_proteins, pdb_train, stride_dir, **args.graph_dataset)
-        if not args.graph_dataset['load']:
-            train_dataset.save()
+        train_dataset = GraphDataset(dataset_dir, 'train', train_proteins, pdb_train, stride_dir, **args.graph_dataset)
     elif data_type == 'rnn':
-        train_dataset = RNNDataset_Feat(dataset_dir, train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
-        if not args.rrn_dataset['load']:
-            train_dataset.save()
+        train_dataset = RNNDataset_Feat(dataset_dir, 'train', train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
     # Get the test data
-    test_dataset = GraphDataset(dataset_dir, test_proteins, pdb_test, stride_dir, **args.test_dataset)
-    if not args.test_dataset['load']:
-        test_dataset.save()
+    test_dataset = GraphDataset(dataset_dir, 'test', test_proteins, pdb_test, stride_dir, **args.test_dataset)
+    # Save the datasets
+    train_dataset.save()
+    test_dataset.save()
     # Define the loaders
     if data_mode == 'dense' or data_type == 'rnn':
         train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)

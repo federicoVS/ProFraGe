@@ -24,9 +24,9 @@ class GraphDataset(Dataset):
         The length of the dataset in terms of valid proteins.
     """
 
-    def __init__(self, root, proteins, pdb_dir, stride_dir,
+    def __init__(self, root, split, proteins, pdb_dir, stride_dir,
                  dist_thr=12, max_size=30, x_type=torch.FloatTensor, bb_type=torch.LongTensor, adj_type=torch.LongTensor, edge_type=torch.FloatTensor,
-                 mode='sparse', probabilistic=False, split='train', load=False):
+                 mode='sparse', probabilistic=False, load=False):
         """
         Initialize the class.
 
@@ -34,6 +34,8 @@ class GraphDataset(Dataset):
         ----------
         root : str
             The root directory where the data is stored.
+        split : str
+            To which split in train/val/test the dataset belongs to. Valid options are ['train','val','test'].
         proteins : list of Bio.PDB.Structure
             The proteins from which to compute the dataset.
         pdb_dir : str
@@ -54,14 +56,13 @@ class GraphDataset(Dataset):
             The type of the edge features. The default is torch.FloatTensor.
         mode : str, optional
             How the data should be. Valid options are ['sparse', 'dense']. The default is 'sparse'.
-        split : str, optional
-            To which split in train/val/test the dataset belongs to. The default is 'train'.
         probabilistic : bool, optional
             Whether the adjacency matrix should contain 1s on the diagonal, indicating the existence of a node. The default is False.
         load : bool, optional
             Whether the data should be computed or loaded (if it has already been computed). The default is False.
         """
         self.root = root
+        self.split = split
         self.proteins = proteins
         self.length = 0
         self._x_type = x_type
@@ -70,7 +71,7 @@ class GraphDataset(Dataset):
         self._edge_type = edge_type
         self._mode = mode
         self._probabilistic = probabilistic
-        self._split = split
+        self._load = load
         if load:
             self.load()
         else:
@@ -161,12 +162,15 @@ class GraphDataset(Dataset):
         """
         Save the data.
 
+        Note that the data is only saved if the data was computed from scratch.
+
         Returns
         -------
         None
         """
-        file_name = 'graph_' + self._mode + '_' + self._split + '.pt'
-        torch.save(self._data, self.root + file_name)
+        if not self._load:
+            file_name = 'graph_' + self._mode + '_' + self.split + '.pt'
+            torch.save(self._data, self.root + file_name)
 
     def load(self):
         """
@@ -176,7 +180,7 @@ class GraphDataset(Dataset):
         -------
         None
         """
-        file_name = 'graph_' + self._mode + '_' + self._split + '.pt'
+        file_name = 'graph_' + self._mode + '_' + self.split + '.pt'
         self._data = torch.load(self.root + file_name)
 
     def get_data(self):
@@ -210,7 +214,7 @@ class RNNDataset_Feat(Dataset):
         The proteins from which to compute the features.
     """
 
-    def __init__(self, root, proteins, pdb_dir, stride_dir, dist_thr=12, max_size=30, split='train', load=False):
+    def __init__(self, root, split, proteins, pdb_dir, stride_dir, dist_thr=12, max_size=30, load=False):
         """
         Initialize the class.
 
@@ -218,6 +222,8 @@ class RNNDataset_Feat(Dataset):
         ----------
         root : str
             The root directory where the data is stored.
+        split : str
+            To which split in train/val/test the dataset belongs to. Valid options are ['train','val','test'].
         proteins : list of Bio.PDB.Structure
             The proteins from which to compute the dataset.
         pdb_dir : str
@@ -235,9 +241,10 @@ class RNNDataset_Feat(Dataset):
         """
         super(RNNDataset_Feat, self).__init__()
         self.root = root
+        self.split = split
         self.proteins = proteins
         self._max_size = max_size
-        self._split = split
+        self._load = load
         if load:
             self.load()
         else:
@@ -330,12 +337,15 @@ class RNNDataset_Feat(Dataset):
         """
         Save the data.
 
+        Note that the data is only saved if the data was computed from scratch.
+
         Returns
         -------
         None
         """
-        file_name = 'rnn_' + self._split + '.pt'
-        torch.save(self._data, self.root + file_name)
+        if not self._load:
+            file_name = 'rnn_' + self.split + '.pt'
+            torch.save(self._data, self.root + file_name)
 
     def load(self):
         """
@@ -345,5 +355,5 @@ class RNNDataset_Feat(Dataset):
         -------
         None
         """
-        file_name = 'rnn_' + self._split + '.pt'
+        file_name = 'rnn_' + self.split + '.pt'
         self._data = torch.load(self.root + file_name)
