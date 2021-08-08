@@ -160,12 +160,16 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, m
     # Get the training data
     if data_type == 'graph':
         train_dataset = GraphDataset(dataset_dir, train_proteins, pdb_train, stride_dir, **args.graph_dataset)
+        if not args.graph_dataset['load']:
+            train_dataset.save()
     elif data_type == 'rnn':
         train_dataset = RNNDataset_Feat(dataset_dir, train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
-    # Save the training dataset
-    train_dataset.save()
+        if not args.rrn_dataset['load']:
+            train_dataset.save()
     # Get the test data
     test_dataset = GraphDataset(dataset_dir, test_proteins, pdb_test, stride_dir, **args.test_dataset)
+    if not args.test_dataset['load']:
+        test_dataset.save()
     # Define the loaders
     if data_mode == 'dense' or data_type == 'rnn':
         train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)

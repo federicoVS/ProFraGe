@@ -26,7 +26,7 @@ class GraphDataset(Dataset):
 
     def __init__(self, root, proteins, pdb_dir, stride_dir,
                  dist_thr=12, max_size=30, x_type=torch.FloatTensor, bb_type=torch.LongTensor, adj_type=torch.LongTensor, edge_type=torch.FloatTensor,
-                 mode='sparse', probabilistic=False, load=False):
+                 mode='sparse', probabilistic=False, split='train', load=False):
         """
         Initialize the class.
 
@@ -54,6 +54,8 @@ class GraphDataset(Dataset):
             The type of the edge features. The default is torch.FloatTensor.
         mode : str, optional
             How the data should be. Valid options are ['sparse', 'dense']. The default is 'sparse'.
+        split : str, optional
+            To which split in train/val/test the dataset belongs to. The default is 'train'.
         probabilistic : bool, optional
             Whether the adjacency matrix should contain 1s on the diagonal, indicating the existence of a node. The default is False.
         load : bool, optional
@@ -68,6 +70,7 @@ class GraphDataset(Dataset):
         self._edge_type = edge_type
         self._mode = mode
         self._probabilistic = probabilistic
+        self._split = split
         if load:
             self.load()
         else:
@@ -162,7 +165,8 @@ class GraphDataset(Dataset):
         -------
         None
         """
-        torch.save(self._data, self.root + 'graph_' + self._mode + '.pt')
+        file_name = 'graph_' + self._mode + '_' + self._split + '.pt'
+        torch.save(self._data, self.root + file_name)
 
     def load(self):
         """
@@ -172,7 +176,8 @@ class GraphDataset(Dataset):
         -------
         None
         """
-        self._data = torch.load(self.root + 'graph_' + self._mode + '.pt')
+        file_name = 'graph_' + self._mode + '_' + self._split + '.pt'
+        self._data = torch.load(self.root + file_name)
 
     def get_data(self):
         """
@@ -205,7 +210,7 @@ class RNNDataset_Feat(Dataset):
         The proteins from which to compute the features.
     """
 
-    def __init__(self, root, proteins, pdb_dir, stride_dir, dist_thr=12, max_size=30, load=False):
+    def __init__(self, root, proteins, pdb_dir, stride_dir, dist_thr=12, max_size=30, split='train', load=False):
         """
         Initialize the class.
 
@@ -223,6 +228,8 @@ class RNNDataset_Feat(Dataset):
             The distance threshold below which two residues are interacting. The default is 12.
         max_size : int, optional
             The maximum number of residues in a fragment. The default is 30.
+        split : str, optional
+            To which split in train/val/test the dataset belongs to. The default is 'train'.
         load : bool, optional
             Whether the data should be computed or loaded (if it has already been computed). The default is False.
         """
@@ -230,6 +237,7 @@ class RNNDataset_Feat(Dataset):
         self.root = root
         self.proteins = proteins
         self._max_size = max_size
+        self._split = split
         if load:
             self.load()
         else:
@@ -326,7 +334,8 @@ class RNNDataset_Feat(Dataset):
         -------
         None
         """
-        torch.save(self._data, self.root + 'rnn_' + self._mode + '.pt')
+        file_name = 'rnn_' + self._split + '.pt'
+        torch.save(self._data, self.root + file_name)
 
     def load(self):
         """
@@ -336,4 +345,5 @@ class RNNDataset_Feat(Dataset):
         -------
         None
         """
-        self._data = torch.load(self.root + 'rnn_' + self._mode + '.pt')
+        file_name = 'rnn_' + self._split + '.pt'
+        self._data = torch.load(self.root + file_name)
