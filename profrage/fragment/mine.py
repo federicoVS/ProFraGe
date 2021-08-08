@@ -759,7 +759,7 @@ class LeidenMiner(SingleMiner):
 
         Parameters
         ----------
-        structure : Bio.PDB.Stucture
+        structure : Bio.PDB.Structure
             The structure from which to generate the fragments.
         cmap : str
             The file holding the CMAP.

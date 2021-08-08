@@ -147,7 +147,7 @@ def node_feature_target_classes(x, device, aa_dim=20, ss_dim=7, ignore_idx=-100)
         The target tensor.
     """
     b_dim, n = x.shape[0], x.shape[1]
-    x_classes = torch.zeros(b_dim,1, dtype=torch.long)
+    x_classes = torch.zeros(b_dim,1, dtype=torch.long).to(device)
     for b in range(b_dim):
         a, s = x[b,0] - 1, x[b,1] - 1 # subtract one because classes begin with 1
         mapping = s*aa_dim + a
@@ -156,7 +156,7 @@ def node_feature_target_classes(x, device, aa_dim=20, ss_dim=7, ignore_idx=-100)
         else:
             x_classes[b,0] = mapping
     x_classes = x_classes.view(b_dim)
-    return x_classes.to(device)
+    return x_classes
 
 def edge_features_input(adj_edge, x_len, max_size, edge_dim, edge_class_dim, device):
     """
@@ -182,13 +182,13 @@ def edge_features_input(adj_edge, x_len, max_size, edge_dim, edge_class_dim, dev
     ae_dense : torch.tensor
         The input tensor.
     """
-    ae_dense = torch.zeros(len(x_len),max_size,max_size,edge_dim+edge_class_dim-1)
+    ae_dense = torch.zeros(len(x_len),max_size,max_size,edge_dim+edge_class_dim-1).to(device)
     prev = 0
     for i in range(len(x_len)):
         xl = x_len[i]
         ae_dense[i,0:xl,:,:] = adj_edge[prev:prev+xl]
         prev += xl
-    return ae_dense.to(device)
+    return ae_dense
 
 def edge_features_target(adj_sparse, edge_sparse, x_len, edge_len, max_size, edge_dim, device):
     """
@@ -216,7 +216,7 @@ def edge_features_target(adj_sparse, edge_sparse, x_len, edge_len, max_size, edg
     ae_dense : torch.tensor
         The target tensor.
     """
-    ae_dense = torch.zeros(len(edge_len),max_size,max_size,edge_dim)
+    ae_dense = torch.zeros(len(edge_len),max_size,max_size,edge_dim).to(device)
     prev_i, prev_x = 0, 0
     for i in range(len(edge_len)):
         el = edge_len[i]
@@ -226,4 +226,4 @@ def edge_features_target(adj_sparse, edge_sparse, x_len, edge_len, max_size, edg
         ae_dense[i,i_idx,j_idx,1] = edge_type + 1 # now 0 means no connections
         prev_i += el
         prev_x += x_len[i]
-    return ae_dense.to(device)
+    return ae_dense
