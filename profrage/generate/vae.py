@@ -90,7 +90,7 @@ class GraphVAE(nn.Module):
 
         # Weights initialization
         self._init_weights(self.latent_mu)
-        nn.init.zeros_(self.latent_log_var.weight)
+        self._init_weights(self.latent_log_var)
         self.fc_out_x.apply(self._init_weights)
         self.fc_out_edge.apply(self._init_weights)
 
@@ -216,7 +216,7 @@ class GraphVAE(nn.Module):
         -------
         None
         """
-        optimizer = Adam(self.parameters(), lr=lr)
+        optimizer = Adam(self.parameters(), lr=lr, betas=(0.5, 0.999))
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
                 # Get the data
@@ -375,7 +375,7 @@ class GraphVAE_Seq(nn.Module):
 
         # Weights initialization
         self._init_weights(self.latent_mu)
-        nn.init.zeros_(self.latent_log_var.weight)
+        self._init_weights(self.latent_log_var)
         self.fc_out_x.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -484,7 +484,7 @@ class GraphVAE_Seq(nn.Module):
         -------
         None
         """
-        optimizer = Adam(self.parameters(), lr=lr)
+        optimizer = Adam(self.parameters(), lr=lr, betas=(0.5, 0.999))
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
                 # Get the data
