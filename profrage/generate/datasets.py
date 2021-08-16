@@ -24,9 +24,7 @@ class GraphDataset(Dataset):
         The length of the dataset in terms of valid proteins.
     """
 
-    def __init__(self, root, split, proteins, pdb_dir, stride_dir,
-                 dist_thr=12, max_size=30, x_type=torch.FloatTensor, bb_type=torch.LongTensor, adj_type=torch.LongTensor, edge_type=torch.FloatTensor,
-                 mode='sparse', probabilistic=False, load=False):
+    def __init__(self, root, id, split, proteins, pdb_dir, stride_dir, dist_thr=12, max_size=30, mode='sparse', probabilistic=False, load=False):
         """
         Initialize the class.
 
@@ -34,6 +32,8 @@ class GraphDataset(Dataset):
         ----------
         root : str
             The root directory where the data is stored.
+        id : int
+            The ID of the dataset.
         split : str
             To which split in train/val/test the dataset belongs to. Valid options are ['train','val','test'].
         proteins : list of Bio.PDB.Structure
@@ -46,14 +46,6 @@ class GraphDataset(Dataset):
             The distance threshold below which two residues are interacting. The default is 12.
         max_size : int, optional
             The maximum number of residues in a fragment. The default is 30.
-        x_type : torch.type, optional
-            The type of the node features. The default is torch.FloatTensor.
-        bb_type : torch.type, optional
-            The type of the backbone features. The default is torch.LongTensor.
-        adj_type : torch.type, optional
-            The type of the adjacency matrix. The default is torch.LongTensor.
-        edge_type : torch.type, optional
-            The type of the edge features. The default is torch.FloatTensor.
         mode : str, optional
             How the data should be. Valid options are ['sparse', 'dense']. The default is 'sparse'.
         probabilistic : bool, optional
@@ -62,13 +54,10 @@ class GraphDataset(Dataset):
             Whether the data should be computed or loaded (if it has already been computed). The default is False.
         """
         self.root = root
+        self.id = id
         self.split = split
         self.proteins = proteins
         self.length = 0
-        self._x_type = x_type
-        self._bb_type = bb_type
-        self._adj_type = adj_type
-        self._edge_type = edge_type
         self._mode = mode
         self._probabilistic = probabilistic
         self._load = load
@@ -109,7 +98,7 @@ class GraphDataset(Dataset):
         sparse_data_list = []
         for i in range(len(self.proteins)):
             # Get features
-            bb, adj, edge, weight, x = GraphFeature(self.proteins[i], pdb_dir, stride_dir, dist_thr=dist_thr, mode=self._mode).get_features()
+            adj, w_adj, edge, x = GraphFeature(self.proteins[i], pdb_dir, stride_dir, dist_thr=dist_thr, mode=self._mode).get_features()
             if x is None:
                 continue
             if x.shape[0] == 0:
@@ -117,35 +106,30 @@ class GraphDataset(Dataset):
             # Pad
             delta = max_size - x.shape[0]
             if self._mode == 'dense':
-                bb = np.pad(bb, (0,delta))
                 adj = np.pad(adj, (0,delta))
+                w_adj = np.pad(w_adj, (0,delta))
                 edge = np.pad(edge, ((0,delta),(0,delta),(0,0)))
-                weight = np.pad(weight, (0,delta))
                 x = np.pad(x, ((0,delta),(0,0)))
-                if self._probabilistic:
-                    adj = adj + torch.eye(adj.shape[0])
             if self._mode == 'sparse':
-                bb = torch.from_numpy(adj).type(self._bb_type)
-                adj = torch.from_numpy(adj).type(self._adj_type)
-                edge = torch.from_numpy(edge).type(self._edge_type)
-                weight = torch.from_numpy(weight).type(torch.FloatTensor)
-                x = torch.from_numpy(x).type(self._x_type)
+                adj = torch.from_numpy(adj).type(torch.LongTensor)
+                w_adj = torch.from_numpy(w_adj).type(torch.FloatTensor)
+                edge = torch.from_numpy(edge).type(torch.FloatTensor)
+                x = torch.from_numpy(x).type(torch.FloatTensor)
             # Node mask
             nm = torch.ones(max_size).type(torch.BoolTensor)
             nm[-delta:] = False
             # Assign features
             if self._mode == 'dense':
-                dense_data_list.append({'x': torch.tensor(x).type(self._x_type),
-                                        'bb': torch.tensor(bb).type(self._bb_type),
-                                        'adj': torch.tensor(adj).type(self._adj_type),
-                                        'edge': torch.tensor(edge).type(self._edge_type),
-                                        'weight': torch.tensor(weight).type(torch.FloatTensor),
+                dense_data_list.append({'x': torch.tensor(x).type(torch.FloatTensor),
+                                        'adj': torch.tensor(adj).type(torch.LongTensor),
+                                        'w_adj': torch.tensor(w_adj).type(torch.FloatTensor),
+                                        'edge': torch.tensor(edge).type(torch.FloatTensor),
                                         'mask': nm,
                                         'len': x.shape[0],
                                         'pdb_id': self.proteins[i].get_id()})
             elif self._mode == 'sparse':
                 gdata = GData(x=x, edge_index=adj.t().contiguous(), edge_attr=edge)
-                gdata.weight = weight
+                gdata.w_adj = w_adj
                 gdata.node_mask = nm
                 gdata.x_len = x.shape[0]
                 gdata.edge_len = adj.shape[0]
@@ -169,7 +153,7 @@ class GraphDataset(Dataset):
         None
         """
         if not self._load:
-            file_name = 'graph_' + self._mode + '_' + self.split + '.pt'
+            file_name = 'graph_' + self._mode + '_' + str(self.id) + '_' + self.split + '.pt'
             torch.save(self._data, self.root + file_name)
 
     def load(self):
@@ -180,7 +164,7 @@ class GraphDataset(Dataset):
         -------
         None
         """
-        file_name = 'graph_' + self._mode + '_' + self.split + '.pt'
+        file_name = 'graph_' + self._mode + '_' + str(self.id) + '_' + self.split + '.pt'
         self._data = torch.load(self.root + file_name)
         self.length = len(self._data)
 
@@ -215,7 +199,7 @@ class RNNDataset_Feat(Dataset):
         The proteins from which to compute the features.
     """
 
-    def __init__(self, root, split, proteins, pdb_dir, stride_dir, dist_thr=12, max_size=30, load=False):
+    def __init__(self, root, id, split, proteins, pdb_dir, stride_dir, dist_thr=12, max_size=30, load=False):
         """
         Initialize the class.
 
@@ -223,6 +207,8 @@ class RNNDataset_Feat(Dataset):
         ----------
         root : str
             The root directory where the data is stored.
+        id : int
+            The ID of the dataset.
         split : str
             To which split in train/val/test the dataset belongs to. Valid options are ['train','val','test'].
         proteins : list of Bio.PDB.Structure
@@ -242,6 +228,7 @@ class RNNDataset_Feat(Dataset):
         """
         super(RNNDataset_Feat, self).__init__()
         self.root = root
+        self.id = id
         self.split = split
         self.proteins = proteins
         self._max_size = max_size
@@ -278,30 +265,30 @@ class RNNDataset_Feat(Dataset):
         """
         return len(self._data)
 
-    def _encode_data(self, adj, edge, x):
-        n = adj.shape[0]
+    def _encode_data(self, w_adj, x):
+        n = w_adj.shape[0]
         s_pi = []
         for i in range(n):
             s_i = []
             for k in range(x.shape[1]):
                 s_i.append(x[i,k])
             for j in range(i):
-                if adj[i,j] > 0:
-                    s_i.append(edge[i,j,1]+1)
+                if w_adj[i,j] > 0:
+                    s_i.append(w_adj[i,j])
                 else:
                     s_i.append(0)
             s_i = torch.tensor(s_i)
             s_pi.append(s_i)
         return s_pi
 
-    def _edge_mapping(self, adj, edge):
-        n = adj.shape[0]
+    def _w_adj_mapping(self, w_adj):
+        n = w_adj.shape[0]
         e_pi = []
         for i in range(n):
             e_i = []
             for j in range(i):
-                if adj[i,j] > 0:
-                    e_i.append(edge[i,j,1]+1)
+                if w_adj[i,j] > 0:
+                    e_i.append(w_adj[i,j])
                 else:
                     e_i.append(0)
             e_i = torch.tensor(e_i)
@@ -312,11 +299,11 @@ class RNNDataset_Feat(Dataset):
         data = []
         for i in range(len(self.proteins)):
             # Get features
-            _, adj, edge, _, x = GraphFeature(self.proteins[i], pdb_dir, stride_dir, dist_thr=dist_thr, mode='dense').get_features()
+            _, w_adj, _, x = GraphFeature(self.proteins[i], pdb_dir, stride_dir, dist_thr=dist_thr, mode='dense').get_features()
             if x is None:
                 continue
-            s_pi = self._encode_data(adj, edge, x)
-            e_pi = self._edge_mapping(adj, edge)
+            s_pi = self._encode_data(w_adj, x)
+            e_pi = self._w_adj_mapping(w_adj)
             n = len(s_pi)
             s_pi = pad_sequence(s_pi, batch_first=True)
             e_pi = pad_sequence(e_pi, batch_first=True)
@@ -345,7 +332,7 @@ class RNNDataset_Feat(Dataset):
         None
         """
         if not self._load:
-            file_name = 'rnn_' + self.split + '.pt'
+            file_name = 'rnn_' + str(self.id) + '_' + self.split + '.pt'
             torch.save(self._data, self.root + file_name)
 
     def load(self):
@@ -356,5 +343,5 @@ class RNNDataset_Feat(Dataset):
         -------
         None
         """
-        file_name = 'rnn_' + self.split + '.pt'
+        file_name = 'rnn_' + str(self.id) + '_' + self.split + '.pt'
         self._data = torch.load(self.root + file_name)

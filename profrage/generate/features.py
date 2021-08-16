@@ -1,6 +1,5 @@
 import numpy as np
 
-from generate.utils import circular_mean
 from utils.structure import AA_TO_INT, structure_length
 from utils.stride import SS_CODE_TO_INT, single_stride
 from utils.io import from_pdb
@@ -73,19 +72,20 @@ class ResidueFeature:
 
     def __init__(self, residue, stride_entry):
         self._features = [0 for _ in range(ResidueFeature.get_n_features())]
+        all_features = [0 for _ in range(len(stride_entry))]
         self._features[0] = float(AA_TO_INT[stride_entry[0]])
         for i in range(1, len(stride_entry)):
-            self._features[i] = stride_entry[i]
+            all_features[i] = stride_entry[i]
         self._features[1] = float(SS_CODE_TO_INT[stride_entry[1]]+1) # add one here, so different from stride that starts from 0
-        self._features[2] = circular_mean([self._features[2]])
-        self._features[3] = circular_mean([self._features[3]])
-        ca_atom = residue['CA']
-        coords = ca_atom.get_coord()
-        self._features[5] = coords[0]
-        self._features[6] = coords[1]
-        self._features[7] = coords[2]
-        self._features[8] = ca_atom.get_occupancy()
-        self._features[9] = ca_atom.get_bfactor()
+        # self._features[1] = circular_mean([all_features[2]])
+        # self._features[2] = circular_mean([all_features[3]])
+        # ca_atom = residue['CA']
+        # coords = ca_atom.get_coord()
+        # self._features[5] = coords[0]
+        # self._features[6] = coords[1]
+        # self._features[7] = coords[2]
+        # self._features[8] = ca_atom.get_occupancy()
+        # self._features[9] = ca_atom.get_bfactor()
         self._features = np.array(self._features)
 
     @staticmethod
@@ -98,7 +98,7 @@ class ResidueFeature:
         int
             The size of a feature vector.
         """
-        return 10
+        return 2
 
     def get_features(self):
         """
@@ -156,31 +156,12 @@ class GraphFeature:
         self._mode = mode
         self._weights_cache = {}
 
-    def _get_backbone(self):
-        n = structure_length(self.protein)
-        if self._mode == 'dense':
-            bb = np.zeros(shape=(n,n))
-        elif self._mode == 'sparse':
-            bb = []
-        residues = []
-        for residue in self.protein.get_residues():
-            residues.append(residue)
-        for i in range(n-1):
-            for j in range(i+1, n):
-                if abs(i-j) == 1:
-                    if self._mode == 'dense':
-                        bb[i,j] = bb[j,i] = 1
-                    elif self._mode == 'sparse':
-                        bb.append([i,j])
-                        bb.append([j,i])
-        return bb
-
     def _get_adjacency(self):
         n = structure_length(self.protein)
         if self._mode == 'dense':
-            adj = np.zeros(shape=(n,n))
+            adj, w_adj = np.zeros(shape=(n,n)), np.zeros(shape=(n,n))
         elif self._mode == 'sparse':
-            adj = []
+            adj, w_adj = [], []
         residues = []
         for residue in self.protein.get_residues():
             residues.append(residue)
@@ -192,20 +173,23 @@ class GraphFeature:
                     if ca_dist < self._dist_thr:
                         if self._mode == 'dense':
                             adj[i,j] = adj[j,i] = 1
+                            w_adj[i,j] = w_adj[j,i] = 1/ca_dist
                         elif self._mode == 'sparse':
                             adj.append([i,j])
                             adj.append([j,i])
+                            w_adj.append(1/ca_dist)
+                            w_adj.append(1/ca_dist)
                         self._weights_cache[(i,j)] = self._weights_cache[(j,i)] = ca_dist
         if self._mode == 'sparse':
-            adj = np.array(adj)
-        return adj
+            adj, w_adj = np.array(adj), np.array(w_adj)
+        return adj, w_adj
 
     def _get_edge_feature(self):
         n = structure_length(self.protein)
         if self._mode == 'dense':
-            edge, weight = np.zeros(shape=(n,n,2)), np.zeros(shape=(n,n))
+            edge = np.zeros(shape=(n,n,2))
         elif self._mode == 'sparse':
-            edge, weight = [], []
+            edge = []
         for i in range(n-1):
             for j in range(i+1, n):
                 if (i,j) in self._weights_cache:
@@ -213,15 +197,12 @@ class GraphFeature:
                     bb = 1 if abs(i-j) == 1 else 0 # 1 is backbone, 0 is contact
                     if self._mode == 'dense':
                         edge[i,j] = edge[j,i] = np.array([w, bb])
-                        weight[i,j] = weight[j,i] = 1/w
                     elif self._mode == 'sparse':
                         edge.append([w, bb])
                         edge.append([w, bb])
-                        weight.append(w)
-                        weight.append(w)
         if self._mode == 'sparse':
-            edge, weight = np.array(edge), np.array(weight)
-        return edge, weight
+            edge = np.array(edge)
+        return edge
 
     def _get_node_feature(self):
         pdb_id = self.protein.get_id()
@@ -246,7 +227,7 @@ class GraphFeature:
         (numpy.ndarray, numpy.ndarray, numpy.ndarray, numpy.ndarray)
             The features.
         """
-        adj = self._get_adjacency() # remember should always be called before _get_edge_features
-        edge, weight = self._get_edge_feature()
-        bb, x = self._get_backbone(), self._get_node_feature()
-        return bb, adj, edge, weight, x
+        adj, w_adj = self._get_adjacency() # remember should always be called before _get_edge_features
+        edge = self._get_edge_feature()
+        x = self._get_node_feature()
+        return adj, w_adj, edge, x

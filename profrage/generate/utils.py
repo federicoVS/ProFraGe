@@ -131,7 +131,7 @@ def node_feature_target_classes(x, device, aa_dim=20, ss_dim=7, ignore_idx=-100)
     Parameters
     ----------
     x : torch.tensor
-        The node features.
+        The sparse node features.
     device : str
         The device on which to put the data.
     aa_dim : int, optional
@@ -227,3 +227,25 @@ def edge_features_target(adj_sparse, edge_sparse, x_len, edge_len, max_size, edg
         prev_i += el
         prev_x += x_len[i]
     return ae_dense
+
+def sparse_adj_target(adj_sparse, N, device):
+    M = adj_sparse.shape[1]
+    adj_targets = torch.zeros(N*N).to(device) # int((N*(N+1))/2)-N
+    for m in range(M):
+        # Skip the second edge since it is the same as the first
+        if m % 2 == 0:
+            i, j = adj_sparse[:,m][0], adj_sparse[:,m][1]
+            mapping = N*i + j
+            adj_targets[mapping] = mapping
+    return adj_targets
+
+def sparse_edge_target(adj_sparse, edge_sparse, N, edge_dim, device):
+    M = edge_sparse.shape[0]
+    edge_targets = torch.zeros(N*N,edge_dim).to(device)
+    for m in range(M):
+        # Skip the second edge since it is the same as the first
+        if m % 2 == 0:
+            i, j = adj_sparse[:,m][0], adj_sparse[:,m][1]
+            mapping = N*i + j
+            edge_targets[mapping] = edge_sparse[m,:]
+    return edge_targets

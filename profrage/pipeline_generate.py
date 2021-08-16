@@ -11,17 +11,16 @@ from torch.utils.data import DataLoader
 from torch_geometric.data import DataLoader as GDataLoader
 
 from generate import args
-from generate.vae import GraphVAE, GraphVAE_Seq
-from generate.dae import GraphDAAE
+from generate.vae import ProVAE
+from generate.dae import ProDAAE
 from generate.gan import ProGAN
-from generate.rnn import GraphRNN_A, GraphRNN_G
+from generate.rnn import ProRNN
 from generate.datasets import GraphDataset, RNNDataset_Feat
 from generate.quality import MMD, QCP
-from generate.visualize import ProViz
 from utils.io import get_files, from_pdb
 from utils.ProgressBar import ProgressBar
 
-def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir, model_id=0, data_type='graph', data_mode='sparse', verbose=False):
+def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir, dataset_id=0, model_id=0, data_type='graph', data_mode='sparse', verbose=False):
     if verbose:
         print('Processing the data...')
     # Get the training proteins
@@ -36,11 +35,11 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         val_proteins.append(from_pdb(pdb_id, pdb, quiet=True))
     # Get the training and validation datasets
     if data_type == 'graph':
-        train_dataset = GraphDataset(dataset_dir, 'train', train_proteins, pdb_train, stride_dir, **args.graph_dataset)
-        val_dataset = GraphDataset(dataset_dir, 'val', val_proteins, pdb_val, stride_dir, **args.graph_dataset)
+        train_dataset = GraphDataset(dataset_dir, dataset_id, 'train', train_proteins, pdb_train, stride_dir, **args.graph_dataset)
+        val_dataset = GraphDataset(dataset_dir, 0, 'val', val_proteins, pdb_val, stride_dir, **args.graph_dataset)
     elif data_type == 'rnn':
-        train_dataset = RNNDataset_Feat(dataset_dir, 'train', train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
-        val_dataset = RNNDataset_Feat(dataset_dir, 'val', val_proteins, pdb_val, stride_dir, **args.rrn_dataset)
+        train_dataset = RNNDataset_Feat(dataset_dir, dataset_id, 'train', train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
+        val_dataset = RNNDataset_Feat(dataset_dir, 0, 'val', val_proteins, pdb_val, stride_dir, **args.rrn_dataset)
     # Save the datasets
     train_dataset.save()
     val_dataset.save()
@@ -53,36 +52,26 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         val_loader = GDataLoader(dataset=val_dataset.get_data(), batch_size=1, shuffle=True)
     # Select model and parameters set
     Cmodel, model_root, model_params, train_params, eval_params = None, model_dir, None, None, None
-    if model_type == 'GraphVAE':
-        Cmodel = GraphVAE
-        model_root += 'GraphVAE/' + str(model_id) + '/full/'
-        model_params = args.graph_vae_cv_params
-        train_params = args.graph_vae_cv_train
-    elif model_type == 'GraphVAE_Seq':
-        Cmodel = GraphVAE_Seq
-        model_root += 'GraphVAE_Seq/' + str(model_id) + '/full/'
-        model_params = args.graph_vae_seq_cv_params
-        train_params = args.graph_vae_seq_cv_train
-    elif model_type == 'GraphDAAE':
-        Cmodel = GraphDAAE
-        model_root += 'GraphDAAE/' + str(model_id) + '/full/'
-        model_params = args.graph_daae_cv_params
-        train_params = args.graph_daae_cv_train
+    if model_type == 'ProVAE':
+        Cmodel = ProVAE
+        model_root += 'ProVAE/' + str(model_id) + '/cv/'
+        model_params = args.pro_vae_cv_params
+        train_params = args.pro_vae_cv_train
+    elif model_type == 'ProDAAE':
+        Cmodel = ProDAAE
+        model_root += 'ProDAAE/' + str(model_id) + '/cv/'
+        model_params = args.pro_daae_cv_params
+        train_params = args.pro_daae_cv_train
     elif model_type == 'ProGAN':
         Cmodel = ProGAN
-        model_root += 'ProGAN/' + str(model_id) + '/full/'
+        model_root += 'ProGAN/' + str(model_id) + '/cv/'
         model_params = args.pro_gan_cv_params
         train_params = args.pro_gan_cv_train
-    elif model_type == 'GraphRNN_A':
-        Cmodel = GraphRNN_A
-        model_root += 'GraphRNN_A/' + str(model_id) + '/full/'
-        model_params = args.graph_rnn_a_cv_params
-        train_params = args.graph_rnn_a_cv_train
-    elif model_type == 'GraphRNN_G':
-        Cmodel = GraphRNN_G
-        model_root += 'GraphRNN_G/' + str(model_id) + '/full/'
-        model_params = args.graph_rnn_g_cv_params
-        train_params = args.graph_rnn_g_cv_train
+    elif model_type == 'ProRNN':
+        Cmodel = ProRNN
+        model_root += 'ProRNN/' + str(model_id) + '/cv/'
+        model_params = args.pro_rnn_cv_params
+        train_params = args.pro_rnn_cv_train
     # Prepare the model parameter configurations
     params_total_len = 1
     for mp in model_params:
@@ -109,24 +98,18 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         model.eval()
         loss = {}
         for i, (data) in enumerate(val_loader):
-            if model_type == 'GraphVAE':
-                x, adj, edge, x_len, edge_len = data.x, data.edge_index, data.edge_attr, data.x_len, data.edge_len
-                loss_dict = model.eval_loss(x, adj, edge, x_len, edge_len, train_config['l_kld'])
-            elif model_type == 'GraphVAE_Seq':
-                x, adj, edge = data.x, data.edge_index, data.edge_attr
-                loss_dict = model.eval_loss(x, adj, edge, train_config['l_kld'])
-            elif model_type == 'GraphDAAE':
-                x, adj, edge, x_len, edge_len = data.x, data.edge_index, data.edge_attr, data.x_len, data.edge_len
-                loss_dict = model.eval_loss(x, adj, edge, x_len, edge_len, train_config['l_adv'])
+            if model_type == 'ProVAE':
+                x, w_adj, mask = data['x'], data['w_wadj'], data['mask']
+                loss_dict = model.eval_loss(x, w_adj, mask, train_config['l_kld'])
+            elif model_type == 'ProDAAE':
+                x, w_adj, mask = data['x'], data['w_wadj'], data['mask']
+                loss_dict = model.eval_loss(x, w_adj, mask, train_config['l_adv'])
             elif model_type == 'ProGAN':
-                x, adj, edge, batch_len = data['x'], data['adj'], data['edge'], data['len']
-                loss_dict = model.eval_loss(x, adj, edge, batch_len, train_config['l_wrl'])
-            elif model_type == 'GraphRNN_A':
+                x, w_adj, mask = data['x'], data['w_adj'], data['mask']
+                loss_dict = model.eval_loss(x, w_adj, mask, train_config['l_wrl'])
+            elif model_type == 'ProRNN':
                 x, y, y_feat, y_len = data['x'], data['y_edge'], data['y_feat'], data['len']
                 loss_dict = model.eval_loss(x, y, y_feat, y_len)
-            elif model_type == 'GraphRNN_G':
-                x, adj, edge, batch_len = data.x, data.edge_index, data.edge_attr, data.x_len
-                loss_dict = model.eval_loss(x, adj, edge, batch_len)
             if i == 0:
                 for key in loss_dict:
                     loss[key] = []
@@ -145,7 +128,7 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
     for best_config in best_configs:
         print(f'Average: {best_config[0]}, Variance: {best_config[1]}, \n Model Params.: {best_config[2]}, Training Params.: {best_config[3]}')
 
-def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, model_id=0, data_type='graph', data_mode='sparse', quality='qcp', train=True, verbose=False):
+def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, dataset_id=0, model_id=0, data_type='graph', data_mode='sparse', quality='qcp', train=True, verbose=False):
     if verbose:
         print('Processing the data...')
     # Get the training proteins
@@ -160,11 +143,11 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, m
         test_proteins.append(from_pdb(pdb_id, pdb, quiet=True))
     # Get the training data
     if data_type == 'graph':
-        train_dataset = GraphDataset(dataset_dir, 'train', train_proteins, pdb_train, stride_dir, **args.graph_dataset)
+        train_dataset = GraphDataset(dataset_dir, dataset_id, 'train', train_proteins, pdb_train, stride_dir, **args.graph_dataset)
     elif data_type == 'rnn':
-        train_dataset = RNNDataset_Feat(dataset_dir, 'train', train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
+        train_dataset = RNNDataset_Feat(dataset_dir, dataset_id, 'train', train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
     # Get the test data
-    test_dataset = GraphDataset(dataset_dir, 'test', test_proteins, pdb_test, stride_dir, **args.test_dataset)
+    test_dataset = GraphDataset(dataset_dir, 0, 'test', test_proteins, pdb_test, stride_dir, **args.test_dataset)
     # Save the datasets
     train_dataset.save()
     test_dataset.save()
@@ -176,42 +159,30 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, m
     test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=True)
     # Select the model
     Cmodel, model_root, model_params, train_params, eval_params = None, model_dir, None, None, None
-    if model_type == 'GraphVAE':
-        Cmodel = GraphVAE
+    if model_type == 'ProVAE':
+        Cmodel = ProVAE
         model_root += 'GraphVAE/' + str(model_id) + '/full/'
-        model_params = args.graph_vae_params
-        train_params = args.graph_vae_train
-        eval_params = args.graph_vae_eval
-    elif model_type == 'GraphVAE_Seq':
-        Cmodel = GraphVAE_Seq
-        model_root += 'GraphVAE_Seq/' + str(model_id) + '/full/'
-        model_params = args.graph_vae_seq_params
-        train_params = args.graph_vae_seq_train
-        eval_params = args.graph_vae_seq_eval
-    elif model_type == 'GraphDAAE':
-        Cmodel = GraphDAAE
-        model_root += 'GraphDAAE/' + str(model_id) + '/full/'
-        model_params = args.graph_daae_params
-        train_params = args.graph_daae_train
-        eval_params = args.graph_daae_eval
+        model_params = args.pro_vae_params
+        train_params = args.pro_vae_train
+        eval_params = args.pro_vae_eval
+    elif model_type == 'ProDAAE':
+        Cmodel = ProDAAE
+        model_root += 'ProDAAE/' + str(model_id) + '/full/'
+        model_params = args.pro_daae_params
+        train_params = args.pro_daae_train
+        eval_params = args.pro_daae_eval
     elif model_type == 'ProGAN':
         Cmodel = ProGAN
         model_root += 'ProGAN/' + str(model_id) + '/full/'
         model_params = args.pro_gan_params
         train_params = args.pro_gan_train
         eval_params = args.pro_gan_eval
-    elif model_type == 'GraphRNN_A':
-        Cmodel = GraphRNN_A
-        model_root += 'GraphRNN_A/' + str(model_id) + '/full/'
-        model_params = args.graph_rnn_a_params
-        train_params = args.graph_rnn_a_train
-        eval_params = args.graph_rnn_a_eval
-    elif model_type == 'GraphRNN_G':
-        Cmodel = GraphRNN_G
-        model_root += 'GraphRNN_G/' + str(model_id) + '/full/'
-        model_params = args.graph_rnn_g_params
-        train_params = args.graph_rnn_g_train
-        eval_params = args.graph_rnn_g_eval
+    elif model_type == 'ProRNN':
+        Cmodel = ProRNN
+        model_root += 'ProRNN/' + str(model_id) + '/full/'
+        model_params = args.pro_rnn_params
+        train_params = args.pro_rnn_train
+        eval_params = args.pro_rnn_eval
     # Create root dir if it does not exist
     if not os.path.exists(model_root):
         os.makedirs(model_root)
@@ -230,11 +201,10 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, m
     if verbose:
         print('Generating...')
     model.eval()
-    prediction = model.generate(**eval_params)
-    if len(prediction) == 2:
-        x_pred, adj_edge_pred = prediction
-    else:
-        x_pred, adj_edge_pred = prediction, None
+    x_pred, w_adj_pred = model.generate(**eval_params)
+    # Reconstructing the fragment
+    if verbose:
+        print('Reconstructing the fragment...')
     # Assess the model performance
     if verbose:
         print('Assessing quality...')
@@ -242,7 +212,7 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, m
         qcp = QCP(x_pred[:,5:8], test_proteins)
         scores = qcp.superimpose()
     elif quality == 'mmd':
-        pred_graph = (x_pred, adj_edge_pred[:,:,1])
+        pred_graph = (x_pred, w_adj_pred[:,:,1])
         target_graphs = []
         for _, (data) in enumerate(test_loader):
             x, adj_edge = data['x'], data['adj'] + data['edge'][:,:,:,1]
@@ -253,23 +223,19 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, m
     score_mean, score_var = np.mean(scores), np.var(scores)
     if verbose:
         print(f'Average: {score_mean}, Variance: {score_var}')
-    # Visualize the data
-    if verbose:
-        print('Producing the visualization...')
-    proviz = ProViz(x_pred, adj=adj_edge_pred, **args.pro_viz)
-    proviz.vizify()
 
 if __name__ == '__main__':
     # Argument parser initialization
     arg_parser = argparse.ArgumentParser(description='Full generation pipeline.')
     arg_parser.add_argument('mode', type=str, help='The mode of the pipeline. Valid modes are [grid_cv,full].')
-    arg_parser.add_argument('model', type=str, help='The model to use. Valid models are [GraphVAE,GraphVAE_Seq,GraphDAAE,ProGAN,GraphRNN_A,GraphRNN_G].')
+    arg_parser.add_argument('model', type=str, help='The model to use. Valid models are [ProVAE,ProDAAE,ProGAN,ProRNN].')
     arg_parser.add_argument('pdb_train', type=str, help='The directory holding the PDB files from the training set.')
     arg_parser.add_argument('pdb_val', type=str, help='The directory holding the PDB files from the validation set.')
     arg_parser.add_argument('pdb_test', type=str, help='The directory holding the PDB files from the test set.')
     arg_parser.add_argument('stride_dir', type=str, help='The directory holding the Stride tool.')
     arg_parser.add_argument('dataset_dir', type=str, help='The directory holding the dataset.')
     arg_parser.add_argument('model_dir', type=str, help='The directory holding the models weights.')
+    arg_parser.add_argument('--dataset_id', type=int, default=0, help='The index of the dataset instance, which is used to save it. Note it only applies to datasets associated to the training data. The default is 0.')
     arg_parser.add_argument('--model_id', type=int, default=0, help='The index of the model instance, which is used to save its weights. The default is 0.')
     arg_parser.add_argument('--data_type', type=str, default='graph', help='The type of the dataset. Valid types are [graph,rnn]. The default is graph.')
     arg_parser.add_argument('--data_mode', type=str, default='sparse', help='The mode of the dataset. Valid types are [sparse,dense]. The default is sparse.')
@@ -281,11 +247,12 @@ if __name__ == '__main__':
     # Choose pipeline
     if args_parsed.mode == 'grid_cv':
         _grid_cv(args_parsed.model, args_parsed.pdb_train, args_parsed.pdb_val, args_parsed.stride_dir, args_parsed.dataset_dir,
-                 args_parsed.model_dir, model_id=args_parsed.model_id, data_type=args_parsed.data_type, data_mode=args_parsed.data_mode,
-                 verbose=args_parsed.verbose)
+                 args_parsed.model_dir, dataset_id=args_parsed.dataset_id, model_id=args_parsed.model_id, data_type=args_parsed.data_type,
+                 data_mode=args_parsed.data_mode, verbose=args_parsed.verbose)
     elif args_parsed.mode == 'full':
         _full(args_parsed.model, args_parsed.pdb_train, args_parsed.pdb_test, args_parsed.stride_dir, args_parsed.dataset_dir, args_parsed.model_dir,
-              model_id=args_parsed.model_id, data_type=args_parsed.data_type, data_mode=args_parsed.data_mode, quality=args_parsed.quality, train=args_parsed.train,
-              verbose=args_parsed.verbose)
+              dataset_id=args_parsed.dataset_id, model_id=args_parsed.model_id, data_type=args_parsed.data_type, data_mode=args_parsed.data_mode,
+              quality=args_parsed.quality, train=args_parsed.train, verbose=args_parsed.verbose)
     else:
         print('Wrong mode selected.')
+    # TODO add last mode for generation

@@ -49,7 +49,7 @@ class GANGenerator(nn.Module):
     https://github.com/yongqyu/MolGAN-pytorch, https://github.com/ZhenyueQin/Implementation-MolGAN-PyTorch
     """
 
-    def __init__(self, max_num_nodes, node_dim, edge_dim, z_dim, mlp_dims, dropout=0.1):
+    def __init__(self, max_num_nodes, x_dim, z_dim, mlp_dims, dropout=0.1):
         """
         Initialize the class.
 
@@ -57,10 +57,6 @@ class GANGenerator(nn.Module):
         ----------
         max_num_nodes : int
             The maximum number of nodes.
-        node_dim : int
-            The size of the node features.
-        edge_dim : int
-            The size of the edge features.
         z_dim : int
             The size of the sample space.
         mlp_dims : list of int
@@ -70,19 +66,10 @@ class GANGenerator(nn.Module):
         """
         super(GANGenerator, self).__init__()
         self.max_num_nodes = max_num_nodes
-        self.node_dim = node_dim
-        self.edge_dim = edge_dim
+        self.dropout = dropout
 
-        layers = []
-        for in_dim, out_dim in zip([z_dim]+mlp_dims[:-1], mlp_dims):
-            layers.append(nn.Linear(in_dim, out_dim))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(dropout))
-        self.hidden_layers = nn.Sequential(*layers)
-        self.x_layer = nn.Linear(mlp_dims[-1], max_num_nodes*node_dim)
-        self.adj_layer = nn.Linear(mlp_dims[-1], max_num_nodes*max_num_nodes)
-        self.edge_layer = nn.Linear(mlp_dims[-1], max_num_nodes*max_num_nodes*edge_dim)
-        self.dropout_layer = nn.Dropout(dropout)
+        self.mlp_x = MLPLayer([z_dim] + mlp_dims + [x_dim])
+        self.mlp_w_adj = MLPLayer([z_dim] + mlp_dims + [max_num_nodes])
 
     def forward(self, z):
         """
@@ -90,19 +77,18 @@ class GANGenerator(nn.Module):
 
         Parameters
         ----------
-        z : torch.tensor
-            The sampled space/
+        z : torch.Tensor
+            The sampled space.
 
         Returns
         -------
-        (x_logits, adj_logits, edge_logits) : (torch.tensor, torch.tensor, torch.tensor)
-            The generated node features, adjacency matrix, and edge features.
+        (out_x, out_w_adj) : (torch.Tensor, torch.Tensor)
+            The generated node features and weighted adjacency
         """
-        out = self.hidden_layers(z)
-        x_logits = self.dropout_layer(self.x_layer(out).view(-1, self.max_num_nodes, self.node_dim))
-        adj_logits = self.dropout_layer(self.adj_layer(out).view(-1, self.max_num_nodes, self.max_num_nodes))
-        edge_logits = self.dropout_layer(self.edge_layer(out).view(-1, self.max_num_nodes, self.max_num_nodes, self.edge_dim))
-        return x_logits, adj_logits, edge_logits
+        out_x = F.dropout(self.mlp_x(z), p=self.dropout)
+        out_w_adj = F.dropout(self.mlp_w_adj(z), p=self.dropout)
+        out_w_adj = out_w_adj.view(-1,self.max_num_nodes,self.max_num_nodes)
+        return out_x, out_w_adj
 
 class GANDiscriminator(nn.Module):
     """
@@ -113,43 +99,35 @@ class GANDiscriminator(nn.Module):
     https://github.com/yongqyu/MolGAN-pytorch, https://github.com/ZhenyueQin/Implementation-MolGAN-PyTorch
     """
 
-    def __init__(self, node_dim, edge_dim, conv_out_dim, agg_dim, mlp_dims, dropout=0.1):
+    def __init__(self, x_dim, gcn_dims, agg_dim, dropout=0.1):
         super(GANDiscriminator, self).__init__()
+        self.dropout = dropout
 
-        self.conv_layer = gnn.ECConv(node_dim, conv_out_dim, nn.Sequential(nn.Linear(edge_dim, node_dim*conv_out_dim)))
-        self.agg_layer = GraphAggregation(conv_out_dim, agg_dim)
-        layers = []
-        for in_dim, out_dim in zip([1]+mlp_dims[:-1], mlp_dims):
-            layers.append(nn.Linear(in_dim, out_dim))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(dropout))
-        self.mlp_layers = nn.Sequential(*layers)
-        self.fc_out = nn.Linear(mlp_dims[-1], 1)
+        self.conv_layer = DGCLayer([x_dim] + gcn_dims + [agg_dim])
+        self.agg_layer = GraphAggregation(agg_dim, 1)
 
-    def forward(self, x, adj, edge, activation=None):
+    def forward(self, x, w_adj, mask, activation=None):
         """
         Compute the forward pass.
 
         Parameters
         ----------
-        x : torch.tensor
+        x : torch.Tensor
             The node feature tensor.
-        adj : torch.tensor
-            The adjacency tensor.
-        edge : torch.tensor
-            The edge features tensor.
+        w_adj : torch.Tensor
+            The weighted adjacency tensor.
+        mask : torch.Tensor
+            The tensor indicating whether a particular node exists.
         activation : callable, optional
             The activation function. The default is None.
 
         Returns
         -------
-        out : torch.tensor
+        out : torch.Tensor
             The output.
         """
-        out = self.conv_layer(x, adj, edge_attr=edge)
+        out = F.dropout(self.conv_layer(x, w_adj, mask=mask), p=self.dropout)
         out = self.agg_layer(out)
-        out = self.mlp_layers(out)
-        out = self.fc_out(out)
         out = activation(out) if activation is not None else out
         return out
 
@@ -176,12 +154,12 @@ class GraphAggregation(nn.Module):
 
         Parameters
         ----------
-        x : torch.tensor
+        x : torch.Tensor
             The tensor representing the state of the graph.
 
         Returns
         -------
-        out : torch.tensor
+        out : torch.Tensor
             The aggregated output.
         """
         i, j = self.sigmoid_layer(x), self.tanh_layer(x)
@@ -275,7 +253,7 @@ class GRULayer(nn.Module):
 
         Parameters
         ----------
-        input_raw : torch.tensor
+        input_raw : torch.Tensor
             The input representing a sequence.
         pack : bool, optional
             Whether to pack the sequence. The default is False.
@@ -284,7 +262,7 @@ class GRULayer(nn.Module):
 
         Returns
         -------
-        (output_raw, output) : (torch.tensor, torch.tensor)
+        (output_raw, output) : (torch.Tensor, torch.Tensor)
             The raw output and the output after being passed into an MLP.
         """
         if self.has_input:
@@ -336,12 +314,12 @@ class GruMLPLayer(nn.Module):
 
         Parameters
         ----------
-        h : torch.tensor
+        h : torch.Tensor
             The input.
 
         Returns
         -------
-        y : torch.tensor
+        y : torch.Tensor
             The output.
         """
         y = self.lin_layer(h)
@@ -379,12 +357,12 @@ class MLPLayer(nn.Module):
 
         Parameters
         ----------
-        x : torch.tensor
+        x : torch.Tensor
             The input.
 
         Returns
         -------
-        out : torch.tensor
+        out : torch.Tensor
             The output.
         """
         out = self.mlp_layers(x)
@@ -424,88 +402,64 @@ class ECCLayer(nn.Module):
 
         Parameters
         ----------
-        x : torch.tensor
+        x : torch.Tensor
             The node features.
-        adj : torch.tensor
+        adj : torch.Tensor
             The adjacency matrix.
-        edge : torch.tensor:
+        edge : torch.Tensor:
             The edge features.
 
         Returns
         -------
-        x : torch.tensor
-            The output.
+        x : torch.Tensor
+            The node embeddings.
         """
         for ecc_layer in self.ecc_layers:
             x = ecc_layer(x, adj, edge_attr=edge)
             x = F.relu(x)
         return x
 
-class CNN1Layer(nn.Module):
+class DGCLayer(nn.Module):
     """
-    A generic 1-dimensional convolutional layer.
+    A layer for multiple DenseGraphConv layers.
+
+    Such layers implement the k-GNN model.
     """
 
-    def __init__(self, channels, kernel_size):
+    def __init__(self, dims):
         """
         Initialize the class.
 
         Parameters
         ----------
-        channels : list of int
-            The channels to apply.
-        kernel_size : int
-            The size of the kernel.
+        dims : list of int
+            The dimensions of the k-GNN layers.
         """
-        super(CNN1Layer, self).__init__()
+        super(DGCLayer, self).__init__()
 
-        layers = []
-        for in_dim, out_dim in zip(channels, channels[1:]):
-            layers.append(nn.Conv1d(in_dim,out_dim, kernel_size))
-            layers.append(nn.BatchNorm1d(out_dim))
-        self.cnn_layers = nn.Sequential(*layers)
+        self.dgc_layers = nn.ModuleList()
+        for in_dim, out_dim in zip(dims, dims[1:]):
+            self.dgc_layers.append(gnn.DenseGraphConv(in_dim, out_dim))
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv1d):
-                m.weight.data = nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('relu'))
-
-    def out_dim(self, l_in):
-        """
-        Compute the dimension of the output features.
-
-        Parameters
-        ----------
-        l_in : int
-            The dimension of the input features.
-
-        Returns
-        -------
-        l_in : int
-            The dimension of the output features.
-        """
-        for child in self.cnn_layers.children():
-            if isinstance(child, nn.Conv1d) or isinstance(child, nn.Conv2d):
-                ks, s, p, d = child.kernel_size[0], child.stride[0], child.padding[0], child.dilation[0]
-                l_in = int((l_in + 2*p - d*(ks - 1) - 1)/s + 1)
-        return l_in
-
-    def forward(self, x, activation=None):
+    def forward(self, x, weight, mask=None):
         """
         Compute the forward pass.
 
         Parameters
         ----------
-        x : torch.tensor
-            The input tensor.
-        activation : callable, None
-            The activation function. The default is None.
+        x : torch.Tensor
+            The node feature tensor.
+        weight : torch.Tensor
+            The weighted adjacency tensor.
+        mask : torch.Tensor
+            The tensor indicating whether a particular node exists.
 
         Returns
         -------
-        out : torch.tensor
-            The output.
+        x : torch.Tensor
+            The node embeddings.
         """
-        out = self.cnn_layers(x)
-        if activation is not None:
-            out = activation(out)
-        return out
+        for dgc_layer in self.dgc_layers:
+            x = dgc_layer(x, weight, mask=mask)
+            x = F.relu(x)
+        return x
