@@ -76,7 +76,7 @@ class ProVAE(nn.Module):
         ce_loss_aa = F.cross_entropy(out_x_aa.permute(0,2,1), x[:,:,0].long())
         ce_loss_ss = F.cross_entropy(out_x_ss.permute(0,2,1), x[:,:,1].long())
         # Weight regression
-        diag_idx = torch.eye(self.max_size,self.max_size).bool()
+        diag_idx = torch.eye(self.max_size,self.max_size).bool().to(self.device)
         mse_loss_edge = F.mse_loss(out_w_adj.masked_fill_(diag_idx, 0), w_adj.squeeze(2).masked_fill_(diag_idx, 0))
         # Node existence classification
         existence = torch.diagonal(out_w_adj, dim1=1, dim2=2)
@@ -241,7 +241,7 @@ class ProVAE(nn.Module):
             The predicted node features and distance matrix.
         """
         # Get the generated data
-        z = torch.randn((1,self.max_size,self.latent_dim))
+        z = torch.randn((1,self.max_size,self.latent_dim)).to(self.device)
         gen_x_aa, gen_x_ss, gen_w_adj = self.decode(z)
         # Softmax on classes
         gen_x_aa = torch.softmax(gen_x_aa, dim=2)

@@ -94,7 +94,7 @@ class ProGAN(nn.Module):
         return reward
 
     def _sample_z(self, B):
-        gaussian = torch.distributions.Normal(torch.zeros(B,self.max_size,self.z_dim), torch.ones(B,self.max_size,self.z_dim))
+        gaussian = torch.distributions.Normal(torch.zeros(B,self.max_size,self.z_dim), torch.ones(B,self.max_size,self.z_dim)).to(self.device)
         z = gaussian.sample()
         return z
 

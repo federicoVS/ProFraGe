@@ -340,7 +340,7 @@ class ProRNN(nn.Module):
         w_adj_pred = self._decode_w_adj(w_adj_pred_float)
         x_pred = x_pred.view(x_pred.size(1),x_pred.size(2))
         # Define and fill the distance matrix prediction
-        dist_pred = torch.zeros_like(w_adj_pred)
+        dist_pred = torch.zeros_like(w_adj_pred).to(self.device)
         for i in range(max_num_nodes):
             for j in range(max_num_nodes):
                 if i != j:

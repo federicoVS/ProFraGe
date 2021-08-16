@@ -15,10 +15,10 @@ class MMD:
 
     Attributes
     ----------
-    pred_graph : (torch.tensor, torch.tensor)
-        The predicted graph consisting of the predicted node feature tensor and the predicted adjacency matrix tensor.
-    target_graphs : list of (torch.tensor, torch.tensor)
-        The target graphs, where each entry consists of the node feature tensor and the adjacency matrix tensor.
+    pred_graph : (torch.Tensor, torch.Tensor)
+        The predicted graph consisting of the predicted node features and the predicted distance matrix.
+    target_graphs : list of (torch.Tensor, torch.Tensor)
+        The target graphs, where each entry consists of the node features and the distance matrix.
     median_subset : int
         The size of the subset to use to compute `sigma`.
     """
@@ -29,10 +29,10 @@ class MMD:
 
         Parameters
         ----------
-        pred_graph : (torch.tensor, torch.tensor)
-            The predicted graph consisting of the predicted node feature tensor and the predicted adjacency matrix tensor.
-        target_graphs : list of (torch.tensor, torch.tensor)
-            The target graphs, where each entry consists of the node feature tensor and the adjacency matrix tensor.
+        pred_graph : (torch.Tensor, torch.Tensor)
+        The predicted graph consisting of the predicted node features and the predicted distance matrix.
+        target_graphs : list of (torch.Tensor, torch.Tensor)
+        The target graphs, where each entry consists of the node features and the distance matrix.
         median_subset : int, optional
             The size of the subset to use to compute `sigma`. The default is 100.
         """
@@ -66,15 +66,15 @@ class MMD:
     def compare_graphs(self):
         scores = []
         # Compute MMD score of the predicted graph
-        x_adj = graph_metrics(self.pred_graph[1])
+        x_D = graph_metrics(self.pred_graph[1])
         x_aa = amino_acid_metrics(self.pred_graph[0])
         x_ss = secondary_sequence_metrics(self.pred_graph[0])
-        x = torch.cat((x_adj,x_aa,x_ss))
+        x = torch.cat((x_D,x_aa,x_ss))
         for target_graph in self.target_graphs:
-            y_adj = graph_metrics(target_graph[1])
+            y_D = graph_metrics(target_graph[1])
             y_aa = amino_acid_metrics(target_graph[0])
             y_ss = secondary_sequence_metrics(target_graph[0])
-            y = torch.cat((y_adj,y_aa,y_ss))
+            y = torch.cat((y_D,y_aa,y_ss))
             # Compare
             scores.append(self._mmd(x, y))
         scores = np.array(scores)

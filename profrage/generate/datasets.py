@@ -24,7 +24,7 @@ class GraphDataset(Dataset):
         The length of the dataset in terms of valid proteins.
     """
 
-    def __init__(self, root, id, split, proteins, pdb_dir, stride_dir, dist_thr=12, max_size=30, mode='sparse', probabilistic=False, load=False):
+    def __init__(self, root, id, split, proteins, pdb_dir, stride_dir, dist_thr=12, max_size=30, mode='sparse', load=False):
         """
         Initialize the class.
 
@@ -48,8 +48,6 @@ class GraphDataset(Dataset):
             The maximum number of residues in a fragment. The default is 30.
         mode : str, optional
             How the data should be. Valid options are ['sparse', 'dense']. The default is 'sparse'.
-        probabilistic : bool, optional
-            Whether the adjacency matrix should contain 1s on the diagonal, indicating the existence of a node. The default is False.
         load : bool, optional
             Whether the data should be computed or loaded (if it has already been computed). The default is False.
         """
@@ -59,7 +57,6 @@ class GraphDataset(Dataset):
         self.proteins = proteins
         self.length = 0
         self._mode = mode
-        self._probabilistic = probabilistic
         self._load = load
         if load:
             self.load()
