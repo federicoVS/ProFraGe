@@ -36,10 +36,10 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
     # Get the training and validation datasets
     if data_type == 'graph':
         train_dataset = GraphDataset(dataset_dir, dataset_id, 'train', train_proteins, pdb_train, stride_dir, **args.graph_dataset)
-        val_dataset = GraphDataset(dataset_dir, 0, 'val', val_proteins, pdb_val, stride_dir, **args.graph_dataset)
+        val_dataset = GraphDataset(dataset_dir, 0, 'val', val_proteins, pdb_val, stride_dir, **args.graph_val_dataset)
     elif data_type == 'rnn':
         train_dataset = RNNDataset_Feat(dataset_dir, dataset_id, 'train', train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
-        val_dataset = RNNDataset_Feat(dataset_dir, 0, 'val', val_proteins, pdb_val, stride_dir, **args.rrn_dataset)
+        val_dataset = RNNDataset_Feat(dataset_dir, 0, 'val', val_proteins, pdb_val, stride_dir, **args.rrn_val_dataset)
     if verbose:
         print(f'Training set has {len(train_dataset)} samples.')
     # Save the datasets
