@@ -26,7 +26,7 @@ class ProRNN(nn.Module):
     """
 
     def __init__(self, root, max_prev_node,
-                 t_hidden_dim=64, o_hidden_dim=16, t_embed_dim=32, o_embed_dim=8, mlp_dims=[16,32,16], num_layers=4,
+                 t_hidden_dim=64, o_hidden_dim=16, t_embed_dim=32, o_embed_dim=8, num_layers=4, mlp_dims=[16,32,16],
                  aa_dim=20, ss_dim=7, dropout=0.1, device='cpu'):
         """
         Initialize the class.
@@ -45,10 +45,10 @@ class ProRNN(nn.Module):
             The embedding dimension of f_trans. The default is 32.
         o_embed_dim : int, optional
             The embedding dimension for f_out_x and f_out_edge. The default is 8.
-        mlp_dims : list of int
-            The dimensions of the MLPs.
         num_layers : int, optional
             The number of layers for f_trans and f_out_edge. The default is 4.
+        mlp_dims : list of int
+            The dimensions of the MLPs.
         aa_dim : int, optional
             The number of amino acids. The default is 20.
         ss_dim : int, optional
@@ -75,7 +75,7 @@ class ProRNN(nn.Module):
 
     def _decode_w_adj(self, wadj_seq, b=0):
         n = wadj_seq.shape[1]
-        adj = torch.zeros(n,n)
+        adj = torch.zeros(n,n).to(self.device)
         for i in range(n):
             for j in range(n):
                 adj[i,j] = adj[j,i] = wadj_seq[b,i,j]
@@ -108,7 +108,7 @@ class ProRNN(nn.Module):
                     'scheduler_state_dict': scheduler.state_dict(),
                     'loss': loss}, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, num_epochs, lr=1e-3, betas=(0.9, 0.999), milestones=[400,1000], decay=0.3, checkpoint=500, verbose=False):
+    def fit(self, loader, num_epochs, lr=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -135,8 +135,12 @@ class ProRNN(nn.Module):
         -------
         None
         """
-        optimizer = Adam(self.parameters(), lr=lr, betas=betas)
-        scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=decay)
+        optimizer_graph = Adam(self.f_trans.parameters(), lr=lr, betas=betas)
+        optimizer_node = Adam(list(self.f_out_x_aa.parameters()) + list(self.f_out_x_ss.parameters()), lr=lr, betas=betas)
+        optimizer_edge = Adam(self.f_out_w_adj.parameters(), lr=lr, betas=betas)
+        scheduler_graph = MultiStepLR(optimizer_graph, milestones=decay_milestones, gamma=decay)
+        scheduler_node = MultiStepLR(optimizer_node, milestones=decay_milestones, gamma=decay)
+        scheduler_edge = MultiStepLR(optimizer_edge, milestones=decay_milestones, gamma=decay)
         for epoch in range(num_epochs):
             for i, (data) in enumerate(loader):
                 self.f_trans.zero_grad()
@@ -189,31 +193,39 @@ class ProRNN(nn.Module):
                 hidden_null = Variable(torch.zeros(self.num_layers-1, h.size(0), h.size(1))).to(self.device)
                 self.f_out_w_adj.hidden = torch.cat((h.view(1,h.size(0),h.size(1)), hidden_null),dim=0) # num_layers, batch_size, hidden_size
                 # Predict the weighted adjacency
-                _, wadj_pred = self.f_out_w_adj(output_x, pack=True, input_len=output_y_len)
+                _, w_adj_pred = self.f_out_w_adj(output_x, pack=True, input_len=output_y_len)
                 # Predict the node features
                 x_pred_aa = self.f_out_x_aa(h_raw)
                 x_pred_ss = self.f_out_x_ss(h_raw)
                 x_pred_aa = x_pred_aa.float()
                 x_pred_ss = x_pred_ss.float()
                 # Clean
-                wadj_pred = pack_padded_sequence(wadj_pred, output_y_len, batch_first=True)
-                wadj_pred = pad_packed_sequence(wadj_pred, batch_first=True)[0]
+                w_adj_pred = pack_padded_sequence(w_adj_pred, output_y_len, batch_first=True)
+                w_adj_pred = pad_packed_sequence(w_adj_pred, batch_first=True)[0]
                 output_y = pack_padded_sequence(output_y, output_y_len, batch_first=True)
                 output_y = pad_packed_sequence(output_y, batch_first=True)[0]
                 output_y = output_y.view(output_y.size(0),output_y.size(1))
                 # Losses
                 ce_loss_aa = F.cross_entropy(x_pred_aa.permute(0,2,1), y_feat[:,:,0].long())
                 ce_loss_ss = F.cross_entropy(x_pred_ss.permute(0,2,1), y_feat[:,:,1].long())
-                mse_loss_wadj = F.mse_loss(wadj_pred.squeeze(2), output_y)
+                mse_loss_w_adj = F.mse_loss(w_adj_pred.squeeze(2), output_y)
                 # Loss and optimization step
-                loss = ce_loss_aa + ce_loss_ss + mse_loss_wadj
+                loss = ce_loss_aa + ce_loss_ss + mse_loss_w_adj
                 loss.backward()
-                optimizer.step()
-                scheduler.step()
-            if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
-                self.checkpoint(epoch, optimizer, scheduler, loss)
+                optimizer_graph.step()
+                optimizer_node.step()
+                optimizer_edge.step()
+            scheduler_graph.step()
+            scheduler_node.step()
+            scheduler_edge.step()
+            # if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
+            #     self.checkpoint(epoch, optimizer, scheduler, loss)
             if verbose:
-                print(f'epoch {epoch+1}/{num_epochs}, loss = {loss.item():.4}')
+                print(f'epoch {epoch+1}/{num_epochs},'
+                      f'AA loss: {ce_loss_aa.item():.4},'
+                      f'SS loss: {ce_loss_ss.item():.4},'
+                      f'A_w loss: {mse_loss_w_adj.item():.4},'
+                      f'Full loss = {loss.item():.4}')
 
     def eval_loss(self, x_unsorted, y_unsorted, y_feat_unsorted, y_len_unsorted):
         """
@@ -277,25 +289,25 @@ class ProRNN(nn.Module):
         h = h.index_select(0, idx)
         hidden_null = Variable(torch.zeros(self.num_layers-1, h.size(0), h.size(1))).to(self.device)
         self.f_out_w_adj.hidden = torch.cat((h.view(1,h.size(0),h.size(1)), hidden_null),dim=0) # num_layers, batch_size, hidden_size
-        # Predict the edges
-        _, wadj_pred = self.f_out_w_adj(output_x, pack=True, input_len=output_y_len)
+        # Predict the weighted adjacency
+        _, w_adj_pred = self.f_out_w_adj(output_x, pack=True, input_len=output_y_len)
         # Predict the node features
         x_pred_aa = self.f_out_x_aa(h_raw)
         x_pred_ss = self.f_out_x_ss(h_raw)
         x_pred_aa = x_pred_aa.float()
         x_pred_ss = x_pred_ss.float()
         # Clean
-        wadj_pred = pack_padded_sequence(wadj_pred, output_y_len, batch_first=True)
-        wadj_pred = pad_packed_sequence(wadj_pred, batch_first=True)[0]
+        w_adj_pred = pack_padded_sequence(w_adj_pred, output_y_len, batch_first=True)
+        w_adj_pred = pad_packed_sequence(w_adj_pred, batch_first=True)[0]
         output_y = pack_padded_sequence(output_y, output_y_len, batch_first=True)
         output_y = pad_packed_sequence(output_y, batch_first=True)[0]
         output_y = output_y.view(output_y.size(0),output_y.size(1))
         # Losses
         ce_loss_aa = F.cross_entropy(x_pred_aa.permute(0,2,1), y_feat[:,:,0].long())
         ce_loss_ss = F.cross_entropy(x_pred_ss.permute(0,2,1), y_feat[:,:,1].long())
-        mse_loss_wadj = F.mse_loss(wadj_pred.squeeze(2), output_y)
+        mse_loss_w_adj = F.mse_loss(w_adj_pred.squeeze(2), output_y)
         # Loss and optimization step
-        loss = ce_loss_aa + ce_loss_ss + mse_loss_wadj
+        loss = ce_loss_aa + ce_loss_ss + mse_loss_w_adj
         return {'Loss': loss}
 
     def generate(self, max_num_nodes):
@@ -344,5 +356,5 @@ class ProRNN(nn.Module):
         for i in range(max_num_nodes):
             for j in range(max_num_nodes):
                 if i != j:
-                    dist_pred[i,j] = 1/w_adj_pred[0,i,j]
+                    dist_pred[i,j] = 1/w_adj_pred[i,j]
         return x_pred, dist_pred

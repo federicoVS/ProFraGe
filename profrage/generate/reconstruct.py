@@ -40,8 +40,11 @@ class Gram:
         M = torch.zeros_like(D).to(self.device)
         for i in range(n):
             for j in range(n):
-                M[i,j] = (D[0,j]**2 + D[i,0]**2 + - D[i,j]**2)/2
-        M = M.numpy()
-        w, v = np.linalg.eig(M)
-        X = np.matmul(w, np.sqrt(v))[:,0:3]
+                M[i,j] = (D[0,j]**2 + D[0,i]**2 + - D[i,j]**2)/2
+        M = M.cpu().numpy()
+        u, s, vh = np.linalg.svd(M)
+        X = np.zeros(shape=(n,3))
+        for i in range(n):
+            for j in range(3):
+                X[i,j] = u[i,j]*np.sqrt(s[j])
         return X

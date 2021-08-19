@@ -5,41 +5,6 @@ import torch_geometric.nn as gnn
 from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
-class SelfAttention(nn.Module):
-
-    def __init__(self, embed_dim, num_heads):
-        super(SelfAttention, self).__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
-        self.values = nn.Linear(self.head_dim, self.head_dim)
-        self.keys = nn.Linear(self.head_dim, self.head_dim)
-        self.queries = nn.Linear(self.head_dim, self.head_dim)
-        self.fc_out = nn.Linear(num_heads*self.head_dim, embed_dim)
-
-    def forward(self, values, keys, query, mask=None):
-        N = query.shape[0]
-        value_len, key_len, query_len = values.shape[1], keys.shape[1], query.shape[1]
-        # Split embedding into num_heads partitions
-        values = values.reshape(N, value_len, self.num_heads, self.head_dim)
-        keys = keys.reshape(N, key_len, self.num_heads, self.head_dim)
-        query = query.reshape(N, query_len, self.num_heads, self.head_dim)
-
-        values = self.values(values)
-        keys = self.values(keys)
-        queries = self.values(query)
-
-        energy = torch.einsum('nqhd,nkhd->nhqk', [queries, keys])
-
-        if mask is not None:
-            # print(energy.shape, mask.shape)
-            energy = energy.masked_fill(mask == 0, float('-1e20'))
-
-        attention = torch.softmax(energy/(self.embed_dim**(0.5)), dim=3)
-        out = torch.einsum('nhql,nlhd->nqhd', [attention,values]).reshape(N, query_len, self.num_heads*self.head_dim) # key length and values length match
-        out = self.fc_out(out)
-        return out
-
 class GANGenerator(nn.Module):
     """
     The generator used in the `ProGAN` model.
@@ -70,6 +35,7 @@ class GANGenerator(nn.Module):
 
         self.mlp_x = MLPLayer([z_dim] + mlp_dims + [x_dim])
         self.mlp_w_adj = MLPLayer([z_dim] + mlp_dims + [max_num_nodes])
+        self.mlp_mask = MLPLayer([z_dim] + mlp_dims + [2])
 
     def forward(self, z):
         """
@@ -82,13 +48,14 @@ class GANGenerator(nn.Module):
 
         Returns
         -------
-        (out_x, out_w_adj) : (torch.Tensor, torch.Tensor)
-            The generated node features and weighted adjacency
+        (out_x, out_w_adj, out_mask) : (torch.Tensor, torch.Tensor, torch.Tensor)
+            The generated node features, weighted adjacency, and node mask.
         """
         out_x = F.dropout(self.mlp_x(z), p=self.dropout)
-        out_w_adj = F.dropout(self.mlp_w_adj(z), p=self.dropout)
+        out_w_adj = F.dropout(self.mlp_w_adj(z, activation=F.relu), p=self.dropout)
+        out_mask = F.dropout(self.mlp_mask(z), p=self.dropout)
         out_w_adj = out_w_adj.view(-1,self.max_num_nodes,self.max_num_nodes)
-        return out_x, out_w_adj
+        return out_x, out_w_adj, out_mask
 
 class GANDiscriminator(nn.Module):
     """
@@ -126,7 +93,7 @@ class GANDiscriminator(nn.Module):
         out : torch.Tensor
             The output.
         """
-        out = F.dropout(self.conv_layer(x, w_adj, mask=mask), p=self.dropout)
+        out = F.dropout(self.conv_layer(x, w_adj.clone(), mask=mask.clone()), p=self.dropout)
         out = self.agg_layer(out)
         out = activation(out) if activation is not None else out
         return out
@@ -227,10 +194,6 @@ class GRULayer(nn.Module):
             elif 'weight' in name:
                 nn.init.xavier_uniform_(param, gain=nn.init.calculate_gain('sigmoid'))
 
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                m.weight.data = nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('relu'))
-
     def init_hidden(self, batch_size):
         """
         Initialize the hidden state.
@@ -307,6 +270,7 @@ class GruMLPLayer(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 m.weight.data = nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('relu'))
+                m.bias.data.zero_()
 
     def forward(self, h):
         """
@@ -345,13 +309,15 @@ class MLPLayer(nn.Module):
         for in_dim, out_dim in zip(dims, dims[1:]):
             layers.append(nn.Linear(in_dim, out_dim))
             layers.append(nn.ReLU())
+        layers.pop()
         self.mlp_layers = nn.Sequential(*layers)
 
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 m.weight.data = nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('relu'))
+                m.bias.data.zero_()
 
-    def forward(self, x):
+    def forward(self, x, activation=None):
         """
         Compute the forward pass.
 
@@ -359,6 +325,8 @@ class MLPLayer(nn.Module):
         ----------
         x : torch.Tensor
             The input.
+        activation : callable, optional
+            The activation function. The default is None.
 
         Returns
         -------
@@ -366,58 +334,8 @@ class MLPLayer(nn.Module):
             The output.
         """
         out = self.mlp_layers(x)
+        out = activation(out) if activation is not None else out
         return out
-
-class ECCLayer(nn.Module):
-    """
-    A layer for multiple ECC layers.
-    """
-
-    def __init__(self, dims, inner_dims, edge_dim):
-        """
-        Initialize the class.
-
-        Parameters
-        ----------
-        dims : list of int
-            The dimensions of the ECC layers.
-        inner_dims : list of int
-            The dimensions of the edge features mapping.
-        edge_dim : int
-            The dimension of the edge features.
-        """
-        super(ECCLayer, self).__init__()
-
-        self.ecc_layers = nn.ModuleList()
-        for in_dim, out_dim in zip(dims, dims[1:]):
-            inner_layers = []
-            for inner_in_dim, inner_out_dim in zip([edge_dim] + inner_dims, inner_dims + [in_dim*out_dim]):
-                inner_layers.append(nn.Linear(inner_in_dim,inner_out_dim))
-            inner_sequential = nn.Sequential(*inner_layers)
-            self.ecc_layers.append(gnn.ECConv(in_dim, out_dim, inner_sequential))
-
-    def forward(self, x, adj, edge):
-        """
-        Compute the forward pass.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            The node features.
-        adj : torch.Tensor
-            The adjacency matrix.
-        edge : torch.Tensor:
-            The edge features.
-
-        Returns
-        -------
-        x : torch.Tensor
-            The node embeddings.
-        """
-        for ecc_layer in self.ecc_layers:
-            x = ecc_layer(x, adj, edge_attr=edge)
-            x = F.relu(x)
-        return x
 
 class DGCLayer(nn.Module):
     """
@@ -441,7 +359,7 @@ class DGCLayer(nn.Module):
         for in_dim, out_dim in zip(dims, dims[1:]):
             self.dgc_layers.append(gnn.DenseGraphConv(in_dim, out_dim))
 
-    def forward(self, x, weight, mask=None):
+    def forward(self, x, w_adj, mask=None):
         """
         Compute the forward pass.
 
@@ -449,7 +367,7 @@ class DGCLayer(nn.Module):
         ----------
         x : torch.Tensor
             The node feature tensor.
-        weight : torch.Tensor
+        w_adj : torch.Tensor
             The weighted adjacency tensor.
         mask : torch.Tensor
             The tensor indicating whether a particular node exists.
@@ -459,7 +377,8 @@ class DGCLayer(nn.Module):
         x : torch.Tensor
             The node embeddings.
         """
+        out = x
         for dgc_layer in self.dgc_layers:
-            x = dgc_layer(x, weight, mask=mask)
-            x = F.relu(x)
-        return x
+            out = dgc_layer(out, w_adj, mask=mask)
+            out = F.relu(out)
+        return out
