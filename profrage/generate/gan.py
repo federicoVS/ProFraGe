@@ -281,14 +281,12 @@ class ProGAN(nn.Module):
         else:
             return {'Discriminator': loss_d, 'Generator': loss_grl, 'Reward': 0}
 
-    def generate(self, test_batch_size=1, aa_min=1, aa_max=20, ss_min=1, ss_max=7, verbose=False):
+    def generate(self, aa_min=1, aa_max=20, ss_min=1, ss_max=7, verbose=False):
         """
         Evaluate the model by generating new data.
 
         Parameters
         ----------
-        test_batch_size : int, optional
-            The number of samples to generate. The default is 1.
         aa_min : int, optional
             The minimum amino acid code. The default is 1.
         aa_max : int, optional
@@ -306,7 +304,7 @@ class ProGAN(nn.Module):
             The predicted node features and distance matrix.
         """
         # Sample z
-        z = self._sample_z(test_batch_size)
+        z = self._sample_z(1)
         # Compute generated graph
         gen_x, gen_w_adj, gen_mask = self.generator(z)
         # Softmax on classes

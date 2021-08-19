@@ -19,7 +19,7 @@ class ProDAAE(nn.Module):
     """
 
     def __init__(self, root, hidden_dim, latent_dim, gcn_dims, mlp_dims,
-                 max_size=30, aa_dim=20, ss_dim=7, dropout=0.1, weight_init=5e-5, device='cpu'):
+                 max_size=30, aa_dim=20, ss_dim=7, dropout=0.1, weight_init=5e-10, device='cpu'):
         """
         Initialize the class.
 
@@ -44,7 +44,7 @@ class ProDAAE(nn.Module):
         dropout : float in [0,1], optional
             The dropout probability. The default is 0.1
         weight_init : float, optional
-            The weight initialization bounds. The default is 5e-5.
+            The weight initialization bounds. The default is 5e-10.
         device : str, optional
             The device where to put the data. The default is 'cpu'.
         """

@@ -26,7 +26,7 @@ class ProRNN(nn.Module):
     """
 
     def __init__(self, root, max_prev_node,
-                 t_hidden_dim=64, o_hidden_dim=16, t_embed_dim=32, o_embed_dim=8, num_layers=4, mlp_dims=[16,32,16],
+                 t_hidden_dim=64, o_hidden_dim=16, t_embed_dim=32, o_embed_dim=8, num_layers=4, mlp_dims=[1024],
                  aa_dim=20, ss_dim=7, dropout=0.1, device='cpu'):
         """
         Initialize the class.
@@ -47,8 +47,8 @@ class ProRNN(nn.Module):
             The embedding dimension for f_out_x and f_out_edge. The default is 8.
         num_layers : int, optional
             The number of layers for f_trans and f_out_edge. The default is 4.
-        mlp_dims : list of int
-            The dimensions of the MLPs.
+        mlp_dims : list of int, optional
+            The dimensions of the MLPs. The default is [1024].
         aa_dim : int, optional
             The number of amino acids. The default is 20.
         ss_dim : int, optional
@@ -81,7 +81,7 @@ class ProRNN(nn.Module):
                 adj[i,j] = adj[j,i] = wadj_seq[b,i,j]
         return adj
 
-    def checkpoint(self, epoch, optimizer, scheduler, loss):
+    def checkpoint(self, epoch, optimizers, schedulers, loss):
         """
         Create a checkpoint saving the results on the ongoing optimization.
 
@@ -91,10 +91,10 @@ class ProRNN(nn.Module):
         ----------
         epoch : int
             The current epoch.
-        optimizer : torch.optim.Optimizer
-           The optimizer.
-        scheduler : list of torch.optim.lr_scheduler.Scheduler
-            The scheduler.
+        optimizers : list of torch.optim.Optimizer
+            The optimizers.
+        schedulers : list of torch.optim.lr_scheduler.Scheduler
+            The schedulers.
         loss : float
             The current loss.
 
@@ -102,11 +102,15 @@ class ProRNN(nn.Module):
         -------
         None
         """
-        torch.save({'epoch': epoch,
-                    'model_state_dict': self.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict(),
-                    'loss': loss}, self.root + 'checkpoint_' + str(epoch))
+        state = {}
+        state['epoch'] = epoch
+        state['model_state_dict'] = self.state_dict()
+        for i in range(len(optimizers)):
+            state['optimizer_state_dict_'+str(i)] = optimizers[i].state_dict()
+        for i in range(len(schedulers)):
+            state['scheduler_state_dict_'+str(i)] = schedulers[i].state_dict()
+        state['loss'] = loss
+        torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
     def fit(self, loader, num_epochs, lr=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
@@ -218,8 +222,8 @@ class ProRNN(nn.Module):
             scheduler_graph.step()
             scheduler_node.step()
             scheduler_edge.step()
-            # if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
-            #     self.checkpoint(epoch, optimizer, scheduler, loss)
+            if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
+                self.checkpoint(epoch, [optimizer_graph,optimizer_node,optimizer_edge], [scheduler_graph,scheduler_node,scheduler_edge], loss)
             if verbose:
                 print(f'epoch {epoch+1}/{num_epochs},'
                       f'AA loss: {ce_loss_aa.item():.4},'
