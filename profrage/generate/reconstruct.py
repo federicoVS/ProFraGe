@@ -1,7 +1,13 @@
 import numpy as np
+
 import torch
 
-class Gram:
+from Bio.PDB.Structure import Structure
+from Bio.PDB.Model import Model
+from Bio.PDB.Chain import Chain
+from Bio.PDB.Residue import Residue
+
+class GramReconstruction:
     """
     Reconstruction of coordinate matrix X based on distance matrix D using Gram matrix.
 
@@ -48,3 +54,14 @@ class Gram:
             for j in range(3):
                 X[i,j] = u[i,j]*np.sqrt(s[j])
         return X
+
+class FragmentBuilder:
+
+    def __init__(self, f_id, x_pred, d_pred, coords):
+        self.f_id = f_id
+        self.x_pred = x_pred
+        self.d_pred = d_pred
+        self.coords = coords
+
+    def build(self, out_dir='./'):
+        fragment = Structure(self.f_id)
