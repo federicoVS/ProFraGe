@@ -17,6 +17,7 @@ from generate.gan import ProGAN
 from generate.rnn import ProRNN
 from generate.datasets import GraphDataset, RNNDataset_Feat
 from generate.quality import MMD, QCP
+from generate.reconstruct import GramReconstruction
 from utils.io import get_files, from_pdb
 from utils.ProgressBar import ProgressBar
 
@@ -116,13 +117,13 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
                 for key in loss_dict:
                     loss[key] = []
             for key in loss_dict:
-                loss[key].append(loss_dict[key].detach())
+                loss[key].append(loss_dict[key].detach().item())
         for key in loss:
             loss[key] = np.array(loss[key])
         means, vars = [], []
         for key in loss:
-            means.append(np.mean(loss[key].item()))
-            vars.append(np.var(loss[key].item()))
+            means.append(np.mean(loss[key]))
+            vars.append(np.var(loss[key]))
         best_params.append((np.median(np.array(means)), np.median(np.array(vars)), param_config, train_config))
     if verbose:
         progress_bar.end()
@@ -165,7 +166,7 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
     Cmodel, model_root, model_params, train_params, eval_params = None, model_dir, None, None, None
     if model_type == 'ProVAE':
         Cmodel = ProVAE
-        model_root += 'GraphVAE/' + str(model_id) + '/full/'
+        model_root += 'ProVAE/' + str(model_id) + '/full/'
         model_params = args.pro_vae_params
         train_params = args.pro_vae_train
         eval_params = args.pro_vae_eval
@@ -205,7 +206,7 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
     if verbose:
         print('Generating...')
     model.eval()
-    x_pred, w_adj_pred = model.generate(**eval_params)
+    x_pred, dist_pred = model.generate(**eval_params)
     # Reconstructing the fragment
     if verbose:
         print('Reconstructing the fragment...')
@@ -213,20 +214,49 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
     if verbose:
         print('Assessing quality...')
     if quality == 'qcp':
-        qcp = QCP(x_pred[:,5:8], test_proteins)
+        gram = GramReconstruction(args.device)
+        X = gram.reconstruct(dist_pred)
+        qcp = QCP(X, test_proteins)
         scores = qcp.superimpose()
     elif quality == 'mmd':
-        pred_graph = (x_pred, w_adj_pred[:,:,1])
+        pred_graph = (x_pred, dist_pred)
         target_graphs = []
         for _, (data) in enumerate(test_loader):
-            x, adj_edge = data['x'], data['adj'] + data['edge'][:,:,:,1]
-            x, adj_edge = x.view(x.shape[1],x.shape[2]), adj_edge.view(adj_edge.shape[1],adj_edge.shape[2])
-            target_graphs.append((x, adj_edge))
+            x, w_adj_edge = data['x'], data['adj'] + data['edge'][:,:,:,1]
+            x, w_adj_edge = x.view(x.shape[1],x.shape[2]), w_adj_edge.view(w_adj_edge.shape[1],w_adj_edge.shape[2])
+            target_graphs.append((x, w_adj_edge))
         mmd = MMD(pred_graph, target_graphs)
         scores = mmd.compare_graphs()
     score_mean, score_var = np.mean(scores), np.var(scores)
     if verbose:
         print(f'Average: {score_mean}, Variance: {score_var}')
+
+def _generate(model_type, model_dir, model_id=0, n_generate=10):
+    # Select the model
+    Cmodel, model_root, model_params = None, model_dir, None
+    if model_type == 'ProVAE':
+        Cmodel = ProVAE
+        model_root += 'ProVAE/' + str(model_id) + '/full/'
+        model_params = args.pro_vae_params
+    if model_type == 'ProDAAE':
+        Cmodel = ProDAAE
+        model_root += 'ProDAAE/' + str(model_id) + '/full/'
+        model_params = args.pro_daae_params
+    if model_type == 'ProGAN':
+        Cmodel = ProGAN
+        model_root += 'ProGAN/' + str(model_id) + '/full/'
+        model_params = args.pro_gan_params
+    if model_type == 'ProRNN':
+        Cmodel = ProRNN
+        model_root += 'ProRNN/' + str(model_id) + '/full/'
+        model_params = args.pro_rnn_params
+    # Create the model
+    model = Cmodel(model_root, **model_params).to(args.device)
+    # Load the weights
+    model.load_state_dict(torch.load(model_root + 'model_state'))
+    # Generate
+    for i in range(n_generate):
+        pass
 
 if __name__ == '__main__':
     # Argument parser initialization
@@ -244,7 +274,8 @@ if __name__ == '__main__':
     arg_parser.add_argument('--data_type', type=str, default='graph', help='The type of the dataset. Valid types are [graph,rnn]. The default is graph.')
     arg_parser.add_argument('--data_mode', type=str, default='sparse', help='The mode of the dataset. Valid types are [sparse,dense]. The default is sparse.')
     arg_parser.add_argument('--quality', type=str, default='qcp', help='The quality metric to use to assess the generated proteins. Valid measurements are [mmd,qcp]. The default is qcp.')
-    arg_parser.add_argument('--train', type=bool, default=True, help='Whether to train the model. If not, then the model weights are loaded. The default is True.')
+    arg_parser.add_argument('--train', type=bool, default=True, help='Whether to train the model. If not, then the model weights are loaded. This parameter has only effect when mode=full. The default is True.')
+    arg_parser.add_argument('--n_generate', type=int, default=10, help='The number of graphs to generate. This has only effect when mode=generate. The default is 10.')
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
     # Parse arguments
     args_parsed = arg_parser.parse_args()
