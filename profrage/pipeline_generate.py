@@ -121,8 +121,8 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
             loss[key] = np.array(loss[key])
         means, vars = [], []
         for key in loss:
-            means.append(np.mean(loss[key]))
-            vars.append(np.var(loss[key]))
+            means.append(np.mean(loss[key].item()))
+            vars.append(np.var(loss[key].item()))
         best_params.append((sum(means), sum(vars), param_config, train_config))
     if verbose:
         progress_bar.end()
