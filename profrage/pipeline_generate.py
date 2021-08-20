@@ -123,7 +123,7 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         for key in loss:
             means.append(np.mean(loss[key].item()))
             vars.append(np.var(loss[key].item()))
-        best_params.append((sum(means), sum(vars), param_config, train_config))
+        best_params.append((np.median(np.array(means)), np.median(np.array(vars)), param_config, train_config))
     if verbose:
         progress_bar.end()
     best_configs = sorted(best_params, key=lambda x: x[0])[0:args.cv_best_n_to_show]
