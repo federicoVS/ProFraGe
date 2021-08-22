@@ -102,10 +102,10 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         loss = {}
         for i, (data) in enumerate(val_loader):
             if model_type == 'ProVAE':
-                x, w_adj, mask = data['x'], data['w_wadj'], data['mask']
+                x, w_adj, mask = data['x'], data['w_adj'], data['mask']
                 loss_dict = model.eval_loss(x, w_adj, mask, train_config['l_kld'])
             elif model_type == 'ProDAAE':
-                x, w_adj, mask = data['x'], data['w_wadj'], data['mask']
+                x, w_adj, mask = data['x'], data['w_adj'], data['mask']
                 loss_dict = model.eval_loss(x, w_adj, mask, train_config['l_adv'])
             elif model_type == 'ProGAN':
                 x, w_adj, mask = data['x'], data['w_adj'], data['mask']
