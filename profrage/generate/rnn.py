@@ -1,13 +1,15 @@
 import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
-from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 from generate.layers import GRULayer, MLPLayer
+from generate.utils import seq_to_adj
 
 class ProRNN(nn.Module):
     """
@@ -72,14 +74,6 @@ class ProRNN(nn.Module):
         self.f_out_x_aa = MLPLayer([t_hidden_dim] + mlp_dims + [aa_dim+1])
         self.f_out_x_ss = MLPLayer([t_hidden_dim] + mlp_dims + [ss_dim+1])
         self.f_out_w_adj = GRULayer(1, o_hidden_dim, o_embed_dim, num_layers, has_output=True, out_dim=1, dropout=dropout, device=device)
-
-    def _decode_w_adj(self, wadj_seq, b=0):
-        n = wadj_seq.shape[1]
-        adj = torch.zeros(n,n).to(self.device)
-        for i in range(n):
-            for j in range(n):
-                adj[i,j] = adj[j,i] = wadj_seq[b,i,j]
-        return adj
 
     def checkpoint(self, epoch, optimizers, schedulers, loss):
         """
@@ -352,9 +346,10 @@ class ProRNN(nn.Module):
             self.f_trans.hidden = Variable(self.f_trans.hidden.data).to(self.device)
         node_pred_float_data = node_pred_long.data.long()
         w_adj_pred_float = w_adj_pred_float.data.float()
+        node_pred_float_data = node_pred_float_data.view(node_pred_float_data.size(1),node_pred_float_data.size(2))
+        w_adj_pred_float = w_adj_pred_float.view(w_adj_pred_float.size(1),w_adj_pred_float.size(2))
         x_pred = node_pred_float_data
-        w_adj_pred = self._decode_w_adj(w_adj_pred_float)
-        x_pred = x_pred.view(x_pred.size(1),x_pred.size(2))
+        w_adj_pred = seq_to_adj(w_adj_pred_float)
         # Define and fill the distance matrix prediction
         dist_pred = torch.zeros_like(w_adj_pred).to(self.device)
         for i in range(max_num_nodes):

@@ -61,6 +61,15 @@ class ProGAN(nn.Module):
                 b_mask[b,n] = torch.argmax(mask[b,n])
         return b_mask.bool()
 
+    def _tril_adj(self, adj):
+        B, N = adj.shape[0], adj.shape[1]
+        adj_tril = torch.zeros(B,N).to(self.device)
+        for b in range(B):
+            for i in range(1,N):
+                for j in range(0,i):
+                    adj_tril[b,i,j] = adj_tril[b,j,i] = adj[b,i,j]
+        return adj_tril
+
     def _reward_fun(self, w_adj, mask, eps=1e-3):
         B, N = w_adj.shape[0], w_adj.shape[1]
         reward = 0
@@ -178,7 +187,7 @@ class ProGAN(nn.Module):
                     # Logits from real data
                     logits_true = self.critic(x, w_adj, mask, activation=None)
                     # Logits from generated data
-                    logits_gen = self.critic(x_gen, w_adj_gen, self._boolean_node_mask(mask_gen), activation=None)
+                    logits_gen = self.critic(x_gen, self._tril_adj(w_adj_gen), self._boolean_node_mask(mask_gen), activation=None)
                     # Compute loss
                     loss_d = -torch.mean(logits_true) + torch.mean(logits_gen)
                     # Optimize
@@ -188,12 +197,12 @@ class ProGAN(nn.Module):
                         p.data.clamp_(-w_clamp, w_clamp)
                     optimizer_critic.step()
                 ### 2. Train the generator ###
-                logits_gen = self.critic(x_gen, w_adj_gen, self._boolean_node_mask(mask_gen), activation=None)
+                logits_gen = self.critic(x_gen, self._tril_adj(w_adj_gen), self._boolean_node_mask(mask_gen), activation=None)
                 # Check whether RL should be used
                 if self.rl:
                     # Reward losses
                     logits_rew_true = self.reward(x, w_adj, mask, activation=torch.sigmoid)
-                    logits_rew_gen = self.reward(x_gen, w_adj_gen, self._boolean_node_mask(mask_gen), activation=torch.sigmoid)
+                    logits_rew_gen = self.reward(x_gen, self._tril_adj(w_adj_gen), self._boolean_node_mask(mask_gen), activation=torch.sigmoid)
                     if i not in reward_fun_cache:
                         reward_true = self._reward_fun(w_adj, mask.int())
                         reward_fun_cache[i] = reward_true
@@ -262,14 +271,14 @@ class ProGAN(nn.Module):
         # Logits from real data
         logits_true = self.critic(x, w_adj, mask, activation=None)
         # Logits from generated data
-        logits_gen = self.critic(x_gen, w_adj_gen, mask_gen, activation=None)
+        logits_gen = self.critic(x_gen, self._tril_adj(w_adj_gen), mask_gen, activation=None)
         # Compute losses
         loss_d = -torch.mean(logits_true) + torch.mean(logits_gen)
         # Check for RL
         if self.rl:
             # Logits reward
             logits_rew_true = self.reward(x, w_adj, mask, activation=torch.sigmoid)
-            logits_rew_gen = self.reward(x_gen, w_adj_gen, self._boolean_node_mask(mask_gen), activation=torch.sigmoid)
+            logits_rew_gen = self.reward(x_gen, self._tril_adj(w_adj_gen), self._boolean_node_mask(mask_gen), activation=torch.sigmoid)
             reward_true = self._reward_fun(w_adj, mask.int())
             reward_gen = self._reward_fun(w_adj_gen, mask_gen.int())
             loss_r = torch.mean((logits_rew_true - reward_true)**2 + (logits_rew_gen - reward_gen)**2)
@@ -327,13 +336,13 @@ class ProGAN(nn.Module):
                 idx += 1
         # Fill the distance matrix prediction
         idx_i = 0
-        for i in range(self.max_size):
+        for i in range(1,self.max_size):
             if nodes[i] == 1:
                 idx_j = 0
-                for j in range(self.max_size):
+                for j in range(i):
                     if nodes[j] == 1:
                         if i != j:
-                            dist_pred[idx_i,idx_j] = 1/gen_w_adj[0,i,j]
+                            dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = 1/gen_w_adj[0,i,j]
                         idx_j += 1
                 idx_i += 1
         return x_pred.long(), dist_pred.float()

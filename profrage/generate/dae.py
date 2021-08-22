@@ -5,7 +5,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
 from generate.layers import MLPLayer, DGCLayer
-from generate.utils import reparametrize
+from generate.utils import reparametrize, adj_to_seq
 
 class ProDAAE(nn.Module):
     """
@@ -19,7 +19,7 @@ class ProDAAE(nn.Module):
     """
 
     def __init__(self, root, hidden_dim, latent_dim, gcn_dims, mlp_dims,
-                 max_size=30, aa_dim=20, ss_dim=7, dropout=0.1, weight_init=5e-10, device='cpu'):
+                 max_size=30, aa_dim=20, ss_dim=7, adj_type='tril', dropout=0.1, weight_init=5e-10, device='cpu'):
         """
         Initialize the class.
 
@@ -41,6 +41,8 @@ class ProDAAE(nn.Module):
             The number of amino acids. The default is 20.
         ss_dim : int, optional
             The number of secondary structure types. The default is 7.
+        adj_type : str, optional
+            How the adjacency is to be computed. Valid options are ['tril','seq']. The default is 'tril'.
         dropout : float in [0,1], optional
             The dropout probability. The default is 0.1
         weight_init : float, optional
@@ -55,6 +57,7 @@ class ProDAAE(nn.Module):
         self.max_size = max_size
         self.aa_dim = aa_dim
         self.ss_dim = ss_dim
+        self.adj_type = adj_type
         self.weight_init = weight_init
         self.device = device
 
@@ -106,7 +109,11 @@ class ProDAAE(nn.Module):
         ce_loss_aa = F.cross_entropy(out_x_aa.permute(0,2,1), x[:,:,0].long())
         ce_loss_ss = F.cross_entropy(out_x_ss.permute(0,2,1), x[:,:,1].long())
         # Weight regression
-        mse_loss_edge = F.mse_loss(out_w_adj, w_adj)
+        if self.adj_type == 'tril':
+            triu_idx = torch.triu_indices(self.max_size,self.max_size)
+            mse_loss_edge = F.mse_loss(out_w_adj[:,~triu_idx], w_adj[:,~triu_idx])
+        elif self.adj_type == 'seq':
+            mse_loss_edge = F.mse_loss(adj_to_seq(out_w_adj), adj_to_seq(w_adj))
         # Node existence classification
         ce_loss_exist = F.cross_entropy(out_mask.permute(0,2,1), mask.long())
         # Discriminator loss
@@ -336,13 +343,13 @@ class ProDAAE(nn.Module):
                 idx += 1
         # Fill the distance matrix prediction
         idx_i = 0
-        for i in range(self.max_size):
+        for i in range(1,self.max_size):
             if nodes[i] == 1:
                 idx_j = 0
-                for j in range(self.max_size):
+                for j in range(i):
                     if nodes[j] == 1:
                         if i != j:
-                            dist_pred[idx_i,idx_j] = 1/gen_w_adj[0,i,j]
+                            dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = 1/gen_w_adj[0,i,j]
                         idx_j += 1
                 idx_i += 1
         return x_pred.long(), dist_pred.float()
