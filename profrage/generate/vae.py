@@ -243,6 +243,8 @@ class ProVAE(nn.Module):
         dict of str -> float
             The losses.
         """
+        # Put onto device
+        x, w_adj, mask = x.to(self.device), w_adj.to(self.device), mask.to(self.device)
         # Forward pass
         _, mu, log_var = self.encode(x, w_adj, mask)
         z = reparametrize(mu, log_var, self.device)
