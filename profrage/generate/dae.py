@@ -225,11 +225,10 @@ class ProDAAE(nn.Module):
         -------
 
         """
-        optimizer_enc = Adam(list(self.enc_gnn.parameters())+list(self.latent_mu.parameters())+list(self.latent_log_var.parameters()), lr=lr, betas=betas)
-        optimizer_dec = Adam(list(self.dec_x_aa.parameters())+list(self.dec_x_ss.parameters())+list(self.dec_w_adj.parameters())+list(self.dec_mask.parameters()), lr=lr, betas=betas)
+        optimizer_vae = Adam(list(self.enc_gnn.parameters())+list(self.latent_mu.parameters())+list(self.latent_log_var.parameters())+
+                             list(self.dec_x_aa.parameters())+list(self.dec_x_ss.parameters())+list(self.dec_w_adj.parameters())+list(self.dec_mask.parameters()), lr=lr, betas=betas)
         optimizer_adv = Adam(self.discriminator.parameters(), lr=lr, betas=betas)
-        scheduler_enc = MultiStepLR(optimizer_enc, milestones=decay_milestones, gamma=decay)
-        scheduler_dec = MultiStepLR(optimizer_dec, milestones=decay_milestones, gamma=decay)
+        scheduler_vae = MultiStepLR(optimizer_vae, milestones=decay_milestones, gamma=decay)
         scheduler_adv = MultiStepLR(optimizer_adv, milestones=decay_milestones, gamma=decay)
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
@@ -240,8 +239,8 @@ class ProDAAE(nn.Module):
                 # Put (original) data on device
                 x, w_adj, mask = x.to(self.device), w_adj.to(self.device), mask.to(self.device)
                 # Start process
-                optimizer_enc.zero_grad()
-                optimizer_dec.zero_grad()
+                optimizer_vae.zero_grad()
+                # optimizer_dec.zero_grad()
                 optimizer_adv.zero_grad()
                 # Encoder
                 _, mu, log_var = self.encode(x_noised, w_adj_noised, mask)
@@ -255,14 +254,12 @@ class ProDAAE(nn.Module):
                 losses = self._loss(x, w_adj, mask, out_x_aa, out_x_ss, out_adj_w, out_mask, z, d_z, d_zn, l_adv)
                 loss = losses['Full loss']
                 loss.backward()
-                optimizer_enc.step()
-                optimizer_dec.step()
+                optimizer_vae.step()
                 optimizer_adv.step()
-            scheduler_enc.step()
-            scheduler_dec.step()
+            scheduler_vae.step()
             scheduler_adv.step()
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
-                self.checkpoint(epoch, [optimizer_enc,optimizer_dec,optimizer_adv], [scheduler_enc,scheduler_dec,scheduler_adv], loss)
+                self.checkpoint(epoch, [optimizer_vae,optimizer_adv], [scheduler_vae,scheduler_adv], loss)
             if verbose:
                 progress = 'epochs: ' + str(epoch+1) + '/' + str(n_epochs) + ', '
                 for key in losses:

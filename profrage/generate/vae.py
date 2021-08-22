@@ -189,10 +189,8 @@ class ProVAE(nn.Module):
         -------
         None
         """
-        optimizer_enc = Adam(list(self.enc_gnn.parameters())+list(self.latent_mu.parameters())+list(self.latent_log_var.parameters()), lr=lr, betas=betas)
-        optimizer_dec = Adam(list(self.dec_x_aa.parameters())+list(self.dec_x_ss.parameters())+list(self.dec_w_adj.parameters())+list(self.dec_mask.parameters()), lr=lr, betas=betas)
-        scheduler_enc = MultiStepLR(optimizer_enc, milestones=decay_milestones, gamma=decay)
-        scheduler_dec = MultiStepLR(optimizer_dec, milestones=decay_milestones, gamma=decay)
+        optimizer = Adam(self.parameters(), lr=lr, betas=betas)
+        scheduler = MultiStepLR(optimizer, milestones=decay_milestones, gamma=decay)
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
                 # Get the data
@@ -204,15 +202,12 @@ class ProVAE(nn.Module):
                 out_x_aa, out_x_ss, out_w_adj, out_mask = self.decode(z)
                 losses = self._vae_loss(x, w_adj, mask, out_x_aa, out_x_ss, out_w_adj, out_mask, mu, log_var, l_kld)
                 loss = losses['Full loss']
-                optimizer_enc.zero_grad()
-                optimizer_dec.zero_grad()
+                optimizer.zero_grad()
                 loss.backward()
-                optimizer_enc.step()
-                optimizer_dec.step()
-            scheduler_enc.step()
-            scheduler_dec.step()
+                optimizer.step()
+            scheduler.step()
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
-                self.checkpoint(epoch, [optimizer_enc,optimizer_dec], [scheduler_enc,scheduler_dec], loss)
+                self.checkpoint(epoch, [optimizer], [scheduler], loss)
             if verbose:
                 progress = 'epochs: ' + str(epoch+1) + '/' + str(n_epochs) + ', '
                 for key in losses:

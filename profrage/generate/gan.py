@@ -260,9 +260,9 @@ class ProGAN(nn.Module):
         # Compute generated graph
         x_gen, w_adj_gen, mask_gen = self.generator(z)
         # Logits from real data
-        logits_true = self.discriminator(x, w_adj, mask, activation=None)
+        logits_true = self.critic(x, w_adj, mask, activation=None)
         # Logits from generated data
-        logits_gen = self.discriminator(x_gen, w_adj_gen, mask_gen, activation=None)
+        logits_gen = self.critic(x_gen, w_adj_gen, mask_gen, activation=None)
         # Compute losses
         loss_d = -torch.mean(logits_true) + torch.mean(logits_gen)
         # Check for RL

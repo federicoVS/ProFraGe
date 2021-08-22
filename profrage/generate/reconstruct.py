@@ -6,6 +6,10 @@ from Bio.PDB.Structure import Structure
 from Bio.PDB.Model import Model
 from Bio.PDB.Chain import Chain
 from Bio.PDB.Residue import Residue
+from Bio.PDB.Atom import Atom
+
+from utils.structure import INT_TO_AA
+from utils.io import to_pdb
 
 class GramReconstruction:
     """
@@ -47,7 +51,7 @@ class GramReconstruction:
         for i in range(n):
             for j in range(n):
                 M[i,j] = (D[0,j]**2 + D[0,i]**2 + - D[i,j]**2)/2
-        M = M.cpu().numpy()
+        M = M.detach().cpu().numpy()
         u, s, vh = np.linalg.svd(M)
         X = np.zeros(shape=(n,3))
         for i in range(n):
@@ -57,11 +61,21 @@ class GramReconstruction:
 
 class FragmentBuilder:
 
-    def __init__(self, f_id, x_pred, d_pred, coords):
+    def __init__(self, f_id, x_pred, coords):
         self.f_id = f_id
         self.x_pred = x_pred
-        self.d_pred = d_pred
         self.coords = coords
 
     def build(self, out_dir='./'):
-        fragment = Structure(self.f_id)
+        structure = Structure(self.f_id)
+        model = Model(0)
+        chain = Chain("A")
+        n = self.x_pred.shape[0]
+        for i in range(n):
+            atom = Atom("CA", np.round(self.coords[i,:], 3), 50.00, 1.00, " ", " CA ", "C")
+            residue = Residue((" ",i+1," "), INT_TO_AA[self.x_pred[i,0].int().item()], i+1)
+            residue.add(atom)
+            chain.add(residue)
+        model.add(chain)
+        structure.add(model)
+        to_pdb(structure, self.f_id, out_dir=out_dir)

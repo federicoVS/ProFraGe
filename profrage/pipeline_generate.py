@@ -17,7 +17,7 @@ from generate.gan import ProGAN
 from generate.rnn import ProRNN
 from generate.datasets import GraphDataset, RNNDataset_Feat
 from generate.quality import MMD, QCP
-from generate.reconstruct import GramReconstruction
+from generate.reconstruct import GramReconstruction, FragmentBuilder
 from utils.io import get_files, from_pdb
 from utils.ProgressBar import ProgressBar
 
@@ -255,13 +255,24 @@ def _generate(model_type, model_dir, model_id=0, n_generate=10):
     # Load the weights
     model.load_state_dict(torch.load(model_root + 'model_state'))
     # Generate
+    gram = GramReconstruction(args.device)
     for i in range(n_generate):
-        pass
+        if model_type == 'ProRNN':
+            for j in range(12,30):
+                x_gen, dist_gen = model.generate(j)
+                coords = gram.reconstruct(dist_gen)
+                fb = FragmentBuilder('fragment_' + str(j) + str(i), x_gen, coords)
+                fb.build(out_dir=model_root)
+        else:
+            x_gen, dist_gen = model.generate()
+            coords = gram.reconstruct(dist_gen)
+            fb = FragmentBuilder('fragment_' + str(x_gen.shape[0]) + str(i), x_gen, coords)
+            fb.build(out_dir=model_root)
 
 if __name__ == '__main__':
     # Argument parser initialization
     arg_parser = argparse.ArgumentParser(description='Full generation pipeline.')
-    arg_parser.add_argument('mode', type=str, help='The mode of the pipeline. Valid modes are [grid_cv,full].')
+    arg_parser.add_argument('mode', type=str, help='The mode of the pipeline. Valid modes are [grid_cv,full,generate].')
     arg_parser.add_argument('model', type=str, help='The model to use. Valid models are [ProVAE,ProDAAE,ProGAN,ProRNN].')
     arg_parser.add_argument('pdb_train', type=str, help='The directory holding the PDB files from the training set.')
     arg_parser.add_argument('pdb_val', type=str, help='The directory holding the PDB files from the validation set.')
@@ -288,6 +299,7 @@ if __name__ == '__main__':
         _full(args_parsed.model, args_parsed.pdb_train, args_parsed.pdb_test, args_parsed.stride_dir, args_parsed.dataset_dir, args_parsed.model_dir,
               dataset_id=args_parsed.dataset_id, model_id=args_parsed.model_id, data_type=args_parsed.data_type, data_mode=args_parsed.data_mode,
               quality=args_parsed.quality, train=args_parsed.train, verbose=args_parsed.verbose)
+    elif args_parsed.mode == 'generate':
+        _generate(args_parsed.model, args_parsed.model_dir, model_id=args_parsed.model_id, n_generate=args_parsed.n_generate)
     else:
         print('Wrong mode selected.')
-    # TODO add last mode for generation
