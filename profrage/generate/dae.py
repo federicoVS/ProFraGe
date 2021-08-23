@@ -19,7 +19,7 @@ class ProDAAE(nn.Module):
     """
 
     def __init__(self, root, hidden_dim, latent_dim, gcn_dims, mlp_dims,
-                 max_size=30, aa_dim=20, ss_dim=7, adj_type='tril', dropout=0.1, weight_init=5e-10, device='cpu'):
+                 max_size=30, aa_dim=20, ss_dim=7, p=0.99, adj_type='tril', dropout=0.1, weight_init=5e-10, device='cpu'):
         """
         Initialize the class.
 
@@ -41,6 +41,8 @@ class ProDAAE(nn.Module):
             The number of amino acids. The default is 20.
         ss_dim : int, optional
             The number of secondary structure types. The default is 7.
+        p : float in [0,1], optional
+            The probability of perturbation for the input. The default is 0.99.
         adj_type : str, optional
             How the adjacency is to be computed. Valid options are ['tril','seq']. The default is 'tril'.
         dropout : float in [0,1], optional
@@ -57,6 +59,7 @@ class ProDAAE(nn.Module):
         self.max_size = max_size
         self.aa_dim = aa_dim
         self.ss_dim = ss_dim
+        self.p = p
         self.adj_type = adj_type
         self.weight_init = weight_init
         self.device = device
@@ -81,20 +84,20 @@ class ProDAAE(nn.Module):
             nn.init.uniform_(self.latent_mu.weight, a=-weight_init, b=weight_init)
             nn.init.uniform_(self.latent_log_var.weight, a=-weight_init, b=weight_init)
 
-    def _noise_x(self, x, p=0.95):
+    def _noise_x(self, x):
         x_noised = x.clone()
         B, N, F = x.shape[0], x.shape[1], x.shape[2]
-        noised = torch.rand(B,N,F) > p
+        noised = torch.rand(B,N,F) > self.p
         non_noised = ~noised
         aa_noised = (x[:,:,0]*non_noised[:,:,0].int()).unsqueeze(2) + torch.add(torch.randint(self.aa_dim, (B,N,1)),1)
         ss_noised = (x[:,:,0]*non_noised[:,:,0].int()).unsqueeze(2) + torch.add(torch.randint(self.ss_dim, (B,N,1)),1)
         x_noised += torch.cat((aa_noised,ss_noised), dim=2)
         return x_noised.to(self.device)
 
-    def _noise_w_adj(self, w_adj, p=0.95):
+    def _noise_w_adj(self, w_adj):
         w_adj_noised = w_adj.clone()
         B, N = w_adj.shape[0], w_adj.shape[1]
-        noised = torch.rand(B,N) > p
+        noised = torch.rand(B,N) > self.p
         for b in range(B):
             for n in range(N):
                 if noised[b,n]:
