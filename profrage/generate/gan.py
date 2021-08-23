@@ -65,7 +65,7 @@ class ProGAN(nn.Module):
         B, N = adj.shape[0], adj.shape[1]
         adj_tril = torch.zeros(B,N,N).to(self.device)
         for b in range(B):
-            adj_tril = torch.tril(adj[b,:,:]) + torch.transpose(torch.tril(adj[b,:,:]))
+            adj_tril = torch.tril(adj[b,:,:]) + torch.transpose(torch.tril(adj[b,:,:]), 0, 1)
             for i in range(1,N):
                 adj_tril[b,i,i] = 0
         return adj_tril
