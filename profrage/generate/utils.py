@@ -63,9 +63,10 @@ def seq_to_adj(adj_seq, device='cpu'):
     adj : torch.Tensor
         The dense representation of the input sequence.
     """
-    n = adj_seq.shape[0]
-    adj = torch.zeros(n,n).to(device)
-    for i in range(n):
-        for j in range(n):
-            adj[i,j] = adj[j,i] = adj_seq[i,j]
+    B, n = adj_seq.shape[0], adj_seq.shape[1]
+    adj = torch.zeros(B,n,n).to(device)
+    for b in range(B):
+        for i in range(n):
+            for j in range(n):
+                adj[b,i,j] = adj[b,j,i] = adj_seq[b,i,j]
     return adj

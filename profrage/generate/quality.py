@@ -4,14 +4,13 @@ import torch
 
 from scipy.stats import wasserstein_distance
 
-from generate.metrics import ca_metrics, graph_metrics, amino_acid_metrics, secondary_sequence_metrics
+from generate.metrics import ca_metrics, amino_acid_metrics, secondary_sequence_metrics
 
 class MMD:
     """
     Compute the Maximum Mean Discrepancy (MMD) between the predicted graph and a set of target ones.
 
-    Graph statistics include connectivity (e.g. valid backbone connections), amino acid sequence information, and
-    secondary structure sequence information.
+    Graph statistics include amino acid sequence information and secondary structure sequence information.
 
     Attributes
     ----------
@@ -30,9 +29,9 @@ class MMD:
         Parameters
         ----------
         pred_graph : (torch.Tensor, torch.Tensor)
-        The predicted graph consisting of the predicted node features and the predicted distance matrix.
+            The predicted graph consisting of the predicted node features and the predicted distance matrix.
         target_graphs : list of (torch.Tensor, torch.Tensor)
-        The target graphs, where each entry consists of the node features and the distance matrix.
+            The target graphs, where each entry consists of the node features and the distance matrix.
         median_subset : int, optional
             The size of the subset to use to compute `sigma`. The default is 100.
         """
@@ -64,17 +63,23 @@ class MMD:
         return xx + yy - 2*xy
 
     def compare_graphs(self):
+        """
+        Compare the graphs.
+
+        Returns
+        -------
+        scores : numpy.ndarray
+            The comparison scores.
+        """
         scores = []
         # Compute MMD score of the predicted graph
-        x_D = graph_metrics(self.pred_graph[1])
         x_aa = amino_acid_metrics(self.pred_graph[0])
         x_ss = secondary_sequence_metrics(self.pred_graph[0])
-        x = torch.cat((x_D,x_aa,x_ss))
+        x = torch.cat((x_aa,x_ss))
         for target_graph in self.target_graphs:
-            y_D = graph_metrics(target_graph[1])
             y_aa = amino_acid_metrics(target_graph[0])
             y_ss = secondary_sequence_metrics(target_graph[0])
-            y = torch.cat((y_D,y_aa,y_ss))
+            y = torch.cat((y_aa,y_ss))
             # Compare
             scores.append(self._mmd(x, y))
         scores = np.array(scores)

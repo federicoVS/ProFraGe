@@ -307,7 +307,7 @@ class ProRNN(nn.Module):
         loss = ce_loss_aa + ce_loss_ss + mse_loss_w_adj
         return {'Loss': loss}
 
-    def generate(self, max_num_nodes):
+    def generate(self, test_batch_size, max_num_nodes):
         """
         Evaluate the model by generating new data.
 
@@ -321,16 +321,16 @@ class ProRNN(nn.Module):
         (x_pred, dist_pred) : (torch.Tensor, torch.Tensor)
             The predicted node features and distance matrix.
         """
-        self.f_trans.hidden = self.f_trans.init_hidden(1)
-        node_pred_long = Variable(torch.zeros(1,max_num_nodes,self.X_DIM)).to(self.device)
-        w_adj_pred_float = Variable(torch.zeros(1,max_num_nodes,self.max_prev_node-1)).to(self.device)
-        x_step = Variable(torch.ones(1,1,self.max_prev_node+self.X_DIM-1)).to(self.device)
+        self.f_trans.hidden = self.f_trans.init_hidden(test_batch_size)
+        node_pred_long = Variable(torch.zeros(test_batch_size,max_num_nodes,self.X_DIM)).to(self.device)
+        w_adj_pred_float = Variable(torch.zeros(test_batch_size,max_num_nodes,self.max_prev_node-1)).to(self.device)
+        x_step = Variable(torch.ones(test_batch_size,1,self.max_prev_node+self.X_DIM-1)).to(self.device)
         for i in range(max_num_nodes):
             h_raw, h = self.f_trans(x_step)
             hidden_null = Variable(torch.zeros(self.num_layers-1,h.size(0),h.size(2))).to(self.device)
             self.f_out_w_adj.hidden = torch.cat((h.permute(1,0,2),hidden_null), dim=0)  # num_layers, batch_size, hidden_size
-            x_step = Variable(torch.zeros(1,1,self.max_prev_node+self.X_DIM-1)).to(self.device)
-            output_x_step = Variable(torch.ones(1,1,1)).to(self.device)
+            x_step = Variable(torch.zeros(test_batch_size,1,self.max_prev_node+self.X_DIM-1)).to(self.device)
+            output_x_step = Variable(torch.ones(test_batch_size,1,1)).to(self.device)
             pred_aa = torch.argmax(F.softmax(self.f_out_x_aa(h_raw), dim=2)[0,0,:])
             pred_ss = torch.argmax(F.softmax(self.f_out_x_ss(h_raw), dim=2)[0,0,:])
             node_pred_long[:,i,:] = torch.LongTensor([pred_aa, pred_ss]) # insert prediction
@@ -339,20 +339,18 @@ class ProRNN(nn.Module):
                 _, output_y_pred_step = self.f_out_w_adj(output_x_step)
                 output_x_step = output_y_pred_step
                 x_step[:,:,self.X_DIM+j:self.X_DIM+j+1] = output_x_step
-                output_x_step = torch.FloatTensor([[[output_x_step]]]) # convert and reshape prediction
                 self.f_out_w_adj.hidden = Variable(self.f_out_w_adj.hidden.data).to(self.device) # update hidden state
             w_adj_pred_float[:,i:i+1,:] = x_step[:,:,self.X_DIM:]
             self.f_trans.hidden = Variable(self.f_trans.hidden.data).to(self.device)
         node_pred_float_data = node_pred_long.data.long()
         w_adj_pred_float = w_adj_pred_float.data.float()
-        node_pred_float_data = node_pred_float_data.view(node_pred_float_data.size(1),node_pred_float_data.size(2))
-        w_adj_pred_float = w_adj_pred_float.view(w_adj_pred_float.size(1),w_adj_pred_float.size(2))
         x_pred = node_pred_float_data
         w_adj_pred = seq_to_adj(w_adj_pred_float)
         # Define and fill the distance matrix prediction
         dist_pred = torch.zeros_like(w_adj_pred).to(self.device)
-        for i in range(max_num_nodes):
-            for j in range(max_num_nodes):
-                if i != j:
-                    dist_pred[i,j] = min(1/w_adj_pred[i,j], 12)
+        for b in range(test_batch_size):
+            for i in range(max_num_nodes):
+                for j in range(max_num_nodes):
+                    if i != j:
+                        dist_pred[b,i,j] = min(1/w_adj_pred[b,i,j], 12)
         return x_pred, dist_pred

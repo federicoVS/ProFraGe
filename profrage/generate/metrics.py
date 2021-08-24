@@ -4,34 +4,6 @@ import torch
 
 from Bio.PDB.QCPSuperimposer import QCPSuperimposer
 
-def graph_metrics(D, eps=1e-3):
-    """
-    Compute metrics associated with the generated distance matrix.
-
-    Parameters
-    ----------
-    w_adj : torch.Tensor
-        The distance matrix.
-    eps : float, optional
-        The threshold value under which a value is considered to be 0. The default is 1e-3.
-
-    Returns
-    -------
-    ratio : torch.Tensor
-        The ratio between the number of symmetric entres and the total.
-    """
-    # Get number of nodes
-    n = D.shape[0]
-    # Initialize score
-    score = 0
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                if abs(D[i,j]-D[j,i]) < eps:
-                    score += 1
-    ratio = score/(2*n)
-    return ratio
-
 def amino_acid_metrics(x, aa_num=20):
     """
     Compute metrics associated with with amino acids.
