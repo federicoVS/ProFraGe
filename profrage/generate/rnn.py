@@ -170,7 +170,6 @@ class ProRNN(nn.Module):
                 y_reshape = y_reshape.index_select(0, idx)
                 y_reshape = y_reshape.view(y_reshape.size(0),y_reshape.size(1),1)
                 output_x = torch.cat((torch.ones(y_reshape.size(0),1,1), y_reshape[:,0:-1,0:1]), dim=1)
-                output_x = output_x
                 output_y = y_reshape
                 output_y_len = []
                 output_y_len_bin = np.bincount(np.array(y_len))
@@ -355,5 +354,5 @@ class ProRNN(nn.Module):
         for i in range(max_num_nodes):
             for j in range(max_num_nodes):
                 if i != j:
-                    dist_pred[i,j] = 1/w_adj_pred[i,j]
+                    dist_pred[i,j] = min(1/w_adj_pred[i,j], 12)
         return x_pred, dist_pred

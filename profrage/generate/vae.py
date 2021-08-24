@@ -297,8 +297,7 @@ class ProVAE(nn.Module):
                 idx_j = 0
                 for j in range(i):
                     if nodes[j] == 1:
-                        if i != j:
-                            dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = 1/gen_w_adj[0,i,j]
+                        dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = min(1/gen_w_adj[i,j], 12)
                         idx_j += 1
                 idx_i += 1
         return x_pred.long(), dist_pred.float()

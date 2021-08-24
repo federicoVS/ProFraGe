@@ -48,11 +48,11 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
     val_dataset.save()
     # Define the loaders
     if data_mode == 'dense' or data_type == 'rnn':
-        train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
-        val_loader = DataLoader(dataset=val_dataset, batch_size=1, shuffle=True)
+        train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
+        val_loader = DataLoader(dataset=val_dataset, batch_size=1, shuffle=False)
     elif data_mode == 'sparse':
-        train_loader = GDataLoader(dataset=train_dataset.get_data(), batch_size=args.batch_size, shuffle=True)
-        val_loader = GDataLoader(dataset=val_dataset.get_data(), batch_size=1, shuffle=True)
+        train_loader = GDataLoader(dataset=train_dataset.get_data(), batch_size=args.batch_size, shuffle=False)
+        val_loader = GDataLoader(dataset=val_dataset.get_data(), batch_size=1, shuffle=False)
     # Select model and parameters set
     Cmodel, model_root, model_params, train_params, eval_params = None, model_dir, None, None, None
     if model_type == 'ProVAE':
@@ -158,10 +158,10 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
     test_dataset.save()
     # Define the loaders
     if data_mode == 'dense' or data_type == 'rnn':
-        train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
+        train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     elif data_mode == 'sparse':
-        train_loader = GDataLoader(dataset=train_dataset.get_data(), batch_size=args.batch_size, shuffle=True)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=True)
+        train_loader = GDataLoader(dataset=train_dataset.get_data(), batch_size=args.batch_size, shuffle=False)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False)
     # Select the model
     Cmodel, model_root, model_params, train_params, eval_params = None, model_dir, None, None, None
     if model_type == 'ProVAE':

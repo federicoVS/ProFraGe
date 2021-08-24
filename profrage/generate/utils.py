@@ -63,7 +63,7 @@ def seq_to_adj(adj_seq, device='cpu'):
     adj : torch.Tensor
         The dense representation of the input sequence.
     """
-    n = adj_seq.shape[1]
+    n = adj_seq.shape[0]
     adj = torch.zeros(n,n).to(device)
     for i in range(n):
         for j in range(n):
