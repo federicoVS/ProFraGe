@@ -5,7 +5,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
 from generate.layers import MLPLayer, DGCLayer
-from generate.utils import reparametrize, adj_to_seq
+from generate.utils import reparametrize
 
 class ProVAE(nn.Module):
     """
@@ -13,7 +13,7 @@ class ProVAE(nn.Module):
     """
 
     def __init__(self, root, hidden_dim, latent_dim, gcn_dims, mlp_dims,
-                 max_size=30, aa_dim=20, ss_dim=7, adj_type='tril', dropout=0.1, device='cpu'):
+                 max_size=30, aa_dim=20, ss_dim=7, dropout=0.1, device='cpu'):
         """
         Initialize the class.
 
@@ -35,8 +35,6 @@ class ProVAE(nn.Module):
             The number of amino acids. The default is 20.
         ss_dim : int, optional
             The number of secondary structures. The default is 7.
-        adj_type : str, optional
-            How the adjacency is to be computed. Valid options are ['tril','seq']. The default is 'tril'.
         dropout : float in [0,1], optional
             The dropout probability. The default is 0.1.
         device : str, optional
@@ -49,7 +47,6 @@ class ProVAE(nn.Module):
         self.max_size = max_size
         self.aa_dim = aa_dim
         self.ss_dim = ss_dim
-        self.adj_type = adj_type
         self.device = device
 
         self.X_DIM = 2
@@ -76,11 +73,9 @@ class ProVAE(nn.Module):
         ce_loss_aa = F.cross_entropy(out_x_aa.permute(0,2,1), x[:,:,0].long())
         ce_loss_ss = F.cross_entropy(out_x_ss.permute(0,2,1), x[:,:,1].long())
         # Weight regression
-        if self.adj_type == 'tril':
-            triu_idx = torch.triu_indices(self.max_size,self.max_size)
-            mse_loss_edge = F.mse_loss(out_w_adj[:,~triu_idx], w_adj[:,~triu_idx])
-        elif self.adj_type == 'seq':
-            mse_loss_edge = F.mse_loss(adj_to_seq(out_w_adj), adj_to_seq(w_adj))
+        adj_seq_tgt = w_adj - torch.triu(w_adj)
+        adj_seq_out = out_w_adj - torch.triu(out_w_adj)
+        mse_loss_edge = F.mse_loss(adj_seq_out, adj_seq_tgt)
         # Node existence classification
         ce_loss_exist = F.cross_entropy(out_mask.permute(0,2,1), mask.long())
         # Kullback-Leibler divergence
@@ -274,6 +269,10 @@ class ProVAE(nn.Module):
         gen_x_aa = torch.softmax(gen_x_aa, dim=2)
         gen_x_ss = torch.softmax(gen_x_ss, dim=2)
         gen_mask = torch.softmax(gen_mask, dim=2)
+        # Reshape and reformat adjacency
+        gen_w_adj = gen_w_adj.view(gen_w_adj.shape[1],gen_w_adj.shape[2])
+        # gen_w_adj = gen_w_adj - torch.triu(gen_w_adj)
+        # gen_w_adj = gen_w_adj + torch.transpose(gen_w_adj, 0,1)
         # Get the nodes to generate and define the total number of nodes
         nodes, N = [0 for _ in range(self.max_size)], 0
         for i in range(self.max_size):
@@ -287,17 +286,18 @@ class ProVAE(nn.Module):
         idx = 0
         for i in range(self.max_size):
             if nodes[i] == 1:
-                x_pred[idx,0] = torch.argmax(gen_x_aa[0,i])
-                x_pred[idx,1] = torch.argmax(gen_x_ss[0,i])
+                x_pred[idx,0] = torch.argmax(gen_x_aa[0,i,1:])+1
+                x_pred[idx,1] = torch.argmax(gen_x_ss[0,i,1:])+1
                 idx += 1
         # Fill the distance matrix prediction
         idx_i = 0
-        for i in range(1,self.max_size):
+        for i in range(self.max_size):
             if nodes[i] == 1:
                 idx_j = 0
-                for j in range(i):
+                for j in range(self.max_size):
                     if nodes[j] == 1:
-                        dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = min(1/gen_w_adj[i,j], 12)
+                        if i != j:
+                            dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = min(1/gen_w_adj[i,j], 12)
                         idx_j += 1
                 idx_i += 1
         return x_pred.long(), dist_pred.float()

@@ -243,52 +243,6 @@ class GRULayer(nn.Module):
             output = self.out_layer(output_raw)
         return output_raw, output
 
-class GruMLPLayer(nn.Module):
-    """
-    An MLP layer associated with the GRU model.
-    """
-
-    def __init__(self, hidden_dim, embed_dim, y_dim):
-        """
-        Initialize the class.
-
-        Parameters
-        ----------
-        hidden_dim : int
-            The dimension of the input features..
-        embed_dim : int
-            The hidden dimension.
-        y_dim : int
-            The dimension of the output features.
-        """
-        super(GruMLPLayer, self).__init__()
-
-        self.lin_layer = nn.Sequential(nn.Linear(hidden_dim, embed_dim),
-                                       nn.ReLU(),
-                                       nn.Linear(embed_dim, y_dim))
-
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                m.weight.data = nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('relu'))
-                m.bias.data.zero_()
-
-    def forward(self, h):
-        """
-        Compute the forward pass.
-
-        Parameters
-        ----------
-        h : torch.Tensor
-            The input.
-
-        Returns
-        -------
-        y : torch.Tensor
-            The output.
-        """
-        y = self.lin_layer(h)
-        return y
-
 class MLPLayer(nn.Module):
     """
     A generic MLP layer.

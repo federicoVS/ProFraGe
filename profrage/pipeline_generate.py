@@ -117,7 +117,10 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
                 for key in loss_dict:
                     loss[key] = []
             for key in loss_dict:
-                loss[key].append(loss_dict[key].detach().item())
+                if isinstance(loss_dict[key], int):
+                    loss[key].append(loss_dict[key])
+                else:
+                    loss[key].append(loss_dict[key].detach().item())
         for key in loss:
             loss[key] = np.array(loss[key])
         means, vars = [], []
@@ -131,7 +134,7 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
     for best_config in best_configs:
         print(f'Average: {best_config[0]}, Variance: {best_config[1]}, \n Model Params.: {best_config[2]}, Training Params.: {best_config[3]}')
 
-def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, dataset_id=0, model_id=0, data_type='graph', data_mode='sparse', quality='qcp', train=True, verbose=False):
+def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, dataset_id=0, model_id=0, data_type='graph', data_mode='sparse', train=True, verbose=False):
     if verbose:
         print('Processing the data...')
     # Get the training proteins
@@ -211,26 +214,30 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
     # Reconstructing the fragment
     if verbose:
         print('Reconstructing the fragment...')
-    # Assess the model performance
+    # Assess the model performance with QCP
     if verbose:
-        print('Assessing quality...')
-    if quality == 'qcp':
-        gram = GramReconstruction(args.device)
-        X = gram.reconstruct(dist_pred)
-        qcp = QCP(X, test_proteins)
-        scores = qcp.superimpose()
-    elif quality == 'mmd':
-        pred_graph = (x_pred, dist_pred)
-        target_graphs = []
-        for _, (data) in enumerate(test_loader):
-            x, w_adj_edge = data['x'], data['adj'] + data['edge'][:,:,:,1]
-            x, w_adj_edge = x.view(x.shape[1],x.shape[2]), w_adj_edge.view(w_adj_edge.shape[1],w_adj_edge.shape[2])
-            target_graphs.append((x, w_adj_edge))
-        mmd = MMD(pred_graph, target_graphs)
-        scores = mmd.compare_graphs()
-    score_mean, score_var = np.mean(scores), np.var(scores)
+        print('Assessing QCP quality...')
+    gram = GramReconstruction(args.device)
+    X = gram.reconstruct(dist_pred)
+    qcp = QCP(X, test_proteins)
+    qcp_scores = qcp.superimpose()
+    qcp_min, qcp_score_mean, qcp_score_var = np.min(qcp_scores), np.mean(qcp_scores), np.var(qcp_scores)
     if verbose:
-        print(f'Average: {score_mean}, Variance: {score_var}')
+        print('Assessing MMD quality...')
+    pred_graph = (x_pred, dist_pred)
+    target_graphs = []
+    for _, (data) in enumerate(test_loader):
+        x, w_adj_edge = data['x'], data['adj'] + data['edge'][:,:,:,1]
+        x, w_adj_edge = x.view(x.shape[1],x.shape[2]), w_adj_edge.view(w_adj_edge.shape[1],w_adj_edge.shape[2])
+        target_graphs.append((x, w_adj_edge))
+    mmd = MMD(pred_graph, target_graphs)
+    mmd_scores = mmd.compare_graphs()
+    mmd_min, mmd_mean, mmd_var = np.min(mmd_scores), np.mean(mmd_scores), np.var(mmd_scores)
+    if verbose:
+        print(f'QCP scores: {qcp_scores}')
+        print(f'MMD scores: {mmd_scores}')
+        print(f'QCP -> Average: {qcp_score_mean}, Variance: {qcp_score_var}, Minimum: {qcp_min}')
+        print(f'MMD -> Average: {mmd_mean}, Variance: {mmd_var}, Minimum: {mmd_min}')
 
 def _generate(model_type, model_dir, model_id=0, n_generate=10):
     # Select the model

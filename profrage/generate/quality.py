@@ -12,6 +12,10 @@ class MMD:
 
     Graph statistics include amino acid sequence information and secondary structure sequence information.
 
+    Source
+    ------
+    https://torchdrift.org/notebooks/note_on_mmd.html
+
     Attributes
     ----------
     pred_graph : (torch.Tensor, torch.Tensor)
