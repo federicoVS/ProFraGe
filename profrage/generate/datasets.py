@@ -1,3 +1,6 @@
+import copy
+from itertools import compress
+
 import numpy as np
 
 import torch
@@ -317,6 +320,21 @@ class RNNDataset_Feat(Dataset):
             y_feat = F.pad(torch.tensor(x), (0,0,0,delta_y_feat)) # plus 1 to make them even with xt
             data.append({'x': xt, 'y_edge': y_edge, 'y_feat': y_feat, 'len': n})
         return data
+
+    def sample(self):
+        """
+        Sample a part of data and return a new dataset based on said data.
+
+        Returns
+        -------
+        dataset_copy : RNNDataset_Feat
+            A new RNNDataset_Feat based on sampled data from self.
+        """
+        idx = np.random.choice(a=[True,False], size=len(self._data)).tolist()
+        sampled = list(compress(self._data, idx))
+        dataset_copy = copy.deepcopy(self)
+        dataset_copy._data = sampled
+        return dataset_copy
 
     def save(self):
         """

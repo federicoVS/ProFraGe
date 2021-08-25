@@ -313,6 +313,8 @@ class ProRNN(nn.Module):
 
         Parameters
         ----------
+        test_batch_size : int
+            The number of graphs to generate.
         max_num_nodes : int
             The number of nodes to generate.
 

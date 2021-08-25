@@ -19,7 +19,7 @@ class ProDAAE(nn.Module):
     """
 
     def __init__(self, root, hidden_dim, latent_dim, gcn_dims, mlp_dims,
-                 max_size=30, aa_dim=20, ss_dim=7, p=0.99, adj_type='tril', dropout=0.1, weight_init=5e-10, device='cpu'):
+                 max_size=30, aa_dim=20, ss_dim=7, p=0.99, dropout=0.1, weight_init=5e-10, device='cpu'):
         """
         Initialize the class.
 
@@ -43,8 +43,6 @@ class ProDAAE(nn.Module):
             The number of secondary structure types. The default is 7.
         p : float in [0,1], optional
             The probability of perturbation for the input. The default is 0.99.
-        adj_type : str, optional
-            How the adjacency is to be computed. Valid options are ['tril','seq']. The default is 'tril'.
         dropout : float in [0,1], optional
             The dropout probability. The default is 0.1
         weight_init : float, optional
@@ -60,7 +58,6 @@ class ProDAAE(nn.Module):
         self.aa_dim = aa_dim
         self.ss_dim = ss_dim
         self.p = p
-        self.adj_type = adj_type
         self.weight_init = weight_init
         self.device = device
 
@@ -112,24 +109,24 @@ class ProDAAE(nn.Module):
         ce_loss_aa = F.cross_entropy(out_x_aa.permute(0,2,1), x[:,:,0].long())
         ce_loss_ss = F.cross_entropy(out_x_ss.permute(0,2,1), x[:,:,1].long())
         # Weight regression
-        if self.adj_type == 'tril':
-            triu_idx = torch.triu_indices(self.max_size,self.max_size)
-            mse_loss_edge = F.mse_loss(out_w_adj[:,~triu_idx], w_adj[:,~triu_idx])
-        elif self.adj_type == 'seq':
-            mse_loss_edge = F.mse_loss(adj_to_seq(out_w_adj), adj_to_seq(w_adj))
+        adj_seq_tgt = w_adj - torch.triu(w_adj)
+        adj_seq_out = out_w_adj - torch.triu(out_w_adj)
+        mse_loss_edge = F.mse_loss(adj_seq_out, adj_seq_tgt)
         # Node existence classification
         ce_loss_exist = F.cross_entropy(out_mask.permute(0,2,1), mask.long())
         # Discriminator loss
         zeros = torch.zeros(z.shape[0],z.shape[1],1, device=self.device)
         ones = torch.ones(z.shape[0],z.shape[1],1, device=self.device)
         d_loss = F.binary_cross_entropy(d_z, zeros) + F.binary_cross_entropy(d_zn, ones)
+        g_loss = F.binary_cross_entropy(d_z, ones)
         # Return full loss
-        return {'AA loss': ce_loss_aa,
-                'SS loss': ce_loss_ss,
-                'A_w loss': mse_loss_edge,
-                'Mask loss': ce_loss_exist,
-                'Adv loss': l_adv*d_loss,
-                'Full loss': ce_loss_aa + ce_loss_ss + mse_loss_edge + ce_loss_exist + l_adv*d_loss}
+        return {'aa_loss': ce_loss_aa,
+                'ss_loss': ce_loss_ss,
+                'a_w_loss': mse_loss_edge,
+                'mask_loss': ce_loss_exist,
+                'G_loss': g_loss,
+                'D_loss': d_loss,
+                'rec_loss': ce_loss_aa + ce_loss_ss + mse_loss_edge + ce_loss_exist + l_adv*g_loss}
 
     def encode(self, x, w_adj, mask):
         """
@@ -262,14 +259,16 @@ class ProDAAE(nn.Module):
                 d_zn = torch.sigmoid(self.discriminator(zn))
                 # Loss
                 losses = self._loss(x, w_adj, mask, out_x_aa, out_x_ss, out_adj_w, out_mask, z, d_z, d_zn, l_adv)
-                loss = losses['Full loss']
-                loss.backward()
+                loss_rec = losses['rec_loss']
+                loss_disc = losses['D_loss']
+                loss_rec.backward(retain_graph=True)
+                loss_disc.backward()
                 optimizer_vae.step()
                 optimizer_adv.step()
             scheduler_vae.step()
             scheduler_adv.step()
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
-                self.checkpoint(epoch, [optimizer_vae,optimizer_adv], [scheduler_vae,scheduler_adv], loss)
+                self.checkpoint(epoch, [optimizer_vae,optimizer_adv], [scheduler_vae,scheduler_adv], loss_rec)
             if verbose:
                 progress = 'epochs: ' + str(epoch+1) + '/' + str(n_epochs) + ', '
                 for key in losses:
@@ -307,7 +306,7 @@ class ProDAAE(nn.Module):
         d_zn = torch.sigmoid(self.discriminator(zn))
         # Compute the loss
         losses = self._loss(x, w_adj, mask, out_x_aa, out_x_ss, out_adj_w, out_mask, z, d_z, d_zn, l_adv)
-        return {'Loss': losses['Full loss']}
+        return {'Loss': losses['rec_loss']}
 
     def generate(self, verbose=False):
         """
@@ -330,6 +329,10 @@ class ProDAAE(nn.Module):
         gen_x_aa = torch.softmax(gen_x_aa, dim=2)
         gen_x_ss = torch.softmax(gen_x_ss, dim=2)
         gen_mask = torch.softmax(gen_mask, dim=2)
+        # Reshape and reformat adjacency
+        gen_w_adj = gen_w_adj.view(gen_w_adj.shape[1],gen_w_adj.shape[2])
+        gen_w_adj = gen_w_adj - torch.triu(gen_w_adj)
+        gen_w_adj = gen_w_adj + torch.transpose(gen_w_adj, 0,1)
         # Get the nodes to generate and define the total number of nodes
         nodes, N = [0 for _ in range(self.max_size)], 0
         for i in range(self.max_size):
@@ -343,17 +346,18 @@ class ProDAAE(nn.Module):
         idx = 0
         for i in range(self.max_size):
             if nodes[i] == 1:
-                x_pred[idx,0] = torch.argmax(gen_x_aa[0,i])
-                x_pred[idx,1] = torch.argmax(gen_x_ss[0,i])
+                x_pred[idx,0] = torch.argmax(gen_x_aa[0,i,1:])+1
+                x_pred[idx,1] = torch.argmax(gen_x_ss[0,i,1:])+1
                 idx += 1
         # Fill the distance matrix prediction
         idx_i = 0
-        for i in range(1,self.max_size):
+        for i in range(self.max_size):
             if nodes[i] == 1:
                 idx_j = 0
-                for j in range(i):
+                for j in range(self.max_size):
                     if nodes[j] == 1:
-                        dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = min(1/gen_w_adj[i,j], 12)
+                        if i != j:
+                            dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = min(1/gen_w_adj[i,j], 12)
                         idx_j += 1
                 idx_i += 1
         return x_pred.long(), dist_pred.float()
