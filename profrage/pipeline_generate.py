@@ -128,8 +128,8 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
             for key in loss:
                 means[key] = np.mean(loss[key])
                 vars[key] = np.var(loss[key])
-            best_params.append((means['Generator'], means['Discriminator'], means['Reward'],
-                                vars['Generator'], vars['Discriminator'], vars['Reward'],
+            best_params.append((means['Discriminator'], means['Generator'], means['Reward'],
+                                vars['Discriminator'], vars['Generator'], vars['Reward'],
                                 param_config, train_config))
         else:
             mean_loss = np.mean(loss['Loss'])
@@ -137,14 +137,11 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
             best_params.append((mean_loss, var_loss, param_config, train_config))
     if verbose:
         progress_bar.end()
-    if model_type == 'ProGAN':
-        best_configs = sorted(best_params, key=lambda x: x[0], reverse=True)[0:args.cv_best_n_to_show]
-    else:
-        best_configs = sorted(best_params, key=lambda x: x[0])[0:args.cv_best_n_to_show]
+    best_configs = sorted(best_params, key=lambda x: x[0])[0:args.cv_best_n_to_show]
     for best_config in best_configs:
         if model_type == 'ProGAN':
-            print(f'Average Generator: {best_config[0]}, Variance Generator: {best_config[3]}, '
-                  f'Average Discriminator: {best_config[1]}, Variance Discriminator: {best_config[4]}, '
+            print(f'Average Discriminator: {best_config[0]}, Variance Discriminator: {best_config[3]}, '
+                  f'Average Generator: {best_config[1]}, Variance Generator: {best_config[4]}, '
                   f'Average Reward: {best_config[2]}, Variance Reward: {best_config[5]}, '
                   f'\n Model Params.: {best_config[6]}, Training Params.: {best_config[7]}')
         else:
