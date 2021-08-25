@@ -131,7 +131,8 @@ class ProGAN(nn.Module):
             state['loss_'+str(i)] = losses[i]
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, n_critic=5, lr=1e-3, l_wrl=0.6, w_clamp=0.01, decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
+    def fit(self, loader, n_epochs, n_critic=5, lr=1e-3, l_wrl=0.6, w_clamp=0.01, decay_milestones=[400,1000], decay=0.1,
+            patience=5, tol=0.01, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -153,6 +154,10 @@ class ProGAN(nn.Module):
             The milestones at which to aply weight decay. The default is [400,1000].
         decay : float in [0,1], optional
             The weight decay. The default is 0.1.
+        patience : int, optional
+            The patience for early-stopping. The default is 5.
+        tol : float, optional
+            The tolerance for early-stopping. The default is 0.01.
         checkpoint : int, optional
             The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
@@ -172,6 +177,8 @@ class ProGAN(nn.Module):
             scheduler_reward = MultiStepLR(optimizer_reward, milestones=decay_milestones, gamma=decay)
         # Cache for reward function
         reward_fun_cache = {}
+        last_grl_loss, last_d_loss = None, None
+        es_count = 0
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
                 # Get the data
@@ -226,6 +233,18 @@ class ProGAN(nn.Module):
                 else:
                     loss_grl.backward()
                     optimizer_generator.step()
+            # Early-stopping
+            if last_grl_loss is None:
+                last_grl_loss, last_d_loss = loss_grl, loss_d
+            if es_count == patience:
+                if abs(loss_grl-last_grl_loss) < tol or abs(loss_d-last_d_loss) < tol:
+                    return
+                else:
+                    last_grl_loss, last_d_loss = loss_grl, loss_d
+                    es_count = 0
+            else:
+                es_count += 1
+            # Weight decay
             scheduler_generator.step()
             scheduler_critic.step()
             if self.rl:
@@ -320,6 +339,10 @@ class ProGAN(nn.Module):
         gen_x, gen_w_adj, gen_mask = self.generator(z)
         # Softmax on classes
         gen_mask = torch.softmax(gen_mask, dim=1)
+        # Reshape and reformat adjacency
+        gen_w_adj = gen_w_adj.view(gen_w_adj.shape[1],gen_w_adj.shape[2])
+        gen_w_adj = gen_w_adj - torch.triu(gen_w_adj)
+        gen_w_adj = gen_w_adj + torch.transpose(gen_w_adj, 0,1)
         # Refine the generated data
         nodes, N = [0 for _ in range(self.max_size)], 0
         for i in range(self.max_size):
@@ -338,10 +361,10 @@ class ProGAN(nn.Module):
                 idx += 1
         # Fill the distance matrix prediction
         idx_i = 0
-        for i in range(1,self.max_size):
+        for i in range(self.max_size):
             if nodes[i] == 1:
                 idx_j = 0
-                for j in range(i):
+                for j in range(self.max_size):
                     if nodes[j] == 1:
                         if i != j:
                             dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = min(1/gen_w_adj[i,j], 12)

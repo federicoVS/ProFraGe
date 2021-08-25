@@ -93,7 +93,7 @@ class GANDiscriminator(nn.Module):
         out : torch.Tensor
             The output.
         """
-        out = F.dropout(self.conv_layer(x, w_adj.clone(), mask=mask.clone()), p=self.dropout)
+        out = F.dropout(self.conv_layer(x, w_adj.clone(), mask=mask.clone(), activation=F.leaky_relu), p=self.dropout)
         out = self.agg_layer(out)
         out = activation(out) if activation is not None else out
         return out
@@ -313,7 +313,7 @@ class DGCLayer(nn.Module):
         for in_dim, out_dim in zip(dims, dims[1:]):
             self.dgc_layers.append(gnn.DenseGraphConv(in_dim, out_dim))
 
-    def forward(self, x, w_adj, mask=None):
+    def forward(self, x, w_adj, mask=None, activation=F.relu):
         """
         Compute the forward pass.
 
@@ -334,5 +334,5 @@ class DGCLayer(nn.Module):
         out = x
         for dgc_layer in self.dgc_layers:
             out = dgc_layer(out, w_adj, mask=mask)
-            out = F.relu(out)
+            out = activation(out)
         return out

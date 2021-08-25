@@ -203,7 +203,8 @@ class ProDAAE(nn.Module):
         state['loss'] = loss
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, lr=1e-3, l_adv=1, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
+    def fit(self, loader, n_epochs, lr=1e-3, l_adv=1, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1,
+            patience=5, tol=0.01, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -223,6 +224,10 @@ class ProDAAE(nn.Module):
             The milestones at which to aply weight decay. The default is [400,1000].
         decay : float in [0,1], optional
             The weight decay. The default is 0.1.
+        patience : int, optional
+            The patience for early-stopping. The default is 5.
+        tol : float, optional
+            The tolerance for early-stopping. The default is 0.01.
         checkpoint : int, optional
             The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
@@ -237,6 +242,8 @@ class ProDAAE(nn.Module):
         optimizer_adv = Adam(self.discriminator.parameters(), lr=lr, betas=betas)
         scheduler_vae = MultiStepLR(optimizer_vae, milestones=decay_milestones, gamma=decay)
         scheduler_adv = MultiStepLR(optimizer_adv, milestones=decay_milestones, gamma=decay)
+        last_loss_rec = None
+        es_count = 0
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
                 x, w_adj, mask = data['x'], data['w_adj'], data['mask']
@@ -265,6 +272,18 @@ class ProDAAE(nn.Module):
                 loss_disc.backward()
                 optimizer_vae.step()
                 optimizer_adv.step()
+            # Early-stopping
+            if last_loss_rec is None:
+                last_loss_rec = loss_rec
+            if es_count == patience:
+                if abs(loss_rec-last_loss_rec) < tol:
+                    return
+                else:
+                    last_loss_rec = loss_rec
+                    es_count = 0
+            else:
+                es_count += 1
+            # Weight decay
             scheduler_vae.step()
             scheduler_adv.step()
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:

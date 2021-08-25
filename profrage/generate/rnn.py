@@ -106,7 +106,8 @@ class ProRNN(nn.Module):
         state['loss'] = loss
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, num_epochs, lr=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
+    def fit(self, loader, num_epochs, lr=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1,
+            patience=5, tol=0.01, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -124,6 +125,10 @@ class ProRNN(nn.Module):
             The list of milestones at which to decay the learning rate. The default is [400,1000].
         decay : float in [0,1], optional
             The decay of to apply to the learning rate. The default is 0.3.
+        patience : int, optional
+            The patience for early-stopping. The default is 5.
+        tol : float, optional
+            The tolerance for early-stopping. The default is 0.01.
         checkpoint : int, optional
             The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
@@ -139,6 +144,8 @@ class ProRNN(nn.Module):
         scheduler_graph = MultiStepLR(optimizer_graph, milestones=decay_milestones, gamma=decay)
         scheduler_node = MultiStepLR(optimizer_node, milestones=decay_milestones, gamma=decay)
         scheduler_edge = MultiStepLR(optimizer_edge, milestones=decay_milestones, gamma=decay)
+        last_loss = None
+        es_count = 0
         for epoch in range(num_epochs):
             for i, (data) in enumerate(loader):
                 self.f_trans.zero_grad()
@@ -212,6 +219,18 @@ class ProRNN(nn.Module):
                 optimizer_graph.step()
                 optimizer_node.step()
                 optimizer_edge.step()
+            # Early-stopping
+            if last_loss is None:
+                last_loss = loss
+            if es_count == patience:
+                if abs(loss-last_loss) < tol:
+                    return
+                else:
+                    last_loss = loss
+                    es_count = 0
+            else:
+                es_count += 1
+            # Weight decay
             scheduler_graph.step()
             scheduler_node.step()
             scheduler_edge.step()
