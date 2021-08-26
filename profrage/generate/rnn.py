@@ -355,5 +355,6 @@ class ProRNN(nn.Module):
             for i in range(max_num_nodes):
                 for j in range(max_num_nodes):
                     if i != j:
-                        dist_pred[b,i,j] = min(1/w_adj_pred[b,i,j], 12)
+                        min_dist = 4 if abs(i-j) == 1 else 12
+                        dist_pred[b,i,j] = min(1/w_adj_pred[b,i,j], min_dist)
         return x_pred, dist_pred
