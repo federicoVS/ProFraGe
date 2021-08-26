@@ -131,8 +131,7 @@ class ProGAN(nn.Module):
             state['loss_'+str(i)] = losses[i]
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, n_critic=5, lr=1e-3, l_wrl=0.6, w_clamp=0.01, decay_milestones=[400,1000], decay=0.1,
-            patience=5, tol=0.01, checkpoint=500, verbose=False):
+    def fit(self, loader, n_epochs, n_critic=5, lr=1e-3, l_wrl=0.6, w_clamp=0.01, decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -154,10 +153,6 @@ class ProGAN(nn.Module):
             The milestones at which to aply weight decay. The default is [400,1000].
         decay : float in [0,1], optional
             The weight decay. The default is 0.1.
-        patience : int, optional
-            The patience for early-stopping. The default is 5.
-        tol : float, optional
-            The tolerance for early-stopping. The default is 0.01.
         checkpoint : int, optional
             The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
@@ -177,8 +172,6 @@ class ProGAN(nn.Module):
             scheduler_reward = MultiStepLR(optimizer_reward, milestones=decay_milestones, gamma=decay)
         # Cache for reward function
         reward_fun_cache = {}
-        last_grl_loss, last_d_loss = None, None
-        es_count = 0
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
                 # Get the data
@@ -233,17 +226,6 @@ class ProGAN(nn.Module):
                 else:
                     loss_grl.backward()
                     optimizer_generator.step()
-            # Early-stopping
-            if last_grl_loss is None:
-                last_grl_loss, last_d_loss = loss_grl, loss_d
-            if es_count == patience:
-                if abs(loss_grl-last_grl_loss) < tol or abs(loss_d-last_d_loss) < tol:
-                    return
-                else:
-                    last_grl_loss, last_d_loss = loss_grl, loss_d
-                    es_count = 0
-            else:
-                es_count += 1
             # Weight decay
             scheduler_generator.step()
             scheduler_critic.step()

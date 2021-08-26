@@ -162,8 +162,7 @@ class ProVAE(nn.Module):
         state['loss'] = loss
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, lr=1e-3, l_kld=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1,
-            patience=5, tol=0.01, checkpoint=500, verbose=False):
+    def fit(self, loader, n_epochs, lr=1e-3, l_kld=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -183,10 +182,6 @@ class ProVAE(nn.Module):
             The milestones at which to aply weight decay. The default is [400,1000].
         decay : float in [0,1], optional
             The weight decay. The default is 0.1.
-        patience : int, optional
-            The patience for early-stopping. The default is 5.
-        tol : float, optional
-            The tolerance for early-stopping. The default is 0.01.
         checkpoint : int, optional
             The epoch interval at which a checkpoint is created. The default is 500.
         verbose : bool, optional
@@ -198,8 +193,6 @@ class ProVAE(nn.Module):
         """
         optimizer = Adam(self.parameters(), lr=lr, betas=betas)
         scheduler = MultiStepLR(optimizer, milestones=decay_milestones, gamma=decay)
-        last_loss = None
-        es_count = 0
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
                 # Get the data
@@ -214,17 +207,6 @@ class ProVAE(nn.Module):
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-            # Early-stopping
-            if last_loss is None:
-                last_loss = loss
-            if es_count == patience:
-                if abs(loss-last_loss) < tol:
-                    return
-                else:
-                    last_loss = loss
-                    es_count = 0
-            else:
-                es_count += 1
             # Weight decay
             scheduler.step()
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
