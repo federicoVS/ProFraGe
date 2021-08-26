@@ -134,7 +134,7 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
                                 vars['Discriminator'], vars['Generator'], vars['Reward'],
                                 param_config, train_config))
         else:
-            mean_loss = np.median(loss['Loss'])
+            mean_loss = np.mean(loss['Loss'])
             var_loss = np.var(loss['Loss'])
             best_params.append((mean_loss, var_loss, param_config, train_config))
     if verbose:
@@ -147,7 +147,7 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
                   f'Average Reward: {best_config[2]}, Variance Reward: {best_config[5]}, '
                   f'\n Model Params.: {best_config[6]}, Training Params.: {best_config[7]}')
         else:
-            print(f'Median: {best_config[0]}, Variance: {best_config[1]}, \n Model Params.: {best_config[2]}, Training Params.: {best_config[3]}')
+            print(f'Average: {best_config[0]}, Variance: {best_config[1]}, \n Model Params.: {best_config[2]}, Training Params.: {best_config[3]}')
 
 def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, dataset_id=0, model_id=0, data_type='graph', data_mode='sparse', train=True, verbose=False):
     if verbose:

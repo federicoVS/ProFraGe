@@ -70,3 +70,36 @@ def seq_to_adj(adj_seq, device='cpu'):
             for j in range(n):
                 adj[b,i,j] = adj[b,j,i] = adj_seq[b,i,j]
     return adj
+
+def clipping_dist(delta):
+    """
+    Returns the average distance between residues i and j, based on experimental data.
+
+    Parameters
+    ----------
+    delta : int
+        The delta between residue indexes i and j.
+
+    Returns
+    -------
+    float
+        The average distance.
+    """
+    if delta == 1:
+        return 4
+    elif delta == 2:
+        return 6
+    elif delta == 3:
+        return 7.5
+    elif delta == 4:
+        return 8.5
+    elif delta == 5:
+        return 10
+    elif delta == 6:
+        return 10.5
+    elif delta == 7:
+        return 11
+    elif delta == 8:
+        return 12
+    else:
+        return 12.5

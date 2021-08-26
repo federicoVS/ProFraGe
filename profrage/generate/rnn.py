@@ -9,7 +9,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 from generate.layers import GRULayer, MLPLayer
-from generate.utils import seq_to_adj
+from generate.utils import seq_to_adj, clipping_dist
 
 class ProRNN(nn.Module):
     """
@@ -355,6 +355,5 @@ class ProRNN(nn.Module):
             for i in range(max_num_nodes):
                 for j in range(max_num_nodes):
                     if i != j:
-                        min_dist = 4 if abs(i-j) == 1 else 12
-                        dist_pred[b,i,j] = min(1/w_adj_pred[b,i,j], min_dist)
+                        dist_pred[b,i,j] = min(1/w_adj_pred[b,i,j], clipping_dist(abs(i-j)))
         return x_pred, dist_pred

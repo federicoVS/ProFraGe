@@ -4,6 +4,7 @@ from torch.optim import RMSprop
 from torch.optim.lr_scheduler import MultiStepLR
 
 from generate.layers import GANGenerator, GANDiscriminator
+from generate.utils import clipping_dist
 
 class ProGAN(nn.Module):
     """
@@ -349,8 +350,7 @@ class ProGAN(nn.Module):
                 for j in range(self.max_size):
                     if nodes[j] == 1:
                         if i != j:
-                            min_dist = 4 if abs(idx_i-idx_j) == 1 else 12
-                            dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = min(1/gen_w_adj[i,j], min_dist)
+                            dist_pred[idx_i,idx_j] = dist_pred[idx_j,idx_i] = min(1/gen_w_adj[i,j], clipping_dist(abs(idx_i-idx_j)))
                         idx_j += 1
                 idx_i += 1
         return x_pred.long(), dist_pred.float()
