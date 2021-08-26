@@ -150,8 +150,6 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
             print(f'Average: {best_config[0]}, Variance: {best_config[1]}, \n Model Params.: {best_config[2]}, Training Params.: {best_config[3]}')
 
 def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, dataset_id=0, model_id=0, data_type='graph', data_mode='sparse', train=True, verbose=False):
-    # Set seed
-    torch.manual_seed(1000)
     if verbose:
         print('Processing the data...')
     # Get the training proteins
@@ -175,8 +173,11 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
     # Get the test data
     test_dataset = GraphDataset(dataset_dir, 0, 'test', test_proteins, pdb_test, stride_dir, **args.test_dataset)
     # Save the datasets
-    train_dataset.save()
+    if data_type == 'graph':
+        train_dataset.save()
     test_dataset.save()
+    # Set seed (after dataset sampling)
+    torch.manual_seed(1000)
     # Define the loaders
     if data_mode == 'dense' or data_type == 'rnn':
         train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
