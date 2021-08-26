@@ -22,6 +22,8 @@ from utils.io import get_files, from_pdb
 from utils.ProgressBar import ProgressBar
 
 def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir, dataset_id=0, model_id=0, data_type='graph', data_mode='sparse', verbose=False):
+    # Set seed
+    torch.manual_seed(1000)
     if verbose:
         print('Processing the data...')
     # Get the training proteins
@@ -148,6 +150,8 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
             print(f'Average: {best_config[0]}, Variance: {best_config[1]}, \n Model Params.: {best_config[2]}, Training Params.: {best_config[3]}')
 
 def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, dataset_id=0, model_id=0, data_type='graph', data_mode='sparse', train=True, verbose=False):
+    # Set seed
+    torch.manual_seed(1000)
     if verbose:
         print('Processing the data...')
     # Get the training proteins
@@ -311,8 +315,6 @@ if __name__ == '__main__':
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
     # Parse arguments
     args_parsed = arg_parser.parse_args()
-    # Set seed
-    torch.manual_seed(1000)
     # Choose pipeline
     if args_parsed.mode == 'grid_cv':
         _grid_cv(args_parsed.model, args_parsed.pdb_train, args_parsed.pdb_val, args_parsed.stride_dir, args_parsed.dataset_dir,

@@ -244,12 +244,17 @@ class ProDAAE(nn.Module):
         scheduler_adv = MultiStepLR(optimizer_adv, milestones=decay_milestones, gamma=decay)
         last_loss_rec = None
         es_count = 0
+        noise_cache = {}
         for epoch in range(n_epochs):
             for i, data in enumerate(loader):
                 x, w_adj, mask = data['x'], data['w_adj'], data['mask']
                 # Add noise (and put on the device in the process)
-                x_noised = self._noise_x(x)
-                w_adj_noised = self._noise_w_adj(w_adj)
+                if i not in noise_cache:
+                    x_noised = self._noise_x(x)
+                    w_adj_noised = self._noise_w_adj(w_adj)
+                    noise_cache[i] = (x_noised, w_adj_noised)
+                else:
+                    x_noised, w_adj_noised = noise_cache[i]
                 # Put (original) data on device
                 x, w_adj, mask = x.to(self.device), w_adj.to(self.device), mask.to(self.device)
                 # Start process
