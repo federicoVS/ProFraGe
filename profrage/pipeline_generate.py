@@ -309,7 +309,6 @@ if __name__ == '__main__':
     arg_parser.add_argument('--model_id', type=int, default=0, help='The index of the model instance, which is used to save its weights. The default is 0.')
     arg_parser.add_argument('--data_type', type=str, default='graph', help='The type of the dataset. Valid types are [graph,rnn]. The default is graph.')
     arg_parser.add_argument('--data_mode', type=str, default='sparse', help='The mode of the dataset. Valid types are [sparse,dense]. The default is sparse.')
-    arg_parser.add_argument('--quality', type=str, default='qcp', help='The quality metric to use to assess the generated proteins. Valid measurements are [mmd,qcp]. The default is qcp.')
     arg_parser.add_argument('--train', type=bool, default=True, help='Whether to train the model. If not, then the model weights are loaded. This parameter has only effect when mode=full. The default is True.')
     arg_parser.add_argument('--n_generate', type=int, default=10, help='The number of graphs to generate. This has only effect when mode=generate. The default is 10.')
     arg_parser.add_argument('--verbose', type=bool, default=False, help='Whether to print progress information. The default is False.')
@@ -323,7 +322,7 @@ if __name__ == '__main__':
     elif args_parsed.mode == 'full':
         _full(args_parsed.model, args_parsed.pdb_train, args_parsed.pdb_test, args_parsed.stride_dir, args_parsed.dataset_dir, args_parsed.model_dir,
               dataset_id=args_parsed.dataset_id, model_id=args_parsed.model_id, data_type=args_parsed.data_type, data_mode=args_parsed.data_mode,
-              quality=args_parsed.quality, train=args_parsed.train, verbose=args_parsed.verbose)
+              train=args_parsed.train, verbose=args_parsed.verbose)
     elif args_parsed.mode == 'generate':
         _generate(args_parsed.model, args_parsed.model_dir, model_id=args_parsed.model_id, n_generate=args_parsed.n_generate)
     else:

@@ -111,7 +111,7 @@ if __name__ == '__main__':
     arg_parser.add_argument('--max_size', type=int, default=30, help='The maximum number of amino acids in a fragment. The default is 30.')
     arg_parser.add_argument('--contacts', type=str, default='dist', help='How to measure whether two amino acids are in contact. Valid values are [cmap, dist]. The default is `dist`.')
     arg_parser.add_argument('--bb_strength', type=float, default=0.55, help='The offset to add to backbone connections to the Leiden algorithm. The default is 0.55.')
-    arg_parser.add_argument('--n_iters', type=int, default=2, help='The number of iterations in the Leiden algorithm. The default is 22.')
+    arg_parser.add_argument('--n_iters', type=int, default=2, help='The number of iterations in the Leiden algorithm. The default is 2.')
     arg_parser.add_argument('--f_thr', type=float, default=0.1, help='The CMAP threshold. The default is 0.1.')
     arg_parser.add_argument('--lower_size', type=int, default=12, help='The minimum number of amino acids in a fragment. The default is 12.')
     arg_parser.add_argument('--first_score_thr', type=float, default=0.425, help='The score threshold for the Stride-level clustering. Valid range is [0,1]. The default is 0.425.')
