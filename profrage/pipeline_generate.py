@@ -266,8 +266,6 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
         mmd_file.write(str(mmd_scores[i]))
     mmd_file.close()
     if verbose:
-        print(f'QCP scores: {qcp_scores}')
-        print(f'MMD scores: {mmd_scores}')
         print(f'QCP -> Average: {qcp_score_mean}, Variance: {qcp_score_var}, Minimum: {qcp_min}')
         print(f'MMD -> Average: {mmd_mean}, Variance: {mmd_var}, Minimum: {mmd_min}')
 
