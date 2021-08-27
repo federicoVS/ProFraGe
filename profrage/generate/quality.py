@@ -116,7 +116,7 @@ class QCP:
         target_proteins : list of Bio.PDB.Structure
             The list of target proteins.
         """
-        self.pred_coords = pred_coords.detach().cpu().numpy()
+        self.pred_coords = pred_coords
         self.target_proteins = target_proteins
 
     def _get_target_ca_atoms_coords(self):
