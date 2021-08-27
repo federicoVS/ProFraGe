@@ -167,7 +167,8 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
         train_dataset = GraphDataset(dataset_dir, dataset_id, 'train', train_proteins, pdb_train, stride_dir, **args.graph_dataset)
     elif data_type == 'rnn':
         train_dataset = RNNDataset_Feat(dataset_dir, dataset_id, 'train', train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
-        train_dataset = train_dataset.sample()
+        if train:
+            train_dataset = train_dataset.sample()
     if verbose:
         print(f'Training set has {len(train_dataset)} samples.')
     # Get the test data
