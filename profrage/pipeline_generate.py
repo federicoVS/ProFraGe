@@ -229,6 +229,8 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
         print('Generating...')
     model.eval()
     x_pred, dist_pred = model.generate(**eval_params)
+    if model_type == 'ProRNN':
+        x_pred, dist_pred = x_pred[0], dist_pred[0]
     # Reconstructing the fragment
     if verbose:
         print('Reconstructing the fragment...')
@@ -285,7 +287,8 @@ def _generate(model_type, model_dir, model_id=0, n_generate=10):
     for i in range(n_generate):
         if model_type == 'ProRNN':
             for j in range(12,30):
-                x_gen, dist_gen = model.generate(j)
+                x_gen, dist_gen = model.generate(1, j)
+                x_gen, dist_gen = x_gen[0], dist_gen[0]
                 coords = gram.reconstruct(dist_gen)
                 fb = FragmentBuilder('fragment_' + str(j) + str(i), x_gen, coords)
                 fb.build(out_dir=model_root)
