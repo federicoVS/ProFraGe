@@ -244,10 +244,11 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
         print('Assessing QCP quality...')
     gram = GramReconstruction(args.device)
     X = gram.reconstruct(dist_pred)
+    n_nodes = X.shape[0]
     qcp = QCP(X, test_proteins)
     qcp_scores = qcp.superimpose()
     qcp_min, qcp_score_mean, qcp_score_var = np.min(qcp_scores), np.mean(qcp_scores), np.var(qcp_scores)
-    qcp_file = open('qcp', 'a')
+    qcp_file = open('qcp_' + str(n_nodes), 'a')
     for i in range(qcp_scores.shape[0]):
         qcp_file.write(str(qcp_scores[i]))
     qcp_file.close()
@@ -262,7 +263,7 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
     mmd = MMD(pred_graph, target_graphs)
     mmd_scores = mmd.compare_graphs()
     mmd_min, mmd_mean, mmd_var = np.min(mmd_scores), np.mean(mmd_scores), np.var(mmd_scores)
-    mmd_file = open('mmd', 'w')
+    mmd_file = open('mmd_' + str(n_nodes))
     for i in range(mmd_scores.shape[0]):
         mmd_file.write(str(mmd_scores[i]))
     mmd_file.close()
