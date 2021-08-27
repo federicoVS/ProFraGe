@@ -34,7 +34,7 @@ class GramReconstruction:
 
     def reconstruct(self, D):
         """
-        Reconstructs the coordinates based on the given distance matrix.
+        Multidimensional scaling algorithm to reconstruct the data.
 
         Parameters
         ----------
@@ -46,17 +46,27 @@ class GramReconstruction:
         X : numpy.ndarray
             The coordinate matrix.
         """
+        # Get number of points
         n = D.shape[0]
-        M = torch.zeros_like(D).to(self.device)
+        # Set up D^2
         for i in range(n):
             for j in range(n):
-                M[i,j] = (D[0,j]**2 + D[0,i]**2 + - D[i,j]**2)/2
-        M = M.detach().cpu().numpy()
-        u, s, vh = np.linalg.svd(M)
+                D[i,j] = D[i,j]**2
+        # Define C
+        C = torch.eye(n).to(self.device) - (1/n)*torch.ones(n,n).to(self.device)
+        # Compute B
+        B = -0.5*torch.matmul(torch.matmul(C, D), C)
+        B = B.detach().cpu().numpy()
+        # Compute eigen-decomposition of B
+        w, v = np.linalg.eig(B)
+        # Sort eigenvectors and eigenvalues
+        eigen_idx = np.argsort(w)[::-1]
+        w, v, = w[eigen_idx], v[eigen_idx]
+        # Compute X
         X = np.zeros(shape=(n,3))
         for i in range(n):
             for j in range(3):
-                X[i,j] = u[i,j]*np.sqrt(s[j])
+                X[i,j] = v[i,j]*np.sqrt(w[j])
         return X
 
 class FragmentBuilder:
