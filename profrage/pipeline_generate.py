@@ -139,7 +139,10 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
             best_params.append((mean_loss, var_loss, param_config, train_config))
     if verbose:
         progress_bar.end()
-    best_configs = sorted(best_params, key=lambda x: x[0])[0:args.cv_best_n_to_show]
+    if model_type == 'ProGAN':
+        best_configs = sorted(best_params, key=lambda x: abs(x[0]))[0:args.cv_best_n_to_show]
+    else:
+        best_configs = sorted(best_params, key=lambda x: x[0])[0:args.cv_best_n_to_show]
     for best_config in best_configs:
         if model_type == 'ProGAN':
             print(f'Average Discriminator: {best_config[0]}, Variance Discriminator: {best_config[3]}, '
