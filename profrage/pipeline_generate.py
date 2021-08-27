@@ -246,6 +246,10 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
     qcp = QCP(X, test_proteins)
     qcp_scores = qcp.superimpose()
     qcp_min, qcp_score_mean, qcp_score_var = np.min(qcp_scores), np.mean(qcp_scores), np.var(qcp_scores)
+    qcp_file = open('qcp', 'a')
+    for i in range(qcp_scores.shape[0]):
+        qcp_file.write(str(qcp_scores[i]))
+    qcp_file.close()
     if verbose:
         print('Assessing MMD quality...')
     pred_graph = (x_pred, dist_pred)
@@ -257,6 +261,10 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
     mmd = MMD(pred_graph, target_graphs)
     mmd_scores = mmd.compare_graphs()
     mmd_min, mmd_mean, mmd_var = np.min(mmd_scores), np.mean(mmd_scores), np.var(mmd_scores)
+    mmd_file = open('mmd', 'w')
+    for i in range(mmd_scores.shape[0]):
+        mmd_file.write(str(mmd_scores[i]))
+    mmd_file.close()
     if verbose:
         print(f'QCP scores: {qcp_scores}')
         print(f'MMD scores: {mmd_scores}')
