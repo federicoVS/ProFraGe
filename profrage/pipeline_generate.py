@@ -181,7 +181,8 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
         train_dataset.save()
     test_dataset.save()
     # Set seed (after dataset sampling)
-    torch.manual_seed(1000)
+    if train:
+        torch.manual_seed(1000)
     # Define the loaders
     if data_mode == 'dense' or data_type == 'rnn':
         train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
