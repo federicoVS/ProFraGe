@@ -304,10 +304,8 @@ class ProDAAE(nn.Module):
         z = reparametrize(mu, log_var, self.device)
         out_x_aa, out_x_ss, out_adj_w, out_mask = self.decode(z)
         zn = torch.randn_like(z)
-        d_z = torch.sigmoid(self.discriminator(z.detach()))
-        d_zn = torch.sigmoid(self.discriminator(zn))
         # Compute the loss
-        losses = self._loss(x, w_adj, mask, out_x_aa, out_x_ss, out_adj_w, out_mask, z, d_z, d_zn, l_adv)
+        losses = self._loss(x, w_adj, mask, out_x_aa, out_x_ss, out_adj_w, out_mask, z, l_adv)
         return {'Loss': losses['rec_loss']}
 
     def generate(self, verbose=False):
