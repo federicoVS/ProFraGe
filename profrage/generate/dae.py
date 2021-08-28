@@ -104,7 +104,7 @@ class ProDAAE(nn.Module):
                 w_adj_noised[b,n,n] = 0
         return w_adj_noised.to(self.device)
 
-    def _loss(self, x, w_adj, mask, out_x_aa, out_x_ss, out_w_adj, out_mask, z, d_z, d_zn, l_adv):
+    def _loss(self, x, w_adj, mask, out_x_aa, out_x_ss, out_w_adj, out_mask, z, l_adv):
         # Node classification/regression
         ce_loss_aa = F.cross_entropy(out_x_aa.permute(0,2,1), x[:,:,0].long())
         ce_loss_ss = F.cross_entropy(out_x_ss.permute(0,2,1), x[:,:,1].long())
@@ -114,11 +114,14 @@ class ProDAAE(nn.Module):
         mse_loss_edge = F.mse_loss(adj_seq_out, adj_seq_tgt)
         # Node existence classification
         ce_loss_exist = F.cross_entropy(out_mask.permute(0,2,1), mask.long())
-        # Discriminator loss
+        # Regularize latent space via discriminator (https://github.com/shentianxiao/text-autoencoders/blob/master/model.py, lines 155-160)
+        zn = torch.randn_like(z)
         zeros = torch.zeros(z.shape[0],z.shape[1],1, device=self.device)
         ones = torch.ones(z.shape[0],z.shape[1],1, device=self.device)
+        d_z = torch.sigmoid(self.discriminator(z))
+        d_zn = torch.sigmoid(self.discriminator(zn))
         d_loss = F.binary_cross_entropy(d_z, zeros) + F.binary_cross_entropy(d_zn, ones)
-        g_loss = F.binary_cross_entropy(d_z, ones)
+        g_loss = F.binary_cross_entropy(torch.sigmoid(self.discriminator(z)), ones)
         # Return full loss
         return {'aa_loss': ce_loss_aa,
                 'ss_loss': ce_loss_ss,
@@ -252,18 +255,13 @@ class ProDAAE(nn.Module):
                 x, w_adj, mask = x.to(self.device), w_adj.to(self.device), mask.to(self.device)
                 # Start process
                 optimizer_vae.zero_grad()
-                # optimizer_dec.zero_grad()
                 optimizer_adv.zero_grad()
                 # Encoder
                 _, mu, log_var = self.encode(x_noised, w_adj_noised, mask)
                 z = reparametrize(mu, log_var, self.device)
                 out_x_aa, out_x_ss, out_adj_w, out_mask = self.decode(z)
-                # Regularize latent space via discriminator (https://github.com/shentianxiao/text-autoencoders/blob/master/model.py, lines 155-160)
-                zn = torch.randn_like(z)
-                d_z = torch.sigmoid(self.discriminator(z.detach()))
-                d_zn = torch.sigmoid(self.discriminator(zn))
                 # Loss
-                losses = self._loss(x, w_adj, mask, out_x_aa, out_x_ss, out_adj_w, out_mask, z, d_z, d_zn, l_adv)
+                losses = self._loss(x, w_adj, mask, out_x_aa, out_x_ss, out_adj_w, out_mask, z, l_adv)
                 loss_rec = losses['rec_loss']
                 loss_disc = losses['D_loss']
                 loss_rec.backward(retain_graph=True)
