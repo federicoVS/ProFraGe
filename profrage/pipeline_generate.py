@@ -296,15 +296,15 @@ def _generate(model_type, model_dir, model_id=0, n_generate=10):
     model.load_state_dict(torch.load(model_root + 'model_state'))
     # Generate
     gram = GramReconstruction(args.device)
-    for i in range(n_generate):
-        if model_type == 'ProRNN':
-            for j in range(12,30):
-                x_gen, dist_gen = model.generate(1, j)
-                x_gen, dist_gen = x_gen[0], dist_gen[0]
-                coords = gram.reconstruct(dist_gen)
-                fb = FragmentBuilder('fragment_' + str(j) + str(i), x_gen, coords)
-                fb.build(out_dir=model_root)
-        else:
+    if model_type == 'ProRNN':
+        for j in range(12,30):
+            x_gen, dist_gen = model.generate(1, j)
+            x_gen, dist_gen = x_gen[0], dist_gen[0]
+            coords = gram.reconstruct(dist_gen)
+            fb = FragmentBuilder('fragment_' + str(j), x_gen, coords)
+            fb.build(out_dir=model_root)
+    else:
+        for i in range(n_generate):
             x_gen, dist_gen = model.generate()
             coords = gram.reconstruct(dist_gen)
             fb = FragmentBuilder('fragment_' + str(x_gen.shape[0]) + str(i), x_gen, coords)

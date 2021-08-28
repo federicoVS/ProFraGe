@@ -120,16 +120,14 @@ class ProDAAE(nn.Module):
         ones = torch.ones(z.shape[0],z.shape[1],1, device=self.device)
         d_z = torch.sigmoid(self.discriminator(z))
         d_zn = torch.sigmoid(self.discriminator(zn))
-        d_loss = F.binary_cross_entropy(d_z, zeros) + F.binary_cross_entropy(d_zn, ones)
-        g_loss = F.binary_cross_entropy(torch.sigmoid(self.discriminator(z)), ones)
+        adv_loss = F.binary_cross_entropy(d_z, zeros) + F.binary_cross_entropy(d_zn, ones)
         # Return full loss
         return {'aa_loss': ce_loss_aa,
                 'ss_loss': ce_loss_ss,
                 'a_w_loss': mse_loss_edge,
                 'mask_loss': ce_loss_exist,
-                'G_loss': g_loss,
-                'D_loss': d_loss,
-                'rec_loss': ce_loss_aa + ce_loss_ss + mse_loss_edge + ce_loss_exist + l_adv*g_loss}
+                'adv_loss': adv_loss,
+                'rec_loss': ce_loss_aa + ce_loss_ss + mse_loss_edge + ce_loss_exist - l_adv*adv_loss}
 
     def encode(self, x, w_adj, mask):
         """
@@ -263,11 +261,11 @@ class ProDAAE(nn.Module):
                 # Loss
                 losses = self._loss(x, w_adj, mask, out_x_aa, out_x_ss, out_adj_w, out_mask, z, l_adv)
                 loss_rec = losses['rec_loss']
-                loss_disc = losses['D_loss']
-                loss_rec.backward(retain_graph=True)
-                loss_disc.backward()
-                optimizer_vae.step()
+                loss_adv = losses['adv_loss']
+                loss_adv.backward(retain_graph=True)
+                loss_rec.backward()
                 optimizer_adv.step()
+                optimizer_vae.step()
             # Weight decay
             scheduler_vae.step()
             scheduler_adv.step()
