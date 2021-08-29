@@ -231,7 +231,7 @@ class ProVAE(nn.Module):
                 for key in losses:
                     progress += key + ': ' + str(losses[key].item()) + ', '
                 print(progress)
-                print('Validation Loss: ' + str(val_loss.item()))
+                print('Validation Loss: ' + str(val_loss))
                 print('--------------------------------------')
         print(f'Best epoch: {best_epoch}')
 
