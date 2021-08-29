@@ -186,7 +186,6 @@ def _full(model_type, pdb_train, pdb_val, pdb_test, stride_dir, dataset_dir, mod
     if train:
         if verbose:
             print('Training...')
-        model.train()
         model.fit(train_loader, val_loader, **train_params)
         torch.save(model.state_dict(), model_root + 'model_state')
     else:
@@ -259,7 +258,7 @@ def _generate(model_type, model_dir, model_id=0, n_generate=10):
     # Generate
     gram = GramReconstruction(args.device)
     if model_type == 'ProRNN':
-        for j in range(12,31):
+        for j in range(12,30):
             x_gen, dist_gen = model.generate(1, j)
             x_gen, dist_gen = x_gen[0], dist_gen[0]
             coords = gram.reconstruct(dist_gen)

@@ -162,7 +162,8 @@ class ProVAE(nn.Module):
         state['loss'] = loss
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, train_loader, val_loader, n_epochs, lr=1e-3, l_kld=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
+    def fit(self, train_loader, val_loader, n_epochs, lr=1e-3, l_kld=1e-3, betas=(0.9, 0.999),
+            patience=5, tol=0.01, decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -180,6 +181,10 @@ class ProVAE(nn.Module):
             The penalty to apply to the Kullback-Leibler loss, for stability reasons. The default is 1e-3.
         betas : (float,float), optional
             Coefficients used to compute averages of the gradient. The default is (0.9, 0.999).
+        patience : int, optional
+            The patience for early stopping. The default is 5.
+        tol : float, optional
+            The minimum improvement needed for early stopping. The default is 0.01.
         decay_milestones : list of int, optional
             The milestones at which to aply weight decay. The default is [400,1000].
         decay : float in [0,1], optional
@@ -196,6 +201,7 @@ class ProVAE(nn.Module):
         optimizer = Adam(self.parameters(), lr=lr, betas=betas)
         scheduler = MultiStepLR(optimizer, milestones=decay_milestones, gamma=decay)
         min_val_loss, best_epoch = 1e10, 0
+        last_val_loss, es_count = 0, 0
         for epoch in range(n_epochs):
             self.train()
             for i, data in enumerate(train_loader):
@@ -225,6 +231,15 @@ class ProVAE(nn.Module):
                 if val_loss < min_val_loss:
                     min_val_loss = val_loss
                     best_epoch = epoch
+            # Early stopping
+            if es_count == patience:
+                if val_loss - last_val_loss <= tol:
+                    if verbose:
+                        print(f'Early stopping loss: {val_loss}, Best epoch: {epoch+1}')
+                    return val_loss, epoch+1
+                else:
+                    es_count = 0
+            es_count += 1
             # Checkpoint
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 self.checkpoint(epoch, [optimizer], [scheduler], loss)
@@ -239,7 +254,8 @@ class ProVAE(nn.Module):
                 print(progress)
                 print('Validation Loss: ' + str(val_loss))
                 print('--------------------------------------')
-        print(f'Best validations loss: {min_val_loss}, Best epoch: {best_epoch+1}')
+        if verbose:
+            print(f'Best validations loss: {min_val_loss}, Best epoch: {best_epoch+1}')
         return min_val_loss, best_epoch+1
 
     def eval_loss(self, x, w_adj, mask, l_kld):
