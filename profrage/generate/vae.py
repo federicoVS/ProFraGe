@@ -213,10 +213,12 @@ class ProVAE(nn.Module):
             scheduler.step()
             self.eval()
             with torch.no_grad():
-                val_loss = 0
+                val_loss, counter = 0, 0
                 for i, data in enumerate(val_loader):
+                    counter += 1
                     x, w_adj, mask = data['x'], data['w_adj'], data['mask']
                     val_loss += self.eval_loss(x, w_adj, mask, l_kld)['Loss'].item()
+                val_loss /= counter
                 if val_loss < min_val_loss:
                     min_val_loss = val_loss
                     best_epoch = epoch
