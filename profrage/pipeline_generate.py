@@ -226,7 +226,7 @@ def _full(model_type, pdb_train, pdb_val, pdb_test, stride_dir, dataset_dir, mod
     for _, (data) in enumerate(test_loader):
         x, w_adj_edge, mask = data['x'], data['adj'] + data['edge'][:,:,:,1], data['mask']
         x, w_adj_edge = x.view(x.shape[1],x.shape[2]), w_adj_edge.view(w_adj_edge.shape[1],w_adj_edge.shape[2])
-        if min(sum(mask[0]),x_pred.shape[0])/max(sum(mask[0]),x_pred.shape[0]) >= 0.6:
+        if min(sum(mask[0]).item(),x_pred.shape[0])/max(sum(mask[0]).item(),x_pred.shape[0]) >= 0.6:
             target_graphs.append((x, w_adj_edge))
     mmd = MMD(pred_graph, target_graphs)
     mmd_scores = mmd.compare_graphs()
