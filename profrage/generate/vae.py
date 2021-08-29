@@ -201,7 +201,7 @@ class ProVAE(nn.Module):
         optimizer = Adam(self.parameters(), lr=lr, betas=betas)
         scheduler = MultiStepLR(optimizer, milestones=decay_milestones, gamma=decay)
         min_val_loss, best_epoch = 1e10, 0
-        last_val_loss, es_count = 0, 0
+        last_val_loss, es_count = 1e10, 0
         for epoch in range(n_epochs):
             self.train()
             for i, data in enumerate(train_loader):
