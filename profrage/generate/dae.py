@@ -298,6 +298,7 @@ class ProDAAE(nn.Module):
                         print(f'Early stopping loss: {val_loss}, Best epoch: {epoch+1}')
                     return val_loss, epoch+1
                 else:
+                    last_val_loss = val_loss
                     es_count = 0
             else:
                 es_count += 1
