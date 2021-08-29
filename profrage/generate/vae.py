@@ -162,14 +162,16 @@ class ProVAE(nn.Module):
         state['loss'] = loss
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, val_loader, n_epochs, lr=1e-3, l_kld=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
+    def fit(self, train_loader, val_loader, n_epochs, lr=1e-3, l_kld=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
         Train the model.
 
         Parameters
         ----------
-        loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
-            The data loader.
+        train_loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader for the training set.
+        val_loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader for the validation set.
         n_epochs : int
             The number of epochs to perform.
         lr : float, optional
@@ -196,7 +198,7 @@ class ProVAE(nn.Module):
         min_val_loss, best_epoch = 1e10, 0
         for epoch in range(n_epochs):
             self.train()
-            for i, data in enumerate(loader):
+            for i, data in enumerate(train_loader):
                 # Get the data
                 x, w_adj, mask = data['x'], data['w_adj'], data['mask']
                 # Put the data on the device
@@ -211,6 +213,7 @@ class ProVAE(nn.Module):
                 optimizer.step()
             # Weight decay
             scheduler.step()
+            # Validation step
             self.eval()
             with torch.no_grad():
                 val_loss, counter = 0, 0
@@ -222,20 +225,22 @@ class ProVAE(nn.Module):
                 if val_loss < min_val_loss:
                     min_val_loss = val_loss
                     best_epoch = epoch
+            # Checkpoint
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 self.checkpoint(epoch, [optimizer], [scheduler], loss)
+            # Print progress
             if verbose:
                 print('--------------------------------------')
-                print('Epoch: '  + str(epoch+1) + '/' + str(n_epochs))
+                print('Epoch: ' + str(epoch+1) + '/' + str(n_epochs))
                 print('Train Losses')
-                # progress = 'epochs: ' + str(epoch+1) + '/' + str(n_epochs) + ', '
                 progress = ''
                 for key in losses:
                     progress += key + ': ' + str(losses[key].item()) + ', '
                 print(progress)
                 print('Validation Loss: ' + str(val_loss))
                 print('--------------------------------------')
-        print(f'Best epoch: {best_epoch}')
+        print(f'Best validations loss: {min_val_loss}, Best epoch: {best_epoch+1}')
+        return min_val_loss, best_epoch+1
 
     def eval_loss(self, x, w_adj, mask, l_kld):
         """

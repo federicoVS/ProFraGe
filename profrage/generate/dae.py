@@ -204,14 +204,16 @@ class ProDAAE(nn.Module):
         state['loss'] = loss
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, lr=1e-3, l_adv=1, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
+    def fit(self, train_loader, val_loader, n_epochs, lr=1e-3, l_adv=1, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
         Train the model.
 
         Parameters
         ----------
-        loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
-            The data loader.
+        train_loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader for the training set.
+        val_loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader for the validation set.
         n_epochs : int
             The number of epochs to perform.
         lr : float, optional
@@ -239,8 +241,10 @@ class ProDAAE(nn.Module):
         scheduler_vae = MultiStepLR(optimizer_vae, milestones=decay_milestones, gamma=decay)
         scheduler_adv = MultiStepLR(optimizer_adv, milestones=decay_milestones, gamma=decay)
         noise_cache = {}
+        min_val_loss, best_epoch = 1e10, 0
         for epoch in range(n_epochs):
-            for i, data in enumerate(loader):
+            self.train()
+            for i, data in enumerate(train_loader):
                 x, w_adj, mask = data['x'], data['w_adj'], data['mask']
                 # Add noise (and put on the device in the process)
                 if i not in noise_cache:
@@ -269,13 +273,34 @@ class ProDAAE(nn.Module):
             # Weight decay
             scheduler_vae.step()
             scheduler_adv.step()
+            # Validation step
+            self.eval()
+            with torch.no_grad():
+                val_loss, counter = 0, 0
+                for i, data in enumerate(val_loader):
+                    counter += 1
+                    x, w_adj, mask = data['x'], data['w_adj'], data['mask']
+                    val_loss += self.eval_loss(x, w_adj, mask, l_adv)['Loss'].item()
+                val_loss /= counter
+                if val_loss < min_val_loss:
+                    min_val_loss = val_loss
+                    best_epoch = epoch
+            # Checkpoint
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 self.checkpoint(epoch, [optimizer_vae,optimizer_adv], [scheduler_vae,scheduler_adv], loss_rec)
+            # Print progress
             if verbose:
-                progress = 'epochs: ' + str(epoch+1) + '/' + str(n_epochs) + ', '
+                print('--------------------------------------')
+                print('Epoch: ' + str(epoch+1) + '/' + str(n_epochs))
+                print('Train Losses')
+                progress = ''
                 for key in losses:
                     progress += key + ': ' + str(losses[key].item()) + ', '
                 print(progress)
+                print('Validation Loss: ' + str(val_loss))
+                print('--------------------------------------')
+        print(f'Best validations loss: {min_val_loss}, Best epoch: {best_epoch+1}')
+        return min_val_loss, best_epoch+1
 
     def eval_loss(self, x, w_adj, mask, l_adv):
         """

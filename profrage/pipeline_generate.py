@@ -51,7 +51,7 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
     # Define the loaders
     if data_mode == 'dense' or data_type == 'rnn':
         train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
-        val_loader = DataLoader(dataset=val_dataset, batch_size=1, shuffle=False)
+        val_loader = DataLoader(dataset=val_dataset, batch_size=args.batch_size, shuffle=False)
     elif data_mode == 'sparse':
         train_loader = GDataLoader(dataset=train_dataset.get_data(), batch_size=args.batch_size, shuffle=False)
         val_loader = GDataLoader(dataset=val_dataset.get_data(), batch_size=args.batch_size, shuffle=False)
@@ -98,80 +98,40 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         if verbose:
             progress_bar.step()
         model = Cmodel(model_root, **param_config).to(args.device)
-        model.train()
-        model.fit(train_loader, val_loader, **train_config)
-        model.eval()
-        loss = {}
-        for i, (data) in enumerate(val_loader):
-            if model_type == 'ProVAE':
-                x, w_adj, mask = data['x'], data['w_adj'], data['mask']
-                loss_dict = model.eval_loss(x, w_adj, mask, train_config['l_kld'])
-            elif model_type == 'ProDAAE':
-                x, w_adj, mask = data['x'], data['w_adj'], data['mask']
-                loss_dict = model.eval_loss(x, w_adj, mask, train_config['l_adv'])
-            elif model_type == 'ProGAN':
-                x, w_adj, mask = data['x'], data['w_adj'], data['mask']
-                loss_dict = model.eval_loss(x, w_adj, mask, train_config['l_wrl'])
-            elif model_type == 'ProRNN':
-                x, y, y_feat, y_len = data['x'], data['y_edge'], data['y_feat'], data['len']
-                loss_dict = model.eval_loss(x, y, y_feat, y_len)
-            if i == 0:
-                for key in loss_dict:
-                    loss[key] = []
-            for key in loss_dict:
-                if isinstance(loss_dict[key], int):
-                    loss[key].append(loss_dict[key])
-                else:
-                    loss[key].append(loss_dict[key].detach().item())
-        for key in loss:
-            loss[key] = np.array(loss[key])
-        if model_type == 'ProGAN':
-            means, vars = {}, {}
-            for key in loss:
-                means[key] = np.mean(loss[key])
-                vars[key] = np.var(loss[key])
-            best_params.append((means['Discriminator'], means['Generator'], means['Reward'],
-                                vars['Discriminator'], vars['Generator'], vars['Reward'],
-                                param_config, train_config))
-        else:
-            mean_loss = np.mean(loss['Loss'])
-            var_loss = np.var(loss['Loss'])
-            best_params.append((mean_loss, var_loss, param_config, train_config))
+        val_loss, val_epoch = model.fit(train_loader, val_loader, **train_config)
+        best_params.append((val_loss, val_epoch, param_config, train_config))
     if verbose:
         progress_bar.end()
-    if model_type == 'ProGAN':
-        best_configs = sorted(best_params, key=lambda x: abs(x[0]))[0:args.cv_best_n_to_show]
-    else:
-        best_configs = sorted(best_params, key=lambda x: x[0])[0:args.cv_best_n_to_show]
+    best_configs = sorted(best_params, key=lambda x: x[0])[0:args.cv_best_n_to_show]
     for best_config in best_configs:
-        if model_type == 'ProGAN':
-            print(f'Average Discriminator: {best_config[0]}, Variance Discriminator: {best_config[3]}, '
-                  f'Average Generator: {best_config[1]}, Variance Generator: {best_config[4]}, '
-                  f'Average Reward: {best_config[2]}, Variance Reward: {best_config[5]}, '
-                  f'\n Model Params.: {best_config[6]}, Training Params.: {best_config[7]}')
-        else:
-            print(f'Average: {best_config[0]}, Variance: {best_config[1]}, \n Model Params.: {best_config[2]}, Training Params.: {best_config[3]}')
+        print(f'Validation Loss: {best_config[0]}, Epoch: {best_config[1]}, \n Model Params.: {best_config[2]}, Training Params.: {best_config[3]}')
 
-def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, dataset_id=0, model_id=0, data_type='graph', data_mode='sparse', train=True, verbose=False):
+def _full(model_type, pdb_train, pdb_val, pdb_test, stride_dir, dataset_dir, model_dir, dataset_id=0, model_id=0, data_type='graph', data_mode='sparse', train=True, verbose=False):
     if verbose:
         print('Processing the data...')
+    train_pdbs, val_pdbs, test_pdbs = get_files(pdb_train, ext='.pdb'),  get_files(pdb_val, ext='.pdb'), get_files(pdb_test, ext='.pdb')
+    train_proteins, val_proteins, test_proteins = [], [], []
     # Get the training proteins
-    train_pdbs, test_pdbs = get_files(pdb_train, ext='.pdb'), get_files(pdb_test, ext='.pdb')
-    train_proteins, test_proteins = [], []
     for pdb in train_pdbs:
         pdb_id = os.path.basename(pdb)[:-4]
         train_proteins.append(from_pdb(pdb_id, pdb, quiet=True))
     # Get the validation proteins
+    for pdb in val_pdbs:
+        pdb_id = os.path.basename(pdb)[:-4]
+        val_proteins.append(from_pdb(pdb_id, pdb, quiet=True))
+    # Get the test proteins
     for pdb in test_pdbs:
         pdb_id = os.path.basename(pdb)[:-4]
         test_proteins.append(from_pdb(pdb_id, pdb, quiet=True))
-    # Get the training data
+    # Get the training and validation data
     if data_type == 'graph':
         train_dataset = GraphDataset(dataset_dir, dataset_id, 'train', train_proteins, pdb_train, stride_dir, **args.graph_dataset)
+        val_dataset = GraphDataset(dataset_dir, 0, 'val', val_proteins, pdb_val, stride_dir, **args.graph_val_dataset)
     elif data_type == 'rnn':
         train_dataset = RNNDataset_Feat(dataset_dir, dataset_id, 'train', train_proteins, pdb_train, stride_dir, **args.rrn_dataset)
         if train:
             train_dataset = train_dataset.sample()
+        val_dataset = RNNDataset_Feat(dataset_dir, 0, 'val', val_proteins, pdb_val, stride_dir, **args.rrn_val_dataset)
     if verbose:
         print(f'Training set has {len(train_dataset)} samples.')
     # Get the test data
@@ -186,8 +146,10 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
     # Define the loaders
     if data_mode == 'dense' or data_type == 'rnn':
         train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
+        val_loader = DataLoader(dataset=val_dataset, batch_size=args.batch_size, shuffle=False)
     elif data_mode == 'sparse':
         train_loader = GDataLoader(dataset=train_dataset.get_data(), batch_size=args.batch_size, shuffle=False)
+        val_loader = GDataLoader(dataset=val_dataset.get_data(), batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False)
     # Select the model
     Cmodel, model_root, model_params, train_params, eval_params = None, model_dir, None, None, None
@@ -225,7 +187,7 @@ def _full(model_type, pdb_train, pdb_test, stride_dir, dataset_dir, model_dir, d
         if verbose:
             print('Training...')
         model.train()
-        model.fit(train_loader, **train_params)
+        model.fit(train_loader, val_loader, **train_params)
         torch.save(model.state_dict(), model_root + 'model_state')
     else:
         model.load_state_dict(torch.load(model_root + 'model_state'))
@@ -297,7 +259,7 @@ def _generate(model_type, model_dir, model_id=0, n_generate=10):
     # Generate
     gram = GramReconstruction(args.device)
     if model_type == 'ProRNN':
-        for j in range(12,30):
+        for j in range(12,31):
             x_gen, dist_gen = model.generate(1, j)
             x_gen, dist_gen = x_gen[0], dist_gen[0]
             coords = gram.reconstruct(dist_gen)
@@ -336,7 +298,7 @@ if __name__ == '__main__':
                  args_parsed.model_dir, dataset_id=args_parsed.dataset_id, model_id=args_parsed.model_id, data_type=args_parsed.data_type,
                  data_mode=args_parsed.data_mode, verbose=args_parsed.verbose)
     elif args_parsed.mode == 'full':
-        _full(args_parsed.model, args_parsed.pdb_train, args_parsed.pdb_test, args_parsed.stride_dir, args_parsed.dataset_dir, args_parsed.model_dir,
+        _full(args_parsed.model, args_parsed.pdb_train, args_parsed.pdb_val, args_parsed.pdb_test, args_parsed.stride_dir, args_parsed.dataset_dir, args_parsed.model_dir,
               dataset_id=args_parsed.dataset_id, model_id=args_parsed.model_id, data_type=args_parsed.data_type, data_mode=args_parsed.data_mode,
               train=args_parsed.train, verbose=args_parsed.verbose)
     elif args_parsed.mode == 'generate':

@@ -106,21 +106,23 @@ class ProRNN(nn.Module):
         state['loss'] = loss
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, num_epochs, lr=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
+    def fit(self, train_loader, val_loader, n_epochs, lr=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
         Train the model.
 
         Parameters
         ----------
-        loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
-            The data loader.
-        num_epochs : int
+        train_loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader for the training set.
+        val_loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader for the validation set.
+        n_epochs : int
             The number of epochs to perform.
         lr : float, optional
             The learning rate. The default is 1e-3.
         betas : (float,float), optional
             Coefficients used to compute averages of the gradient. The default is (0.9, 0.999).
-        milestones : list of int, optional
+        decay_milestones : list of int, optional
             The list of milestones at which to decay the learning rate. The default is [400,1000].
         decay : float in [0,1], optional
             The decay of to apply to the learning rate. The default is 0.3.
@@ -139,8 +141,10 @@ class ProRNN(nn.Module):
         scheduler_graph = MultiStepLR(optimizer_graph, milestones=decay_milestones, gamma=decay)
         scheduler_node = MultiStepLR(optimizer_node, milestones=decay_milestones, gamma=decay)
         scheduler_edge = MultiStepLR(optimizer_edge, milestones=decay_milestones, gamma=decay)
-        for epoch in range(num_epochs):
-            for i, (data) in enumerate(loader):
+        min_val_loss, best_epoch = 1e10, 0
+        for epoch in range(n_epochs):
+            self.train()
+            for i, (data) in enumerate(train_loader):
                 self.f_trans.zero_grad()
                 self.f_out_x_aa.zero_grad()
                 self.f_out_x_ss.zero_grad()
@@ -216,14 +220,31 @@ class ProRNN(nn.Module):
             scheduler_graph.step()
             scheduler_node.step()
             scheduler_edge.step()
+            # Validation step
+            self.eval()
+            with torch.no_grad():
+                val_loss, counter = 0, 0
+                for i, data in enumerate(val_loader):
+                    x, y, y_feat, y_len = data['x'], data['y_edge'], data['y_feat'], data['len']
+                    val_loss += self.eval_loss(x, y, y_feat, y_len)['Loss']
+                val_loss /= counter
+                if val_loss < min_val_loss:
+                    min_val_loss = val_loss
+                    best_epoch = epoch
+            # Checkpoint
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 self.checkpoint(epoch, [optimizer_graph,optimizer_node,optimizer_edge], [scheduler_graph,scheduler_node,scheduler_edge], loss)
+            # Print progress
             if verbose:
-                print(f'epoch {epoch+1}/{num_epochs},'
-                      f'AA loss: {ce_loss_aa.item():.4},'
-                      f'SS loss: {ce_loss_ss.item():.4},'
-                      f'A_w loss: {mse_loss_w_adj.item():.4},'
-                      f'Full loss = {loss.item():.4}')
+                print('--------------------------------------')
+                print('Epoch: ' + str(epoch+1) + '/' + str(n_epochs))
+                print('Train Losses')
+                progress = 'AA loss: ' + str(ce_loss_aa.item()) + ', SS loss: ' + str(ce_loss_ss.item()) + ', A_w loss: ' + str(mse_loss_w_adj.item()) + ', Full loss: ' + str(loss.item())
+                print(progress)
+                print('Validation Loss: ' + str(val_loss))
+                print('--------------------------------------')
+        print(f'Best validations loss: {min_val_loss}, Best epoch: {best_epoch+1}')
+        return min_val_loss, best_epoch+1
 
     def eval_loss(self, x_unsorted, y_unsorted, y_feat_unsorted, y_len_unsorted):
         """

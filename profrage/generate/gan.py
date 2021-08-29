@@ -132,14 +132,16 @@ class ProGAN(nn.Module):
             state['loss_'+str(i)] = losses[i]
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, n_critic=5, lr=1e-3, l_wrl=0.6, w_clamp=0.01, decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
+    def fit(self, train_loader, val_loader, n_epochs, n_critic=5, lr=1e-3, l_wrl=0.6, w_clamp=0.01, decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
         Train the model.
 
         Parameters
         ----------
-        loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
-            The data loader.
+        train_loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader for the training set.
+        val_loader : torch.utils.data.DataLoader or torch_geometric.data.DataLoader
+            The data loader for the validation set.
         n_epochs : int
             The number of epochs.
         n_critic : int, optional
@@ -169,12 +171,14 @@ class ProGAN(nn.Module):
         optimizer_reward = RMSprop(self.reward.parameters(), lr=lr)
         scheduler_generator = MultiStepLR(optimizer_generator, milestones=decay_milestones, gamma=decay)
         scheduler_critic = MultiStepLR(optimizer_critic, milestones=decay_milestones, gamma=decay)
+        min_val_loss, best_epoch = 1e10, 0
         if self.rl:
             scheduler_reward = MultiStepLR(optimizer_reward, milestones=decay_milestones, gamma=decay)
         # Cache for reward function
         reward_fun_cache = {}
         for epoch in range(n_epochs):
-            for i, data in enumerate(loader):
+            self.train()
+            for i, data in enumerate(train_loader):
                 # Get the data
                 x, w_adj, mask = data['x'], data['w_adj'], data['mask']
                 # Put the data on the device
@@ -232,17 +236,39 @@ class ProGAN(nn.Module):
             scheduler_critic.step()
             if self.rl:
                 scheduler_reward.step()
+            # Validation step
+            self.eval()
+            with torch.no_grad():
+                val_loss, counter = 0, 0
+                for i, data in enumerate(val_loader):
+                    counter += 1
+                    x, w_adj, mask = data['x'], data['w_adj'], data['mask']
+                    val_loss += abs(self.eval_loss(x, w_adj, mask, l_wrl)['Discriminator'].item())
+                val_loss /= counter
+                if val_loss < min_val_loss:
+                    min_val_loss = val_loss
+                    best_epoch = epoch
+            # Checkpoint
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 if self.rl:
                     self.checkpoint(epoch, [optimizer_critic,optimizer_generator,optimizer_reward],
                                     [scheduler_critic,scheduler_generator,scheduler_reward],[loss_d,loss_grl,loss_r])
                 else:
                     self.checkpoint(epoch, [optimizer_critic,optimizer_generator], [scheduler_critic,scheduler_generator], [loss_d,loss_grl])
+            # Print progress
             if verbose:
+                print('--------------------------------------')
+                print('Epoch: ' + str(epoch+1) + '/' + str(n_epochs))
+                print('Train Losses')
                 if self.rl:
-                    print(f'epoch {epoch+1}/{n_epochs}, loss_D={loss_d.item():.4}, loss_G={loss_grl.item():.4}, loss_R={loss_r.item():.4}')
+                    progress = 'loss_D: ' + str(loss_d.item()) + ', loss_G: ' + str(loss_grl.item()) + ', loss_R: ' + str(loss_r.item())
                 else:
-                    print(f'epoch {epoch+1}/{n_epochs}, loss_D={loss_d.item():.4}, loss_G={loss_grl.item():.4}')
+                    progress = 'loss_D: ' + str(loss_d.item()) + ', loss_G: ' + str(loss_grl.item())
+                print(progress)
+                print('Validation Loss: ' + str(val_loss))
+                print('--------------------------------------')
+        print(f'Best validations loss: {min_val_loss}, Best epoch: {best_epoch+1}')
+        return min_val_loss, best_epoch+1
 
     def eval_loss(self, x, w_adj, mask, l_wrl):
         """
