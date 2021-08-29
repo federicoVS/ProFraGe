@@ -54,7 +54,7 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
         val_loader = DataLoader(dataset=val_dataset, batch_size=1, shuffle=False)
     elif data_mode == 'sparse':
         train_loader = GDataLoader(dataset=train_dataset.get_data(), batch_size=args.batch_size, shuffle=False)
-        val_loader = GDataLoader(dataset=val_dataset.get_data(), batch_size=1, shuffle=False)
+        val_loader = GDataLoader(dataset=val_dataset.get_data(), batch_size=len(val_dataset), shuffle=False)
     # Select model and parameters set
     Cmodel, model_root, model_params, train_params, eval_params = None, model_dir, None, None, None
     if model_type == 'ProVAE':
@@ -99,7 +99,7 @@ def _grid_cv(model_type, pdb_train, pdb_val, stride_dir, dataset_dir, model_dir,
             progress_bar.step()
         model = Cmodel(model_root, **param_config).to(args.device)
         model.train()
-        model.fit(train_loader, **train_config)
+        model.fit(train_loader, val_loader, **train_config)
         model.eval()
         loss = {}
         for i, (data) in enumerate(val_loader):
