@@ -233,7 +233,7 @@ class ProVAE(nn.Module):
                     best_epoch = epoch
             # Early stopping
             if es_count == patience:
-                if val_loss - last_val_loss <= tol:
+                if val_loss - last_val_loss >= -tol:
                     if verbose:
                         print(f'Early stopping loss: {val_loss}, Best epoch: {epoch+1}')
                     return val_loss, epoch+1
