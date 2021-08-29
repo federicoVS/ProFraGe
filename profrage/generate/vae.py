@@ -162,7 +162,7 @@ class ProVAE(nn.Module):
         state['loss'] = loss
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, loader, n_epochs, lr=1e-3, l_kld=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
+    def fit(self, loader, val_loader, n_epochs, lr=1e-3, l_kld=1e-3, betas=(0.9, 0.999), decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -193,7 +193,9 @@ class ProVAE(nn.Module):
         """
         optimizer = Adam(self.parameters(), lr=lr, betas=betas)
         scheduler = MultiStepLR(optimizer, milestones=decay_milestones, gamma=decay)
+        min_val_loss, best_epoch = 1e10, 0
         for epoch in range(n_epochs):
+            self.train()
             for i, data in enumerate(loader):
                 # Get the data
                 x, w_adj, mask = data['x'], data['w_adj'], data['mask']
@@ -209,13 +211,29 @@ class ProVAE(nn.Module):
                 optimizer.step()
             # Weight decay
             scheduler.step()
+            self.eval()
+            with torch.no_grad():
+                val_loss = 0
+                for i, data in enumerate(val_loader):
+                    x, w_adj, mask = data['x'], data['w_adj'], data['mask']
+                    val_loss += self.eval_loss(x, w_adj, mask, l_kld)
+                if val_loss < min_val_loss:
+                    min_val_loss = val_loss
+                    best_epoch = epoch
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 self.checkpoint(epoch, [optimizer], [scheduler], loss)
             if verbose:
-                progress = 'epochs: ' + str(epoch+1) + '/' + str(n_epochs) + ', '
+                print('--------------------------------------')
+                print('Epoch: '  + str(epoch+1) + '/' + str(n_epochs))
+                print('Train Losses')
+                # progress = 'epochs: ' + str(epoch+1) + '/' + str(n_epochs) + ', '
+                progress = ''
                 for key in losses:
                     progress += key + ': ' + str(losses[key].item()) + ', '
                 print(progress)
+                print('Validation Loss: ' + str(val_loss))
+                print('--------------------------------------')
+        print(f'Best epoch: {best_epoch}')
 
     def eval_loss(self, x, w_adj, mask, l_kld):
         """
