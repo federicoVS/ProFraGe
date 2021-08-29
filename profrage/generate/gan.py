@@ -132,7 +132,8 @@ class ProGAN(nn.Module):
             state['loss_'+str(i)] = losses[i]
         torch.save(state, self.root + 'checkpoint_' + str(epoch))
 
-    def fit(self, train_loader, val_loader, n_epochs, n_critic=5, lr=1e-3, l_wrl=0.6, w_clamp=0.01, decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
+    def fit(self, train_loader, val_loader, n_epochs, n_critic=5, lr=1e-3, l_wrl=0.6, w_clamp=0.01,
+            patience=5, tol=0.01, decay_milestones=[400,1000], decay=0.1, checkpoint=500, verbose=False):
         """
         Train the model.
 
@@ -152,6 +153,10 @@ class ProGAN(nn.Module):
             The trade-off between the generator loss and the reward network loss. The default is 0.6.
         w_clamp : float, optional
             The clamping to apply to the discriminator weights. The default is 0.01.
+        patience : int, optional
+            The patience for early stopping. The default is 5.
+        tol : float, optional
+            The minimum improvement needed for early stopping. The default is 0.01.
         decay_milestones : list of int, optional
             The milestones at which to aply weight decay. The default is [400,1000].
         decay : float in [0,1], optional
@@ -172,6 +177,7 @@ class ProGAN(nn.Module):
         scheduler_generator = MultiStepLR(optimizer_generator, milestones=decay_milestones, gamma=decay)
         scheduler_critic = MultiStepLR(optimizer_critic, milestones=decay_milestones, gamma=decay)
         min_val_loss, best_epoch = 1e10, 0
+        last_val_loss, es_count = 1e10, 0
         if self.rl:
             scheduler_reward = MultiStepLR(optimizer_reward, milestones=decay_milestones, gamma=decay)
         # Cache for reward function
@@ -248,6 +254,16 @@ class ProGAN(nn.Module):
                 if val_loss < min_val_loss:
                     min_val_loss = val_loss
                     best_epoch = epoch
+            # Early stopping
+            if es_count == patience:
+                if abs(val_loss) - abs(last_val_loss) >= -tol:
+                    if verbose:
+                        print(f'Early stopping loss: {val_loss}, Best epoch: {epoch+1}')
+                    return val_loss, epoch+1
+                else:
+                    es_count = 0
+            else:
+                es_count += 1
             # Checkpoint
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 if self.rl:

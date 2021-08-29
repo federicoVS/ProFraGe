@@ -239,7 +239,8 @@ class ProVAE(nn.Module):
                     return val_loss, epoch+1
                 else:
                     es_count = 0
-            es_count += 1
+            else:
+                es_count += 1
             # Checkpoint
             if checkpoint is not None and epoch != 0 and epoch % checkpoint == 0:
                 self.checkpoint(epoch, [optimizer], [scheduler], loss)

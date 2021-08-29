@@ -208,11 +208,11 @@ def _full(model_type, pdb_train, pdb_val, pdb_test, stride_dir, dataset_dir, mod
     X = gram.reconstruct(dist_pred)
     n_nodes = X.shape[0]
     target_proteins = []
-    for i in range(test_proteins):
+    for i in range(len(test_proteins)):
         sl = structure_length(test_proteins[i])
         if min(sl,x_pred.shape[0])/max(sl,x_pred.shape[0]) <= 0.6:
             target_proteins.append(test_proteins[i])
-    qcp = QCP(X, test_proteins)
+    qcp = QCP(X, target_proteins)
     qcp_scores = qcp.superimpose()
     qcp_min, qcp_score_mean, qcp_score_var = np.min(qcp_scores), np.mean(qcp_scores), np.var(qcp_scores)
     qcp_file = open('qcp_' + str(n_nodes), 'a')
