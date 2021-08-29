@@ -216,7 +216,7 @@ class ProVAE(nn.Module):
                 val_loss = 0
                 for i, data in enumerate(val_loader):
                     x, w_adj, mask = data['x'], data['w_adj'], data['mask']
-                    val_loss += self.eval_loss(x, w_adj, mask, l_kld)
+                    val_loss += self.eval_loss(x, w_adj, mask, l_kld)['Loss']
                 if val_loss < min_val_loss:
                     min_val_loss = val_loss
                     best_epoch = epoch
