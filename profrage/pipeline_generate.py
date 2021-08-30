@@ -230,7 +230,7 @@ def _full(model_type, pdb_train, pdb_val, pdb_test, stride_dir, dataset_dir, mod
             target_graphs.append((x, w_adj_edge))
     mmd = MMD(pred_graph, target_graphs)
     mmd_scores = mmd.compare_graphs()
-    mmd_min, mmd_mean, mmd_var = np.min(mmd_scores), np.mean(mmd_scores), np.var(mmd_scores)
+    mmd_min, mmd_mean, mmd_var = np.min(abs(mmd_scores)), np.mean(mmd_scores), np.var(mmd_scores)
     mmd_file = open('mmd_' + str(n_nodes), 'a')
     for i in range(mmd_scores.shape[0]):
         mmd_file.write(str(mmd_scores[i]))
