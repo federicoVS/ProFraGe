@@ -278,10 +278,37 @@ def _generate(model_type, model_dir, model_id=0, n_generate=10):
             fb = FragmentBuilder('fragment_' + str(x_gen.shape[0]) + str(i), x_gen, coords)
             fb.build(out_dir=model_root)
 
+def _get_model_summary(model_type, model_dir, model_id=0):
+    Cmodel, model_root, model_params = None, model_dir, None
+    if model_type == 'ProVAE':
+        Cmodel = ProVAE
+        model_root += 'ProVAE/' + str(model_id) + '/full/'
+        model_params = args.pro_vae_params
+    if model_type == 'ProDAAE':
+        Cmodel = ProDAAE
+        model_root += 'ProDAAE/' + str(model_id) + '/full/'
+        model_params = args.pro_daae_params
+    if model_type == 'ProGAN':
+        Cmodel = ProGAN
+        model_root += 'ProGAN/' + str(model_id) + '/full/'
+        model_params = args.pro_gan_params
+    if model_type == 'ProRNN':
+        Cmodel = ProRNN
+        model_root += 'ProRNN/' + str(model_id) + '/full/'
+        model_params = args.pro_rnn_params
+    # Create the model
+    model = Cmodel(model_root, **model_params).to(args.device)
+    # Get summary
+    summary = str(model)
+    # Write summary
+    s_file = open('summary.txt', 'w')
+    s_file.write(summary)
+    s_file.close()
+
 if __name__ == '__main__':
     # Argument parser initialization
     arg_parser = argparse.ArgumentParser(description='Full generation pipeline.')
-    arg_parser.add_argument('mode', type=str, help='The mode of the pipeline. Valid modes are [grid_cv,full,generate].')
+    arg_parser.add_argument('mode', type=str, help='The mode of the pipeline. Valid modes are [grid_cv,full,generate,summary].')
     arg_parser.add_argument('model', type=str, help='The model to use. Valid models are [ProVAE,ProDAAE,ProGAN,ProRNN].')
     arg_parser.add_argument('pdb_train', type=str, help='The directory holding the PDB files from the training set.')
     arg_parser.add_argument('pdb_val', type=str, help='The directory holding the PDB files from the validation set.')
@@ -309,5 +336,7 @@ if __name__ == '__main__':
               train=args_parsed.train, verbose=args_parsed.verbose)
     elif args_parsed.mode == 'generate':
         _generate(args_parsed.model, args_parsed.model_dir, model_id=args_parsed.model_id, n_generate=args_parsed.n_generate)
+    elif args_parsed.mode == 'summary':
+        _get_model_summary(args_parsed.model, args_parsed.model_dir, model_id=args_parsed.model_id)
     else:
         print('Wrong mode selected.')
