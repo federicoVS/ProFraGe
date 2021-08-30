@@ -77,15 +77,15 @@ class ProGAN(nn.Module):
         for b in range(B):
             seen_zero, beginning = False, True
             for n in range(N):
-                if mask[b,n] == 1 and seen_zero:
+                if mask[b,n] and seen_zero:
                     break
-                elif mask[b,n] == 0 and beginning:
+                elif mask[b,n] and beginning:
                     break
                 else:
                     reward += 1
                 if beginning:
                     beginning = False
-                if mask[b,n] == 0:
+                if mask[b,n]:
                     seen_zero = True
         for b in range(B):
             for i in range(N):
@@ -215,11 +215,11 @@ class ProGAN(nn.Module):
                     logits_rew_true = self.reward(x, w_adj, mask, activation=torch.sigmoid)
                     logits_rew_gen = self.reward(x_gen, self._tril_adj(w_adj_gen), self._boolean_node_mask(mask_gen), activation=torch.sigmoid)
                     if i not in reward_fun_cache:
-                        reward_true = self._reward_fun(w_adj, mask.int())
+                        reward_true = self._reward_fun(w_adj, mask)
                         reward_fun_cache[i] = reward_true
                     else:
                         reward_true = reward_fun_cache[i]
-                    reward_gen = self._reward_fun(w_adj_gen, mask_gen.int())
+                    reward_gen = self._reward_fun(w_adj_gen, self._boolean_node_mask(mask_gen))
                     # Define losses
                     loss_r = torch.mean((logits_rew_true - reward_true)**2 + (logits_rew_gen - reward_gen)**2)
                     loss_grl = -(l_wrl*torch.mean(logits_gen) + (1 - l_wrl)*torch.mean(logits_rew_gen))
@@ -326,8 +326,8 @@ class ProGAN(nn.Module):
             # Logits reward
             logits_rew_true = self.reward(x, w_adj, mask, activation=torch.sigmoid)
             logits_rew_gen = self.reward(x_gen, self._tril_adj(w_adj_gen), self._boolean_node_mask(mask_gen), activation=torch.sigmoid)
-            reward_true = self._reward_fun(w_adj, mask.int())
-            reward_gen = self._reward_fun(w_adj_gen, mask_gen.int())
+            reward_true = self._reward_fun(w_adj, mask)
+            reward_gen = self._reward_fun(w_adj_gen, self._boolean_node_mask(mask_gen))
             loss_r = torch.mean((logits_rew_true - reward_true)**2 + (logits_rew_gen - reward_gen)**2)
             loss_grl = -(l_wrl*torch.mean(logits_gen) + (1 - l_wrl)*torch.mean(logits_rew_gen))
         else:
