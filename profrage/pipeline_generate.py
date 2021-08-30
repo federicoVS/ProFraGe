@@ -301,7 +301,7 @@ def _get_model_summary(model_type, model_dir, model_id=0):
     # Get summary
     summary = str(model)
     # Write summary
-    s_file = open('summary.txt', 'w')
+    s_file = open(model_root + 'summary.txt', 'w')
     s_file.write(summary)
     s_file.close()
 
