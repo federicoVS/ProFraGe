@@ -14,7 +14,7 @@ from utils.ProgressBar import ProgressBar
 
 def leiden_gridsearch(train_set_dir, test_set_dir, cmap_train_dir, cmap_test_dir, stride_dir, leiden_params, first_cluster_params, second_cluster_params, third_cluster_params, range_params, lm_rmsd_thr=2.5, train_size=500, to_show=3, verbose=False, write_stats=False):
     """
-    Perform GridSearch based on the Leiden mining algorithm coupled with Agglomerative clustering.
+    Perform GridSearch based on the Leiden mining algorithm coupled with three-level clustering.
 
     Parameters
     ----------
