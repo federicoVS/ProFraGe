@@ -4,7 +4,7 @@ import argparse
 from utils.protein_net import process_testing_set, process_training_set, process_validation_set
 from utils.io import parse_protein_net
 
-def pipeline(casp_dir, testing_dir, sqid=30, pct_thr=0.9, out_dir='protein-net/', do_test=True, do_validation=True, do_train=True, verbose=False):
+def pipeline(casp_dir, sqid=30, out_dir='protein-net/', do_test=True, do_validation=True, do_train=True, verbose=False):
     """
     Perform a full ProteinNet pipeline.
     
@@ -17,12 +17,8 @@ def pipeline(casp_dir, testing_dir, sqid=30, pct_thr=0.9, out_dir='protein-net/'
     ----------
     casp_dir : str
         The directory holding the ProteinNet splits.
-    testing_dir : str
-        The directory holding the PDB files for the testing set.
     sqid : int, optional
         the sequence identity percentage, which should be the same as the PDB dataset. The default is 30.
-    pct_thr : float in [0,1], optional
-        The percentage threshold above which two sequences are similar. The default is 0.9.
     out_dir : str, optional
         The output directory. The default is 'protein-net/'.
     do_test : bool, optional
@@ -41,10 +37,9 @@ def pipeline(casp_dir, testing_dir, sqid=30, pct_thr=0.9, out_dir='protein-net/'
     # Create out directory if it does not exist
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
-    # First process all directories
     # Process testing set
     if do_test:
-        process_testing_set(testing_dir, out_dir, verbose=verbose)
+        process_testing_set(casp_dir + 'testing', out_dir, verbose=verbose)
     # Process validation set
     if do_validation:
         pn_dict = parse_protein_net(casp_dir + 'validation')
@@ -57,11 +52,9 @@ def pipeline(casp_dir, testing_dir, sqid=30, pct_thr=0.9, out_dir='protein-net/'
 if __name__ == '__main__':
     # Argument parser initialization
     arg_parser = argparse.ArgumentParser(description='Full ProteinNet dataset pipeline.')
-    arg_parser.add_argument('casp_dir', type=str, help='The directory containing the ProteinNet splits.')
-    arg_parser.add_argument('testing_dir', type=str, help='The directory containing the testing PDB files.')
+    arg_parser.add_argument('out_dir', type=str,help='The output directory.')
+    arg_parser.add_argument('--casp_dir', type=str, default='../pdb/casp11/', help='The directory containing the ProteinNet splits. The default is ../pdb/casp11/.')
     arg_parser.add_argument('--sqid', type=int, default=30, help='The sequence identity percentage. The default is 30.')
-    arg_parser.add_argument('--pct_thr', type=float, default=0.9, help='The percentage threshold above which two sequences are equal. The default is 0.9.')
-    arg_parser.add_argument('--out_dir', type=str, default='protein-net/', help='The output directory. The default is protein-net/.')
     arg_parser.add_argument('--do_test', type=bool, default=True, help='Whether to process the testing split. The default is True.')
     arg_parser.add_argument('--do_validation', type=bool, default=True, help='Whether to process the validation split. The default is True.')
     arg_parser.add_argument('--do_train', type=bool, default=True, help='Whether to process the training split. The default is True.')
@@ -69,5 +62,4 @@ if __name__ == '__main__':
     # Parse arguments
     args = arg_parser.parse_args()
     # Begin pipeline
-    pipeline(args.casp_dir, args.testing_dir, sqid=args.sqid, pct_thr=args.pct_thr, out_dir=args.out_dir, do_test=args.do_test, do_validation=args.do_validation, do_train=args.do_train, verbose=args.verbose)
-    
+    pipeline(args.casp_dir, sqid=args.sqid, pct_thr=args.pct_thr, out_dir=args.out_dir, do_test=args.do_test, do_validation=args.do_validation, do_train=args.do_train, verbose=args.verbose)

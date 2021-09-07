@@ -28,8 +28,8 @@ This file provides information on the technical requirements of this tool, as we
 
 I used the following external C++ tools
 
-* Stride (TODO link)
-* ConFind (TODO link)
+* [Stride](http://webclu.bio.wzw.tum.de/stride/)
+* [ConFind](https://grigoryanlab.org/confind/)
 
 I used Python3 coupled with the Anaconda virtual environment throughout my work. Below is the list of requirements.
 
@@ -52,37 +52,37 @@ I experimented with two datasets during my work, but I ultimately settled on Pro
 
 ### PDB Dataset
 
-Switch to the `profrage/` directory and run the following command
+Switch to the `profrage/` directory. Below is how to run the PDB pipeline with the default parameters. For more information on the parameters, simply run `python3 pipeline_pdb -h`.
 
 ```
-python3 pipeline_pdb -h
+python3 pipeline_pdb path/to/store/
 ```
-
-It will print on the standard output information for each parameter.
 
 Note that this step requires downloading PDB files in `.pdb.gz` format. See *pdb/ids/README.md* for details on how to download them.
 
 ### ProteinNet Dataset
 
-Switch to the `profrage/` directory and run the following command
+Switch to the `profrage/` directory. Again, for more information on the parameters simply run `python3 pipeline_proteinnet -h`.
 
 ```
-python3 pipeline_proteinnet -h
+python3 pipeline_proteinnet path/to/store/
 ```
 
-It will print on the standard output information for each parameter.
+Note that the file *../pdb/casp11/training_30.zip* needs to be unzipped before running the previous command.
 
-Note that this step requires downloading the datasets from [ProteinNet](https://github.com/aqlaboratory/proteinnet). Once they are downloaded, one should only consider the PDB IDs for all structures, and write them to a file.
+For more information please see *pdb/casp11/README.md*.
 
 ## Fragments: Mining & Clustering
 
-Switch to the `profrage/` directory and run the following command
+Switch to the `profrage/` directory. I show an example where I use the ProteinNet dataset
 
 ```
-python3 pipeline_mine -h
+python3 pipeline_mine path/to/store/ path/to/cmaps/ path/to/stride path/to/filtered/ path/to/clustered/
 ```
 
-Note that if contact maps (`CMAP`) are used, then the ConFind tool should be run first on the full proteins.
+Note that for ProteinNet, this procedure is to be carried out for all the splits (training/validation/test).
+
+Further note that if contact maps (`CMAP`) are used, then the ConFind tool should be run first on the full proteins.
 
 ### Tuning via Language Model
 
@@ -118,10 +118,12 @@ leiden_gridsearch(train_set_dir, validation_set_dir, cmap_train_dir, cmap_valida
 
 ## Deep Learning Models
 
-Switch to the `profrage/` directory and run the following command
+Switch to the `profrage/` directory.
 
 ```
-python3 pipeline_generate -h
+python3 pipeline_generate full ProRNN <path/to/store>/training/ <path/to/store>/*validation/ <path/to/store>/testing/ path/to/stride/ path/to/dataset_directory/ path/to/model_directory/
 ```
+
+where `dataset_directory/` and `model_directory/` refer to the directories where features and model weights will be saved respectively.
 
 Note that for this the file `profrage/generate/args.py` is to be configured. The current version of the file holds the default parameters.
