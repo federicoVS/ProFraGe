@@ -2,7 +2,7 @@
 
 #### ETH Zurich, Computer Science Msc, Master Project: Generative Modeling of Protein Fragments
 
-*ProFraGe (**Pr**otein **Fra**gment **Ge**nerator)* is a Python tool developed during my Master Project at ETH Zurich.
+*ProFraGe (**Pro**tein **Fra**gment **Ge**nerator)* is a Python tool developed during my Master Project at ETH Zurich.
 
 The goal of the project was to generate protein fragments via protein-graphs. The work consists of four main phases
 
